@@ -1,7 +1,25 @@
+import os
 import sqlite3
+from flask import Flask
+from threading import Thread
 from telebot import TeleBot, types
 
-# আপনার বট টোকেন এবং মনিট্যাগ লিংক বসানো সম্পন্ন
+# Flask Web Server setup for Render Port Binding
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running perfectly!"
+
+def run():
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# আপনার বট টোকেন এবং মনিট্যাগ লিংক
 TOKEN = '8615856288:AAHxmLU-JVNut0cBy-86sSMjeMVsT-b8luM' 
 MONETAG_LINK = 'https://omg10.com/4/11516146' 
 
@@ -42,7 +60,7 @@ def get_user(user_id, first_name):
 def add_balance(user_id, amount):
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
-    cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (user_id, user_id))
+    cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
     conn.commit()
     conn.close()
 
@@ -76,7 +94,7 @@ def handle_message(message):
 
         bot.send_message(
             message.chat.id,
-            "নিচের বোতামে চাপ দিয়ে বিজ্ঞাপনটি দেখুন। দেখার পর আপনার অ্যাকাউন্টে $0.05 যোগ হয়ে যাবে!",
+            "নিচের বোতামে চাপ দিয়ে বিজ্ঞাপনটি দেখুন। দেখার পর আপনার অ্যাকাউন্টে $0.05 যোগ হয়ে যাবে!",
             reply_markup=inline_markup
         )
 
@@ -84,5 +102,7 @@ def handle_message(message):
         balance = get_user(user_id, first_name)
         bot.send_message(message.chat.id, f"👤 ইউজার: {first_name}\n💳 মোট ব্যালেন্স: ${balance:.2f} USDT")
 
-print("Bot is running...")
-bot.infinity_polling()
+if __name__ == "__main__":
+    keep_alive()
+    print("Bot is running...")
+    bot.infinity_polling()
