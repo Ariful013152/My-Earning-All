@@ -10,18 +10,19 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is running perfectly!"
+    return "Bot is running live!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
-# Bot & DB Configuration
+# Bot Configuration
 TOKEN = '8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqnftct1C8'
 ADMIN_ID = 5034445579
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 
-# MongoDB Setup
+# Database Setup (MongoDB)
+# Render Environment-এ MONGO_URI থাকলে সেটা নেবে, না থাকলে ডিফল্ট URI ব্যবহার করবে
 MONGO_URI = os.environ.get('MONGO_URI', 'mongodb+srv://test:test@cluster0.example.mongodb.net/?retryWrites=true&w=majority')
 client = MongoClient(MONGO_URI)
 db = client['telegram_bot']
@@ -30,13 +31,13 @@ users_collection = db['users']
 SIGNUP_BONUS = 0.0010
 REFERRAL_BONUS = 0.0030
 
-# /start Command & Referral Handling
+# /start Command & Referral System
 @bot.message_handler(commands=['start'])
 def start_command(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name
     
-    # ইউজার ডাটাবেজে আছে কিনা চেক
+    # ডাটাবেজে ইউজার আছে কিনা চেক
     user = users_collection.find_one({"user_id": user_id})
     
     if not user:
@@ -47,7 +48,7 @@ def start_command(message):
         if len(args) > 1 and args[1].isdigit():
             referrer_id = int(args[1])
         
-        # নতুন ইউজার সেভ
+        # নতুন ইউজার হিসেবে সেভ
         users_collection.insert_one({
             "user_id": user_id,
             "name": first_name,
@@ -56,7 +57,7 @@ def start_command(message):
             "referred_by": referrer_id
         })
         
-        # রেফারারের ব্যালেন্স যোগ ও নোটিফিকেশন
+        # রেফারারের ব্যালেন্স এবং রেফারাল সংখ্যা বাড়ানো
         if referrer_id and referrer_id != user_id:
             referrer = users_collection.find_one({"user_id": referrer_id})
             if referrer:
@@ -67,12 +68,12 @@ def start_command(message):
                 try:
                     bot.send_message(
                         referrer_id, 
-                        f"🎉 **নতুন রেফারেল বোনাস!**\n\n👤 **{first_name}** আপনার রেফারেল লিংকে জয়েন করেছেন।\n💰 আপনার অ্যাকাউন্টে **${REFERRAL_BONUS} USDT** যোগ হয়েছে!"
+                        f"🎉 **নতুন রেফারেল ইনকাম!**\n\n👤 **{first_name}** আপনার লিংকে জয়েন করেছেন।\n🎁 আপনি পেয়েছেন **${REFERRAL_BONUS} USDT**!"
                     )
                 except Exception as e:
-                    print(f"Error sending referral msg: {e}")
+                    print(f"Referral Notification Error: {e}")
 
-    # মেইন কিবোর্ড বাটন
+    # কিবোর্ড বাটন সেটআপ
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.add(
         types.KeyboardButton('📺 Watch Ad'),
@@ -87,7 +88,7 @@ def start_command(message):
     
     bot.send_message(
         message.chat.id, 
-        f"👋 **স্বাগতম, {first_name}!**\n\nআমাদের বটের কাজগুলো নিচে দেওয়া বাটনের মাধ্যমে করতে পারবেন:", 
+        f"👋 **স্বাগতম, {first_name}!**\n\nআমাদের বটে কাজ করতে নিচের বাটনগুলো ব্যবহার করুন:", 
         reply_markup=markup
     )
 
@@ -108,7 +109,11 @@ def account_info(message):
 @bot.message_handler(func=lambda message: message.text == '✨ Referral')
 def referral_info(message):
     user_id = message.from_user.id
-    bot_username = bot.get_me().username
+    try:
+        bot_username = bot.get_me().username
+    except:
+        bot_username = "myearningall01_bot"
+        
     ref_link = f"https://t.me/{bot_username}?start={user_id}"
     
     bot.reply_to(
@@ -123,9 +128,9 @@ def ban_user(message):
     try:
         tid = int(message.text.split()[1])
         users_collection.update_one({"user_id": tid}, {"$set": {"is_banned": True}})
-        bot.reply_to(message, f"✅ ইউজার {tid} ব্যান করা হয়েছে।")
+        bot.reply_to(message, f"✅ ইউজার `{tid}` ব্যান করা হয়েছে।")
     except:
-        bot.reply_to(message, "ব্যবহার: `/ban USER_ID`")
+        bot.reply_to(message, "⚠️ ব্যবহার: `/ban USER_ID`")
 
 @bot.message_handler(commands=['unban'])
 def unban_user(message):
@@ -133,9 +138,9 @@ def unban_user(message):
     try:
         tid = int(message.text.split()[1])
         users_collection.update_one({"user_id": tid}, {"$set": {"is_banned": False}})
-        bot.reply_to(message, f"✅ ইউজার {tid} এর ব্যান তোলা হয়েছে।")
+        bot.reply_to(message, f"✅ ইউজার `{tid}` এর ব্যান তোলা হয়েছে।")
     except:
-        bot.reply_to(message, "ব্যবহার: `/unban USER_ID`")
+        bot.reply_to(message, "⚠️ ব্যবহার: `/unban USER_ID`")
 
 @bot.message_handler(commands=['addbalance'])
 def add_balance(message):
@@ -143,9 +148,9 @@ def add_balance(message):
     try:
         _, tid, amt = message.text.split()
         users_collection.update_one({"user_id": int(tid)}, {"$inc": {"balance": float(amt)}})
-        bot.reply_to(message, f"✅ ইউজার {tid} এর ব্যালেন্সে ${amt} যোগ করা হয়েছে।")
+        bot.reply_to(message, f"✅ ইউজার `{tid}` এর অ্যাকাউন্টে ${amt} যোগ করা হয়েছে।")
     except:
-        bot.reply_to(message, "ব্যবহার: `/addbalance USER_ID AMOUNT`")
+        bot.reply_to(message, "⚠️ ব্যবহার: `/addbalance USER_ID AMOUNT`")
 
 @bot.message_handler(commands=['cutbalance'])
 def cut_balance(message):
@@ -153,14 +158,18 @@ def cut_balance(message):
     try:
         _, tid, amt = message.text.split()
         users_collection.update_one({"user_id": int(tid)}, {"$inc": {"balance": -float(amt)}})
-        bot.reply_to(message, f"✅ ইউজার {tid} এর ব্যালেন্স থেকে ${amt} কাটা হয়েছে।")
+        bot.reply_to(message, f"✅ ইউজার `{tid}` এর অ্যাকাউন্ট থেকে ${amt} কাটা হয়েছে।")
     except:
-        bot.reply_to(message, "ব্যবহার: `/cutbalance USER_ID AMOUNT`")
+        bot.reply_to(message, "⚠️ ব্যবহার: `/cutbalance USER_ID AMOUNT`")
 
 # Start Flask Web Server
 threading.Thread(target=run_flask, daemon=True).start()
 
-# Start Bot Polling cleanly
+# Clear Webhooks & Start Polling
 if __name__ == '__main__':
-    bot.remove_webhook()
-    bot.polling(non_stop=True, interval=0)
+    try:
+        bot.remove_webhook()
+    except Exception as e:
+        print(f"Webhook Removal Error: {e}")
+        
+    bot.infinity_polling(timeout=60, long_polling_timeout=30)
