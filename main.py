@@ -23,7 +23,7 @@ def keep_alive():
     t.start()
 
 # --- CONFIGURATION ---
-TOKEN = '8615856288:AAGaV1qttSwXx_RogiQxPh43VLZEdo2OsUE' 
+TOKEN = '8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqnftct1C8' 
 WHATSAPP_LINK = 'https://wa.me/qr/TLGSBEYHL74LD1'
 SUPPORT_GROUP = 'https://t.me/allinoneg1'
 ADMIN_USERNAME = '@akadmin02'
