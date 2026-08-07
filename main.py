@@ -23,7 +23,7 @@ def keep_alive():
     t.start()
 
 # --- CONFIGURATION ---
-TOKEN = '8615856288:AAHxmLU-JVNut0cBy-86sSMjeMVsT-b8luM' 
+TOKEN = '8615856288:AAHRhpYhKrYsFrbTvBOWDG0PB0zQugMhjgU' 
 WHATSAPP_LINK = 'https://wa.me/qr/TLGSBEYHL74LD1'
 SUPPORT_GROUP = 'https://t.me/allinoneg1'
 ADMIN_USERNAME = '@akadmin02'
@@ -31,6 +31,7 @@ ADMIN_ID = 8615856288
 
 # পাবলিক চ্যানেল ইউজারনেম (বটকে চ্যানেলে Admin বানিয়ে রাখবেন)
 PAYMENT_CHANNEL = '@myearningall' 
+REQUIRED_CHANNELS = ['@allinoneg1', '@myearningall']
 
 # --- MONETAG & ADSTERRA LINKS ---
 MONETAG_LINKS = [
@@ -68,6 +69,33 @@ MONGO_URI = os.environ.get('MONGO_URI')
 client = MongoClient(MONGO_URI)
 db = client['telegram_bot']
 users_col = db['users']
+
+# --- FORCE JOIN CHECKER ---
+def check_user_channels(user_id):
+    for ch in REQUIRED_CHANNELS:
+        try:
+            member = bot.get_chat_member(ch, user_id)
+            if member.status in ['left', 'kicked']:
+                return False
+        except Exception as e:
+            print(f"Channel Check Error ({ch}):", e)
+            return False
+    return True
+
+def send_force_join_msg(chat_id):
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    btn1 = types.InlineKeyboardButton("📢 Channel 1 Join", url="https://t.me/allinoneg1")
+    btn2 = types.InlineKeyboardButton("📢 Channel 2 Join", url="https://t.me/myearningall")
+    btn_check = types.InlineKeyboardButton("✅ Joined / Verified", callback_data="check_channels")
+    markup.add(btn1, btn2, btn_check)
+
+    text = (
+        "🛑 **আমাদের বটের সার্ভিস ব্যবহার করতে হলে নিচের ২টি চ্যানেলে জয়েন থাকা বাধ্যতামুলক:**\n\n"
+        "১. https://t.me/allinoneg1\n"
+        "২. https://t.me/myearningall\n\n"
+        "জয়েন করার পর নিচে **'✅ Joined / Verified'** বাটনে ক্লিক করুন।"
+    )
+    bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
 
 # --- DATABASE FUNCTIONS ---
 def is_user_banned(user_id):
@@ -216,6 +244,11 @@ def send_welcome(message):
         bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!**", parse_mode="Markdown")
         return
 
+    # Check Channel Subscription First
+    if not check_user_channels(user_id):
+        send_force_join_msg(message.chat.id)
+        return
+
     args = message.text.split()
     if len(args) > 1 and args[1].isdigit():
         referrer_id = int(args[1])
@@ -248,6 +281,11 @@ def handle_message(message):
 
     if is_user_banned(user_id):
         bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!**", parse_mode="Markdown")
+        return
+
+    # Check Channel Subscription for every message
+    if not check_user_channels(user_id):
+        send_force_join_msg(message.chat.id)
         return
 
     if "Start" in text_input:
@@ -369,7 +407,7 @@ def handle_message(message):
             )
             bot.send_message(
                 message.chat.id,
-                f"💳 **আপনার ব্যালেন্স:** ${balance:.4f} USDT\n\nপেমент মেথড সিলেক্ট করুন:",
+                f"💳 **আপনার ব্যালেন্স:** ${balance:.4f} USDT\n\nপেমেন্ট মেথড সিলেক্ট করুন:",
                 reply_markup=inline_markup
             )
 
@@ -426,7 +464,26 @@ def callback_inline(call):
         bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
         return
 
-    if call.data == "claim_reward":
+    if call.data == "check_channels":
+        if check_user_channels(user_id):
+            bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে! এবার কাজ শুরু করুন।", show_alert=True)
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+            get_user(user_id, call.from_user.first_name)
+            bot.send_message(
+                call.message.chat.id,
+                f"👋 **স্বাগতম {call.from_user.first_name}!**\n\nআপনি সফলভাবে চ্যানেলগুলোতে জয়েন করেছেন। নিচের বাটনগুলো ব্যবহার করে ইনকাম শুরু করুন:",
+                reply_markup=main_keyboard(),
+                parse_mode="Markdown"
+            )
+        else:
+            bot.answer_callback_query(call.id, "❌ আপনি এখনও ২টি চ্যানেলে জয়েন করেননি!", show_alert=True)
+
+    elif call.data == "claim_reward":
+        if not check_user_channels(user_id):
+            bot.answer_callback_query(call.id, "⚠️ আগে চ্যানেলগুলোতে জয়েন করুন!", show_alert=True)
+            send_force_join_msg(call.message.chat.id)
+            return
+
         current_time = time.time()
         last_click = user_last_click.get(user_id, 0)
         time_passed = current_time - last_click
