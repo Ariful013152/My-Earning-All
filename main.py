@@ -6,7 +6,7 @@ from flask import Flask
 from threading import Thread
 from telebot import TeleBot, types
 
-# Flask Web Server setup for Render Port Binding
+# Render Port Binding & Server keep-alive setup
 app = Flask('')
 
 @app.route('/')
@@ -19,6 +19,7 @@ def run():
 
 def keep_alive():
     t = Thread(target=run)
+    t.daemon = True
     t.start()
 
 # --- CONFIGURATION ---
@@ -135,8 +136,10 @@ def get_total_users():
     conn.close()
     return total
 
+# --- Main Reply Keyboard Keyboard (স্টার্ট বাটনসহ) ---
 def main_keyboard():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn_start = types.KeyboardButton("🚀 Start")
     btn_ad = types.KeyboardButton("📺 Watch Ad")
     btn_acc = types.KeyboardButton("🖥️ Account")
     btn_ref = types.KeyboardButton("✨ Referral")
@@ -145,6 +148,8 @@ def main_keyboard():
     btn_wa = types.KeyboardButton("🔰 Whatsapp")
     btn_sup = types.KeyboardButton("📤 Support")
     btn_stat = types.KeyboardButton("📊 Status")
+    
+    markup.add(btn_start)
     markup.add(btn_ad, btn_acc, btn_ref, btn_with, btn_rules, btn_wa, btn_sup, btn_stat)
     return markup
 
@@ -264,7 +269,7 @@ def send_welcome(message):
                 conn.close()
                 add_referral(referrer_id)
                 try:
-                    bot.send_message(referrer_id, f"🎉 আপনার রেফারে নতুন একজন জয়েন করেছে! আপনি $0.003 বোনাস পেয়েছেন।")
+                    bot.send_message(referrer_id, f"🎉 আপনার রেফারে নতুন একজন জয়েন করেছে! আপনি $0.003 বোনাস পেয়েছেন।")
                 except: pass
 
     balance, ref_count = get_user(user_id, first_name)
@@ -279,6 +284,11 @@ def handle_message(message):
 
     if is_user_banned(user_id):
         bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!**", parse_mode="Markdown")
+        return
+
+    # '🚀 Start' বাটনে প্রেস করলে
+    if "Start" in text_input:
+        send_welcome(message)
         return
 
     # ইউজার উইথড্র তথ্য ইনপুট দিলে
@@ -314,16 +324,14 @@ def handle_message(message):
         )
 
         try:
-            # চ্যানেলে নোটিফিকেশন পাঠাবে
             bot.send_message(PAYMENT_CHANNEL, channel_post, parse_mode="Markdown")
-            # এডমিনের ইনবক্সে পাঠাবে
             bot.send_message(ADMIN_ID, admin_post, parse_mode="Markdown")
         except Exception as e:
             print("Withdraw Notification Error:", e)
 
         bot.send_message(
             message.chat.id, 
-            f"✅ **আপনার উইথড্র রিকোয়েস্ট জমা হয়েছে!**\n\n"
+            f"✅ **আপনার উইথড্র রিকোয়েস্ট জমা হয়েছে!**\n\n"
             f"💳 **পরিমাণ:** ${balance:.4f} USDT\n"
             f"🔹 **মেথড:** {method}\n"
             f"📱 **ডিটেইলস:** {acc_details}\n\n"
@@ -352,7 +360,7 @@ def handle_message(message):
             message.chat.id,
             "🎯 **যে কোনো বিজ্ঞাপনে ক্লিক করুন!**\n\n"
             "১. নিচের যেকোনো বিজ্ঞাপনে ক্লিক করে **১৫ সেকেন্ড** অপেক্ষা করুন।\n"
-            "২. সময় শেষ হলে **Claim Reward** বাটনে চাপ দিয়ে $0.001 পয়েন্ট যোগ করে নিন!",
+            "২. সময় শেষ হলে **Claim Reward** বাটনে চাপ দিয়ে $0.001 পয়েন্ট যোগ করে নিন!",
             reply_markup=inline_markup,
             parse_mode="Markdown"
         )
@@ -455,7 +463,7 @@ def callback_inline(call):
     user_id = call.from_user.id
     
     if is_user_banned(user_id):
-        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
+        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
         return
 
     if call.data == "claim_reward":
@@ -469,12 +477,12 @@ def callback_inline(call):
         else:
             add_balance(user_id, 0.001)
             user_last_click[user_id] = current_time + 10
-            bot.answer_callback_query(call.id, "🎉 $0.001 আপনার অ্যাকাউন্টে যোগ করা হয়েছে।", show_alert=True)
+            bot.answer_callback_query(call.id, "🎉 $0.001 আপনার অ্যাকাউন্টে যোগ করা হয়েছে।", show_alert=True)
             
             balance, _ = get_user(user_id, call.from_user.first_name)
             bot.send_message(
                 call.message.chat.id,
-                f"✅ **রিওয়ার্ড সফলভাবে যোগ হয়েছে!**\nবর্তমান ব্যালেন্স: ${balance:.4f} USDT",
+                f"✅ **রিওয়ার্ড সফলভাবে যোগ হয়েছে!**\nবর্তমান ব্যালেন্স: ${balance:.4f} USDT",
                 parse_mode="Markdown"
             )
 
@@ -490,4 +498,4 @@ if __name__ == "__main__":
     keep_alive()
     start_auto_post()
     print("Bot is running...")
-    bot.infinity_polling()
+    bot.infinity_polling(skip_pending=True)
