@@ -1,10 +1,10 @@
 import os
 import time
 import random
-import sqlite3
 from flask import Flask
 from threading import Thread
 from telebot import TeleBot, types
+from pymongo import MongoClient
 
 # Render Port Binding & Server keep-alive setup
 app = Flask('')
@@ -27,12 +27,12 @@ TOKEN = '8615856288:AAHxmLU-JVNut0cBy-86sSMjeMVsT-b8luM'
 WHATSAPP_LINK = 'https://wa.me/qr/TLGSBEYHL74LD1'
 SUPPORT_GROUP = 'https://t.me/allinoneg1'
 ADMIN_USERNAME = '@akadmin02'
-ADMIN_ID = 8615856288  # আপনার টেলিগ্রাম আইডি
+ADMIN_ID = 8615856288 
 
-# পাবলিক চ্যানেল ইউজারনেম (বটকে চ্যানেলে Admin বানিয়ে রাখবেন)
+# পাবলিক চ্যানেল ইউজারনেম (বটকে চ্যানেলে Admin বানিয়ে রাখবেন)
 PAYMENT_CHANNEL = '@myearningall' 
 
-# --- 10 MONETAG LINKS ---
+# --- MONETAG & ADSTERRA LINKS ---
 MONETAG_LINKS = [
     'https://omg10.com/4/11522087',
     'https://omg10.com/4/11522086',
@@ -46,7 +46,6 @@ MONETAG_LINKS = [
     'https://omg10.com/4/11516146'
 ]
 
-# --- 10 ADSTERRA LINKS ---
 ADSTERRA_LINKS = [
     'https://www.effectivecpmnetwork.com/nx2nqegj3p?key=8fb4f6d68a89919faeee5ec3846d4292',
     'https://www.effectivecpmnetwork.com/bbjq6k48?key=4707c2aa3827755848d5332b72a9c955',
@@ -64,79 +63,48 @@ user_last_click = {}
 user_withdraw_step = {}
 bot = TeleBot(TOKEN)
 
-# Database Setup
-def init_db():
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            first_name TEXT,
-            balance REAL DEFAULT 0.0,
-            referred_by INTEGER DEFAULT 0,
-            referrals_count INTEGER DEFAULT 0,
-            is_banned INTEGER DEFAULT 0
-        )
-    ''')
-    conn.commit()
-    conn.close()
+# --- MONGODB CONNECTION ---
+MONGO_URI = os.environ.get('MONGO_URI')
+client = MongoClient(MONGO_URI)
+db = client['telegram_bot']
+users_col = db['users']
 
-init_db()
-
+# --- DATABASE FUNCTIONS ---
 def is_user_banned(user_id):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT is_banned FROM users WHERE user_id = ?', (user_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return True if row and row[0] == 1 else False
+    user = users_col.find_one({'user_id': user_id})
+    return True if user and user.get('is_banned', 0) == 1 else False
 
 def get_user(user_id, first_name):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT balance, referrals_count FROM users WHERE user_id = ?', (user_id,))
-    row = cursor.fetchone()
-    
-    if row is None:
-        cursor.execute('INSERT INTO users (user_id, first_name, balance, referred_by, referrals_count, is_banned) VALUES (?, ?, 0.0, 0, 0, 0)', (user_id, first_name))
-        conn.commit()
-        data = (0.0, 0)
-    else:
-        data = (row[0], row[1])
-        
-    conn.close()
-    return data
+    user = users_col.find_one({'user_id': user_id})
+    if not user:
+        new_user = {
+            'user_id': user_id,
+            'first_name': first_name,
+            'balance': 0.0,
+            'referred_by': 0,
+            'referrals_count': 0,
+            'is_banned': 0
+        }
+        users_col.insert_one(new_user)
+        return 0.0, 0
+    return user.get('balance', 0.0), user.get('referrals_count', 0)
 
 def add_balance(user_id, amount):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
-    conn.commit()
-    conn.close()
+    users_col.update_one({'user_id': user_id}, {'$inc': {'balance': amount}})
 
 def deduct_balance(user_id, amount):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
-    conn.commit()
-    conn.close()
+    users_col.update_one({'user_id': user_id}, {'$inc': {'balance': -amount}})
 
 def add_referral(referrer_id):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET balance = balance + 0.003, referrals_count = referrals_count + 1 WHERE user_id = ?', (referrer_id,))
-    conn.commit()
-    conn.close()
+    users_col.update_one(
+        {'user_id': referrer_id},
+        {'$inc': {'balance': 0.003, 'referrals_count': 1}}
+    )
 
 def get_total_users():
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) FROM users')
-    total = cursor.fetchone()[0]
-    conn.close()
-    return total
+    return users_col.count_documents({})
 
-# --- Main Reply Keyboard Keyboard (স্টার্ট বাটনসহ) ---
+# --- MAIN KEYBOARD ---
 def main_keyboard():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     btn_start = types.KeyboardButton("🚀 Start")
@@ -200,12 +168,8 @@ def ban_user_cmd(message):
     args = message.text.split()
     if len(args) > 1 and args[1].isdigit():
         target_id = int(args[1])
-        conn = sqlite3.connect('users.db')
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET is_banned = 1 WHERE user_id = ?', (target_id,))
-        conn.commit()
-        conn.close()
-        bot.reply_to(message, f"❌ ইউজার `{target_id}` কে ব্যান করা হয়েছে।", parse_mode="Markdown")
+        users_col.update_one({'user_id': target_id}, {'$set': {'is_banned': 1}})
+        bot.reply_to(message, f"❌ ইউজার `{target_id}` কে ব্যান করা হয়েছে।", parse_mode="Markdown")
 
 @bot.message_handler(commands=['unban'])
 def unban_user_cmd(message):
@@ -213,12 +177,8 @@ def unban_user_cmd(message):
     args = message.text.split()
     if len(args) > 1 and args[1].isdigit():
         target_id = int(args[1])
-        conn = sqlite3.connect('users.db')
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET is_banned = 0 WHERE user_id = ?', (target_id,))
-        conn.commit()
-        conn.close()
-        bot.reply_to(message, f"✅ ইউজার `{target_id}` এর ব্যান তুলে নেওয়া হয়েছে।", parse_mode="Markdown")
+        users_col.update_one({'user_id': target_id}, {'$set': {'is_banned': 0}})
+        bot.reply_to(message, f"✅ ইউজার `{target_id}` এর ব্যান তুলে নেওয়া হয়েছে।", parse_mode="Markdown")
 
 @bot.message_handler(commands=['addbalance'])
 def add_balance_cmd(message):
@@ -229,7 +189,7 @@ def add_balance_cmd(message):
         try:
             amount = float(args[2])
             add_balance(target_id, amount)
-            bot.reply_to(message, f"✅ `{target_id}` একাউন্টে **${amount}** যোগ করা হয়েছে।", parse_mode="Markdown")
+            bot.reply_to(message, f"✅ `{target_id}` একাউন্টে **${amount}** যোগ করা হয়েছে।", parse_mode="Markdown")
         except ValueError:
             bot.reply_to(message, "⚠️ সঠিক পরিমাণ লিখুন।")
 
@@ -242,7 +202,7 @@ def cut_balance_cmd(message):
         try:
             amount = float(args[2])
             deduct_balance(target_id, amount)
-            bot.reply_to(message, f"✂️ `{target_id}` একাউন্ট থেকে **${amount}** কাটা হয়েছে।", parse_mode="Markdown")
+            bot.reply_to(message, f"✂️ `{target_id}` একাউন্ট থেকে **${amount}** কাটা হয়েছে।", parse_mode="Markdown")
         except ValueError:
             bot.reply_to(message, "⚠️ সঠিক পরিমাণ লিখুন।")
 
@@ -253,23 +213,27 @@ def send_welcome(message):
     first_name = message.from_user.first_name
     
     if is_user_banned(user_id):
-        bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!**", parse_mode="Markdown")
+        bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!**", parse_mode="Markdown")
         return
 
     args = message.text.split()
     if len(args) > 1 and args[1].isdigit():
         referrer_id = int(args[1])
         if referrer_id != user_id:
-            conn = sqlite3.connect('users.db')
-            cursor = conn.cursor()
-            cursor.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
-            if cursor.fetchone() is None:
-                cursor.execute('INSERT INTO users (user_id, first_name, balance, referred_by, referrals_count, is_banned) VALUES (?, ?, 0.0, ?, 0, 0)', (user_id, first_name, referrer_id))
-                conn.commit()
-                conn.close()
+            existing_user = users_col.find_one({'user_id': user_id})
+            if not existing_user:
+                new_user = {
+                    'user_id': user_id,
+                    'first_name': first_name,
+                    'balance': 0.0,
+                    'referred_by': referrer_id,
+                    'referrals_count': 0,
+                    'is_banned': 0
+                }
+                users_col.insert_one(new_user)
                 add_referral(referrer_id)
                 try:
-                    bot.send_message(referrer_id, f"🎉 আপনার রেফারে নতুন একজন জয়েন করেছে! আপনি $0.003 বোনাস পেয়েছেন।")
+                    bot.send_message(referrer_id, "🎉 আপনার রেফারে নতুন একজন জয়েন করেছে! আপনি $0.003 বোনাস পেয়েছেন।")
                 except: pass
 
     balance, ref_count = get_user(user_id, first_name)
@@ -283,15 +247,13 @@ def handle_message(message):
     text_input = message.text.strip()
 
     if is_user_banned(user_id):
-        bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!**", parse_mode="Markdown")
+        bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!**", parse_mode="Markdown")
         return
 
-    # '🚀 Start' বাটনে প্রেস করলে
     if "Start" in text_input:
         send_welcome(message)
         return
 
-    # ইউজার উইথড্র তথ্য ইনপুট দিলে
     if user_id in user_withdraw_step:
         method = user_withdraw_step[user_id]['method']
         acc_details = text_input
@@ -304,7 +266,6 @@ def handle_message(message):
 
         deduct_balance(user_id, balance)
         
-        # চ্যানেলে পাবলিক পোস্ট
         channel_post = (
             f"✅ **Withdrawal Paid**\n\n"
             f"💵 **{balance:.3f} USDT**\n"
@@ -312,7 +273,6 @@ def handle_message(message):
             f"👛 `{acc_details}`"
         )
 
-        # এডমিনের কাছে ডিটেইলস নোটিফিকেশন
         admin_post = (
             f"📥 **REAL WITHDRAW REQUEST!**\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
@@ -409,7 +369,7 @@ def handle_message(message):
             )
             bot.send_message(
                 message.chat.id,
-                f"💳 **আপনার ব্যালেন্স:** ${balance:.4f} USDT\n\nপেমেন্ট মেথড সিলেক্ট করুন:",
+                f"💳 **আপনার ব্যালেন্স:** ${balance:.4f} USDT\n\nপেমент মেথড সিলেক্ট করুন:",
                 reply_markup=inline_markup
             )
 
