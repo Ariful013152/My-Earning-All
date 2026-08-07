@@ -28,7 +28,7 @@ WHATSAPP_LINK = 'https://wa.me/qr/TLGSBEYHL74LD1'
 SUPPORT_GROUP = 'https://t.me/allinoneg1'
 ADMIN_USERNAMES = '@akadmin01 / @akadmin02'
 
-# দুইটা এডমিন আইডিকে লিস্টে রাখা হলো
+# দুইটা এডমিন আইডি
 ADMIN_IDS = [8414665404, 5034445579] 
 
 # পাবলিক চ্যানেল ইউজারনেম (বটকে চ্যানেলে Admin বানিয়ে রাখবেন)
@@ -251,7 +251,7 @@ def send_welcome(message):
         send_force_join_msg(message.chat.id)
         return
 
-    # FIXED REFERRAL LOGIC
+    # REFERRAL LOGIC
     args = message.text.split()
     if len(args) > 1 and args[1].isdigit():
         referrer_id = int(args[1])
@@ -286,7 +286,7 @@ def handle_message(message):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", parse_mode="Markdown")
         return
 
-    # Check Channel Subscription for every message
+    # Check Channel Subscription
     if not check_user_channels(user_id):
         send_force_join_msg(message.chat.id)
         return
@@ -517,8 +517,22 @@ def callback_inline(call):
             f"📝 আপনার {method} নম্বর বা এড্রেসটি লিখে মেসেজ পাঠান:"
         )
 
+# --- BOT RUNNER WITH ERROR 409 FIX ---
 if __name__ == "__main__":
     keep_alive()
     start_auto_post()
-    print("Bot is running...")
-    bot.infinity_polling(skip_pending=True)
+    print("Bot is starting...")
+    
+    # পুরোনো রানিং ওয়েবহুক মুছে ফেলার জন্য
+    try:
+        bot.remove_webhook()
+    except Exception as e:
+        print("Webhook remove error:", e)
+
+    # Error 409/Auto reconnect handler loop
+    while True:
+        try:
+            bot.polling(none_stop=True, interval=0, timeout=20, skip_pending=True)
+        except Exception as e:
+            print(f"Bot Polling Error: {e}")
+            time.sleep(3) # ৩ সেকেন্ড অপেক্ষা করে স্বয়ংক্রিয়ভাবে আবার কানেক্ট হবে
