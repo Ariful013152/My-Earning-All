@@ -1,5 +1,6 @@
 import os
 import time
+import random
 import sqlite3
 from flask import Flask
 from threading import Thread
@@ -20,11 +21,15 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# Config
+# --- CONFIGURATION ---
 TOKEN = '8615856288:AAHxmLU-JVNut0cBy-86sSMjeMVsT-b8luM' 
 WHATSAPP_LINK = 'https://wa.me/qr/TLGSBEYHL74LD1'
 SUPPORT_GROUP = 'https://t.me/allinoneg1'
 ADMIN_USERNAME = '@akadmin02'
+ADMIN_ID = 8615856288  # আপনার টেলিগ্রাম আইডি
+
+# পাবলিক চ্যানেল ইউজারনেম (বটকে চ্যানেলে Admin বানিয়ে রাখবেন)
+PAYMENT_CHANNEL = '@myearningall' 
 
 # --- 10 MONETAG LINKS ---
 MONETAG_LINKS = [
@@ -54,9 +59,8 @@ ADSTERRA_LINKS = [
     'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
 ]
 
-# Security Trackers (In-Memory)
 user_last_click = {}
-
+user_withdraw_step = {}
 bot = TeleBot(TOKEN)
 
 # Database Setup
@@ -69,13 +73,22 @@ def init_db():
             first_name TEXT,
             balance REAL DEFAULT 0.0,
             referred_by INTEGER DEFAULT 0,
-            referrals_count INTEGER DEFAULT 0
+            referrals_count INTEGER DEFAULT 0,
+            is_banned INTEGER DEFAULT 0
         )
     ''')
     conn.commit()
     conn.close()
 
 init_db()
+
+def is_user_banned(user_id):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT is_banned FROM users WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return True if row and row[0] == 1 else False
 
 def get_user(user_id, first_name):
     conn = sqlite3.connect('users.db')
@@ -84,7 +97,7 @@ def get_user(user_id, first_name):
     row = cursor.fetchone()
     
     if row is None:
-        cursor.execute('INSERT INTO users (user_id, first_name, balance, referred_by, referrals_count) VALUES (?, ?, 0.0, 0, 0)', (user_id, first_name))
+        cursor.execute('INSERT INTO users (user_id, first_name, balance, referred_by, referrals_count, is_banned) VALUES (?, ?, 0.0, 0, 0, 0)', (user_id, first_name))
         conn.commit()
         data = (0.0, 0)
     else:
@@ -97,6 +110,13 @@ def add_balance(user_id, amount):
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
     cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
+    conn.commit()
+    conn.close()
+
+def deduct_balance(user_id, amount):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
     conn.commit()
     conn.close()
 
@@ -128,11 +148,109 @@ def main_keyboard():
     markup.add(btn_ad, btn_acc, btn_ref, btn_with, btn_rules, btn_wa, btn_sup, btn_stat)
     return markup
 
+# --- AUTO FAKE PAYMENT SENDER THREAD ---
+def auto_payment_poster():
+    hex_chars = "0123456789abcdefABCDEF"
+    methods = ["bKash (Personal)", "Nagad (Personal)", "BSC (BEP20)", "Binance USDT", "Payeer"]
+    
+    while True:
+        try:
+            amount = round(random.uniform(5.5, 35.0), 3)
+            method = random.choice(methods)
+            
+            if "BSC" in method:
+                start_hex = ''.join(random.choices(hex_chars, k=3))
+                end_hex = ''.join(random.choices(hex_chars, k=4))
+                address = f"0x{start_hex}****{end_hex}"
+            elif "bKash" in method or "Nagad" in method:
+                prefix = random.choice(["017", "018", "019", "013", "014", "016", "015"])
+                digits = ''.join(random.choices("0123456789", k=2))
+                last = ''.join(random.choices("0123456789", k=2))
+                address = f"{prefix}{digits}***{last}"
+            else:
+                address = f"P10{''.join(random.choices('0123456789', k=6))}"
+
+            text = (
+                f"✅ **Withdrawal Paid**\n\n"
+                f"💵 **{amount:.3f} USDT**\n"
+                f"🌐 **{method}**\n"
+                f"👛 `{address}`"
+            )
+            
+            bot.send_message(PAYMENT_CHANNEL, text, parse_mode="Markdown")
+        except Exception as e:
+            print("Auto post error:", e)
+            
+        time.sleep(60)
+
+def start_auto_post():
+    t = Thread(target=auto_payment_poster)
+    t.daemon = True
+    t.start()
+
+# --- ADMIN COMMANDS ---
+@bot.message_handler(commands=['ban'])
+def ban_user_cmd(message):
+    if message.from_user.id != ADMIN_ID: return
+    args = message.text.split()
+    if len(args) > 1 and args[1].isdigit():
+        target_id = int(args[1])
+        conn = sqlite3.connect('users.db')
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET is_banned = 1 WHERE user_id = ?', (target_id,))
+        conn.commit()
+        conn.close()
+        bot.reply_to(message, f"❌ ইউজার `{target_id}` কে ব্যান করা হয়েছে।", parse_mode="Markdown")
+
+@bot.message_handler(commands=['unban'])
+def unban_user_cmd(message):
+    if message.from_user.id != ADMIN_ID: return
+    args = message.text.split()
+    if len(args) > 1 and args[1].isdigit():
+        target_id = int(args[1])
+        conn = sqlite3.connect('users.db')
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET is_banned = 0 WHERE user_id = ?', (target_id,))
+        conn.commit()
+        conn.close()
+        bot.reply_to(message, f"✅ ইউজার `{target_id}` এর ব্যান তুলে নেওয়া হয়েছে।", parse_mode="Markdown")
+
+@bot.message_handler(commands=['addbalance'])
+def add_balance_cmd(message):
+    if message.from_user.id != ADMIN_ID: return
+    args = message.text.split()
+    if len(args) == 3 and args[1].isdigit():
+        target_id = int(args[1])
+        try:
+            amount = float(args[2])
+            add_balance(target_id, amount)
+            bot.reply_to(message, f"✅ `{target_id}` একাউন্টে **${amount}** যোগ করা হয়েছে।", parse_mode="Markdown")
+        except ValueError:
+            bot.reply_to(message, "⚠️ সঠিক পরিমাণ লিখুন।")
+
+@bot.message_handler(commands=['cutbalance'])
+def cut_balance_cmd(message):
+    if message.from_user.id != ADMIN_ID: return
+    args = message.text.split()
+    if len(args) == 3 and args[1].isdigit():
+        target_id = int(args[1])
+        try:
+            amount = float(args[2])
+            deduct_balance(target_id, amount)
+            bot.reply_to(message, f"✂️ `{target_id}` একাউন্ট থেকে **${amount}** কাটা হয়েছে।", parse_mode="Markdown")
+        except ValueError:
+            bot.reply_to(message, "⚠️ সঠিক পরিমাণ লিখুন।")
+
+# --- MAIN BOT HANDLERS ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name
     
+    if is_user_banned(user_id):
+        bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!**", parse_mode="Markdown")
+        return
+
     args = message.text.split()
     if len(args) > 1 and args[1].isdigit():
         referrer_id = int(args[1])
@@ -141,14 +259,13 @@ def send_welcome(message):
             cursor = conn.cursor()
             cursor.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
             if cursor.fetchone() is None:
-                cursor.execute('INSERT INTO users (user_id, first_name, balance, referred_by, referrals_count) VALUES (?, ?, 0.0, ?, 0)', (user_id, first_name, referrer_id))
+                cursor.execute('INSERT INTO users (user_id, first_name, balance, referred_by, referrals_count, is_banned) VALUES (?, ?, 0.0, ?, 0, 0)', (user_id, first_name, referrer_id))
                 conn.commit()
                 conn.close()
                 add_referral(referrer_id)
                 try:
                     bot.send_message(referrer_id, f"🎉 আপনার রেফারে নতুন একজন জয়েন করেছে! আপনি $0.003 বোনাস পেয়েছেন।")
-                except:
-                    pass
+                except: pass
 
     balance, ref_count = get_user(user_id, first_name)
     text = f"👋 **স্বাগতম, {first_name}!**\n\nআমাদের বটে কাজ করে আপনি সহজেই ইনকাম করতে পারবেন। নিচের বাটনগুলো ব্যবহার করে কাজ শুরু করুন:"
@@ -160,22 +277,69 @@ def handle_message(message):
     first_name = message.from_user.first_name
     text_input = message.text.strip()
 
+    if is_user_banned(user_id):
+        bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!**", parse_mode="Markdown")
+        return
+
+    # ইউজার উইথড্র তথ্য ইনপুট দিলে
+    if user_id in user_withdraw_step:
+        method = user_withdraw_step[user_id]['method']
+        acc_details = text_input
+        balance, _ = get_user(user_id, first_name)
+        
+        if balance < 2.0:
+            bot.send_message(message.chat.id, "⚠️ আপনার পর্যাপ্ত ব্যালেন্স নেই! সর্বনিম্ন উইথড্র $2.00 USDT।", reply_markup=main_keyboard())
+            del user_withdraw_step[user_id]
+            return
+
+        deduct_balance(user_id, balance)
+        
+        # চ্যানেলে পাবলিক পোস্ট
+        channel_post = (
+            f"✅ **Withdrawal Paid**\n\n"
+            f"💵 **{balance:.3f} USDT**\n"
+            f"🌐 **{method}**\n"
+            f"👛 `{acc_details}`"
+        )
+
+        # এডমিনের কাছে ডিটেইলস নোটিফিকেশন
+        admin_post = (
+            f"📥 **REAL WITHDRAW REQUEST!**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 **Name:** {first_name}\n"
+            f"🆔 **User ID:** `{user_id}`\n"
+            f"💰 **Amount:** ${balance:.4f} USDT\n"
+            f"⚡ **Method:** {method}\n"
+            f"📱 **Account:** `{acc_details}`"
+        )
+
+        try:
+            # চ্যানেলে নোটিফিকেশন পাঠাবে
+            bot.send_message(PAYMENT_CHANNEL, channel_post, parse_mode="Markdown")
+            # এডমিনের ইনবক্সে পাঠাবে
+            bot.send_message(ADMIN_ID, admin_post, parse_mode="Markdown")
+        except Exception as e:
+            print("Withdraw Notification Error:", e)
+
+        bot.send_message(
+            message.chat.id, 
+            f"✅ **আপনার উইথড্র রিকোয়েস্ট জমা হয়েছে!**\n\n"
+            f"💳 **পরিমাণ:** ${balance:.4f} USDT\n"
+            f"🔹 **মেথড:** {method}\n"
+            f"📱 **ডিটেইলস:** {acc_details}\n\n"
+            f"পেমেন্ট প্রুফ চ্যানেলে চেক করুন। ধন্যবাদ!",
+            reply_markup=main_keyboard()
+        )
+        del user_withdraw_step[user_id]
+        return
+
     if "Watch Ad" in text_input:
         user_last_click[user_id] = time.time()
-        
         inline_markup = types.InlineKeyboardMarkup(row_width=2)
         
-        # Adding 10 Monetag Links
-        m_btns = []
-        for i, link in enumerate(MONETAG_LINKS, 1):
-            m_btns.append(types.InlineKeyboardButton(text=f"📺 Monetag {i}", url=link))
-        
-        # Adding 10 Adsterra Links
-        a_btns = []
-        for i, link in enumerate(ADSTERRA_LINKS, 1):
-            a_btns.append(types.InlineKeyboardButton(text=f"⭐ Adsterra {i}", url=link))
+        m_btns = [types.InlineKeyboardButton(text=f"📺 Monetag {i}", url=link) for i, link in enumerate(MONETAG_LINKS, 1)]
+        a_btns = [types.InlineKeyboardButton(text=f"⭐ Adsterra {i}", url=link) for i, link in enumerate(ADSTERRA_LINKS, 1)]
             
-        # Grouping in pairs
         for i in range(0, 10, 2):
             inline_markup.add(m_btns[i], m_btns[i+1])
         for i in range(0, 10, 2):
@@ -217,19 +381,29 @@ def handle_message(message):
 
     elif "Withdraw" in text_input:
         balance, _ = get_user(user_id, first_name)
-        text = (
-            f"💸 **উইথড্র ইনফরমেশন**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"💳 **আপনার বর্তমান ব্যালেন্স:** ${balance:.4f} USDT\n"
-            f"📌 **সর্বনিম্ন উইথড্র:** **$2.00 USDT**\n\n"
-            f"⚡ **পেমেন্ট মেথডসমূহ:**\n"
-            f"🔹 বিকাশ (bKash)\n"
-            f"🔹 নগদ (Nagad)\n"
-            f"🔹 বাইনান্স (Binance USDT)\n"
-            f"🔹 পায়ার (Payeer)\n\n"
-            f"📝 **নোট:** আপনার ব্যালেন্স $2.00 USDT পূর্ণ হলে টাকা তুলতে সরাসরি অ্যাডমিন সাপোর্টে যোগাযোগ করুন।"
-        )
-        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+        if balance < 2.0:
+            bot.send_message(
+                message.chat.id,
+                f"💸 **উইথড্র ইনফরমেশন**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"💳 **আপনার বর্তমান ব্যালেন্স:** ${balance:.4f} USDT\n"
+                f"📌 **সর্বনিম্ন উইথড্র:** **$2.00 USDT**\n\n"
+                f"⚠️ আপনার অ্যাকাউন্টে পর্যাপ্ত ব্যালেন্স নেই।",
+                parse_mode="Markdown"
+            )
+        else:
+            inline_markup = types.InlineKeyboardMarkup(row_width=2)
+            inline_markup.add(
+                types.InlineKeyboardButton("bKash", callback_data="with_bKash"),
+                types.InlineKeyboardButton("Nagad", callback_data="with_Nagad"),
+                types.InlineKeyboardButton("Binance USDT", callback_data="with_Binance"),
+                types.InlineKeyboardButton("Payeer", callback_data="with_Payeer")
+            )
+            bot.send_message(
+                message.chat.id,
+                f"💳 **আপনার ব্যালেন্স:** ${balance:.4f} USDT\n\nপেমেন্ট মেথড সিলেক্ট করুন:",
+                reply_markup=inline_markup
+            )
 
     elif "Rule" in text_input:
         text = (
@@ -237,8 +411,7 @@ def handle_message(message):
             f"━━━━━━━━━━━━━━━━━━━━━\n"
             f"১. কোনো প্রকার অটো-ক্লিক বা বট ব্যবহার করা যাবে না।\n"
             f"২. ভিপিএন (VPN) ব্যবহার করে কাজ করা সম্পূর্ণ নিষেধ।\n"
-            f"৩. ফেক বা ভুয়া রেফারেল করলে অ্যাকাউন্ট পার্মানেন্ট ব্যান করা হবে।\n"
-            f"৪. সততার সাথে কাজ করলে ১০০% পেমেন্ট গ্যারান্টি।"
+            f"৩. ফেক বা ভুয়া রেফারেল করলে অ্যাকাউন্ট পার্মানেন্ট ব্যান করা হবে।"
         )
         bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
@@ -248,7 +421,7 @@ def handle_message(message):
         inline_markup.add(btn_wa)
         bot.send_message(
             message.chat.id,
-            "🔰 **অফিসিয়াল হোয়াটসঅ্যাপ সাপোর্ট**\n\nআমাদের সাথে সরাসরি হোয়াটসঅ্যাপে কথা বলতে নিচের বোতামে চাপ দিন:",
+            "🔰 **অফিসিয়াল হোয়াটসঅ্যাপ সাপোর্ট**",
             reply_markup=inline_markup,
             parse_mode="Markdown"
         )
@@ -262,11 +435,8 @@ def handle_message(message):
         text = (
             f"🌐 **ALL IN ONE SUPPORT CENTER** 🌐\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"আপনার যেকোনো সমস্যা বা পেমেন্ট সংক্রান্ত তথ্যের জন্য যোগাযোগ করুন:\n\n"
             f"✅ **টেলিগ্রাম এডমিন:** {ADMIN_USERNAME}\n"
-            f"🖇️ **সাপোর্ট গ্রুপ:** {SUPPORT_GROUP}\n"
-            f"✅ **Whatsapp এডমিন:** {WHATSAPP_LINK}\n\n"
-            f"সহযোগিতার জন্য নিচের বোতামগুলো ব্যবহার করুন 👇"
+            f"🖇️ **সাপোর্ট গ্রুপ:** {SUPPORT_GROUP}"
         )
         bot.send_message(message.chat.id, text, reply_markup=inline_markup, parse_mode="Markdown")
 
@@ -280,32 +450,44 @@ def handle_message(message):
         )
         bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-# Callback Handler for Secure Reward Verification
-@bot.callback_query_handler(func=lambda call: call.data == "claim_reward")
-def claim_reward_callback(call):
+@bot.callback_query_handler(func=lambda call: True)
+def callback_inline(call):
     user_id = call.from_user.id
-    current_time = time.time()
-    last_click = user_last_click.get(user_id, 0)
+    
+    if is_user_banned(user_id):
+        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
+        return
 
-    time_passed = current_time - last_click
+    if call.data == "claim_reward":
+        current_time = time.time()
+        last_click = user_last_click.get(user_id, 0)
+        time_passed = current_time - last_click
 
-    if time_passed < 15:
-        remaining = int(15 - time_passed)
-        bot.answer_callback_query(call.id, f"⚠️ ভুয়া দাবি গ্রহণ করা হবে না! বিজ্ঞাপনে অন্তত ১৫ সেকেন্ড থাকুন (আর {remaining} সেকেন্ড বাকি)।", show_alert=True)
-    else:
-        add_balance(user_id, 0.001)
-        user_last_click[user_id] = current_time + 10 # reset timer with cooldown
-        bot.answer_callback_query(call.id, "🎉 অভিনন্দন! $0.001 আপনার অ্যাকাউন্টে যোগ করা হয়েছে।", show_alert=True)
-        
-        balance, _ = get_user(user_id, call.from_user.first_name)
+        if time_passed < 15:
+            remaining = int(15 - time_passed)
+            bot.answer_callback_query(call.id, f"⚠️ অন্তত ১৫ সেকেন্ড থাকুন (আর {remaining} সেকেন্ড বাকি)।", show_alert=True)
+        else:
+            add_balance(user_id, 0.001)
+            user_last_click[user_id] = current_time + 10
+            bot.answer_callback_query(call.id, "🎉 $0.001 আপনার অ্যাকাউন্টে যোগ করা হয়েছে।", show_alert=True)
+            
+            balance, _ = get_user(user_id, call.from_user.first_name)
+            bot.send_message(
+                call.message.chat.id,
+                f"✅ **রিওয়ার্ড সফলভাবে যোগ হয়েছে!**\nবর্তমান ব্যালেন্স: ${balance:.4f} USDT",
+                parse_mode="Markdown"
+            )
+
+    elif call.data.startswith("with_"):
+        method = call.data.split("_")[1]
+        user_withdraw_step[user_id] = {'method': method}
         bot.send_message(
             call.message.chat.id,
-            f"✅ **রিওয়ার্ড সফলভাবে যোগ হয়েছে!**\n"
-            f"বর্তমান মোট ব্যালেন্স: ${balance:.4f} USDT",
-            parse_mode="Markdown"
+            f"📝 আপনার **{method}** নম্বর বা এড্রেসটি লিখে মেসেজ পাঠান:"
         )
 
 if __name__ == "__main__":
     keep_alive()
-    print("Bot is running securely with 20 ad links...")
+    start_auto_post()
+    print("Bot is running...")
     bot.infinity_polling()
