@@ -28,14 +28,11 @@ WHATSAPP_LINK = 'https://wa.me/qr/TLGSBEYHL74LD1'
 SUPPORT_GROUP = 'https://t.me/allinoneg1'
 ADMIN_USERNAMES = '@akadmin01 / @akadmin02'
 
-# দুইটা এডমিন আইডি
 ADMIN_IDS = [8414665404, 5034445579] 
 
-# পাবলিক চ্যানেল ইউজারনেম (বটকে চ্যানেলে Admin বানিয়ে রাখবেন)
 PAYMENT_CHANNEL = '@myearningall' 
 REQUIRED_CHANNELS = ['@allinoneg1', '@myearningall']
 
-# --- MONETAG & ADSTERRA LINKS ---
 MONETAG_LINKS = [
     'https://omg10.com/4/11522087',
     'https://omg10.com/4/11522086',
@@ -64,6 +61,7 @@ ADSTERRA_LINKS = [
 
 user_last_click = {}
 user_withdraw_step = {}
+temp_referrer = {}
 bot = TeleBot(TOKEN)
 
 # --- MONGO DB CONNECTION ---
@@ -107,17 +105,21 @@ def is_user_banned(user_id):
 def get_user(user_id, first_name):
     user = users_col.find_one({'user_id': user_id})
     if not user:
+        return 0.0, 0
+    return user.get('balance', 0.0), user.get('referrals_count', 0)
+
+def create_user(user_id, first_name, referrer_id=0):
+    user = users_col.find_one({'user_id': user_id})
+    if not user:
         new_user = {
             'user_id': user_id,
             'first_name': first_name,
             'balance': 0.0,
-            'referred_by': 0,
+            'referred_by': referrer_id,
             'referrals_count': 0,
             'is_banned': 0
         }
         users_col.insert_one(new_user)
-        return 0.0, 0
-    return user.get('balance', 0.0), user.get('referrals_count', 0)
 
 def add_balance(user_id, amount):
     users_col.update_one({'user_id': user_id}, {'$inc': {'balance': amount}})
@@ -134,10 +136,9 @@ def add_referral(referrer_id):
 def get_total_users():
     return users_col.count_documents({})
 
-# --- MAIN KEYBOARD ---
+# --- MAIN KEYBOARD (Without Start button) ---
 def main_keyboard():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    btn_start = types.KeyboardButton("🚀 Start")
     btn_ad = types.KeyboardButton("📺 Watch Ad")
     btn_acc = types.KeyboardButton("🖥️ Account")
     btn_ref = types.KeyboardButton("✨ Referral")
@@ -147,14 +148,16 @@ def main_keyboard():
     btn_sup = types.KeyboardButton("📤 Support")
     btn_stat = types.KeyboardButton("📊 Status")
     
-    markup.add(btn_start)
     markup.add(btn_ad, btn_acc, btn_ref, btn_with, btn_rules, btn_wa, btn_sup, btn_stat)
     return markup
 
-# --- AUTO FAKE PAYMENT SENDER THREAD ---
+# --- AUTO FAKE PAYMENT SENDER (Every 5 Minutes) ---
 def auto_payment_poster():
     hex_chars = "0123456789abcdefABCDEF"
     methods = ["bKash (Personal)", "Nagad (Personal)", "BSC (BEP20)", "Binance USDT", "Payeer"]
+    
+    # প্রথম ফেক পোস্ট ৫ মিনিট (৩০০ সেকেন্ড) পর যাবে
+    time.sleep(300)
     
     while True:
         try:
@@ -182,9 +185,10 @@ def auto_payment_poster():
             
             bot.send_message(PAYMENT_CHANNEL, text, parse_mode="Markdown")
         except Exception as e:
-            print("Auto post error:", e)
+            print("Auto post error (Ensure Bot is Admin in Channel):", e)
             
-        time.sleep(3600)
+        # প্রতি ৫ মিনিট (৩০০ সেকেন্ড) পর পর পরবর্তী ফেক পোস্ট পাঠানো হবে
+        time.sleep(300)
 
 def start_auto_post():
     t = Thread(target=auto_payment_poster)
@@ -246,32 +250,17 @@ def send_welcome(message):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", parse_mode="Markdown")
         return
 
-    # Check Channel Subscription First
+    args = message.text.split()
+    if len(args) > 1 and args[1].isdigit():
+        ref_id = int(args[1])
+        if ref_id != user_id:
+            temp_referrer[user_id] = ref_id
+
     if not check_user_channels(user_id):
         send_force_join_msg(message.chat.id)
         return
 
-    # REFERRAL LOGIC
-    args = message.text.split()
-    if len(args) > 1 and args[1].isdigit():
-        referrer_id = int(args[1])
-        if referrer_id != user_id:
-            existing_user = users_col.find_one({'user_id': user_id})
-            if not existing_user:
-                new_user = {
-                    'user_id': user_id,
-                    'first_name': first_name,
-                    'balance': 0.0,
-                    'referred_by': referrer_id,
-                    'referrals_count': 0,
-                    'is_banned': 0
-                }
-                users_col.insert_one(new_user)
-                add_referral(referrer_id)
-                try:
-                    bot.send_message(referrer_id, "🎉 আপনার রেফারে নতুন একজন জয়েন করেছে! আপনি $0.003 বোনাস পেয়েছেন।")
-                except: pass
-
+    create_user(user_id, first_name)
     balance, ref_count = get_user(user_id, first_name)
     text = f"👋 স্বাগতম, {first_name}!\n\nআমাদের বটে কাজ করে আপনি সহজেই ইনকাম করতে পারবেন। নিচের বাটনগুলো ব্যবহার করে কাজ শুরু করুন:"
     bot.send_message(message.chat.id, text, reply_markup=main_keyboard(), parse_mode="Markdown")
@@ -286,15 +275,11 @@ def handle_message(message):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", parse_mode="Markdown")
         return
 
-    # Check Channel Subscription
     if not check_user_channels(user_id):
         send_force_join_msg(message.chat.id)
         return
 
-    if "Start" in text_input:
-        send_welcome(message)
-        return
-
+    # REAL WITHDRAW REQUEST HANDLER
     if user_id in user_withdraw_step:
         method = user_withdraw_step[user_id]['method']
         acc_details = text_input
@@ -326,12 +311,14 @@ def handle_message(message):
 
         try:
             bot.send_message(PAYMENT_CHANNEL, channel_post, parse_mode="Markdown")
-            for admin_id in ADMIN_IDS:
-                try:
-                    bot.send_message(admin_id, admin_post, parse_mode="Markdown")
-                except: pass
         except Exception as e:
-            print("Withdraw Notification Error:", e)
+            print("Channel Post Error (Ensure Bot is Admin in Channel):", e)
+
+        for admin_id in ADMIN_IDS:
+            try:
+                bot.send_message(admin_id, admin_post, parse_mode="Markdown")
+            except Exception as e:
+                print(f"Admin Notify Error for {admin_id}:", e)
 
         bot.send_message(
             message.chat.id, 
@@ -465,19 +452,35 @@ def handle_message(message):
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     user_id = call.from_user.id
-    
+    first_name = call.from_user.first_name
+
     if is_user_banned(user_id):
         bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
         return
 
     if call.data == "check_channels":
         if check_user_channels(user_id):
-            bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে! এবার কাজ শুরু করুন।", show_alert=True)
+            bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে!", show_alert=True)
             bot.delete_message(call.message.chat.id, call.message.message_id)
-            get_user(user_id, call.from_user.first_name)
+            
+            existing_user = users_col.find_one({'user_id': user_id})
+            if not existing_user:
+                ref_id = temp_referrer.get(user_id, 0)
+                create_user(user_id, first_name, ref_id)
+                
+                if ref_id != 0:
+                    add_referral(ref_id)
+                    try:
+                        bot.send_message(ref_id, "🎉 আপনার রেফারকৃত সদস্য চ্যানেলগুলোতে জয়েন করে সফলভাবে ভেরিফাই সম্পন্ন করেছেন! আপনি $0.003 USDT বোনাস পেয়েছেন।")
+                    except Exception as e:
+                        print("Referral Notify Error:", e)
+                
+                if user_id in temp_referrer:
+                    del temp_referrer[user_id]
+
             bot.send_message(
                 call.message.chat.id,
-                f"👋 স্বাগতম {call.from_user.first_name}!\n\nআপনি সফলভাবে চ্যানেলগুলোতে জয়েন করেছেন। নিচের বাটনগুলো ব্যবহার করে ইনকাম শুরু করুন:",
+                f"👋 স্বাগতম {first_name}!\n\nআপনি সফলভাবে চ্যানেলগুলোতে জয়েন করেছেন। নিচের বাটনগুলো ব্যবহার করে ইনকাম শুরু করুন:",
                 reply_markup=main_keyboard(),
                 parse_mode="Markdown"
             )
@@ -502,7 +505,7 @@ def callback_inline(call):
             user_last_click[user_id] = current_time + 10
             bot.answer_callback_query(call.id, "🎉 $0.001 আপনার অ্যাকাউন্টে যোগ করা হয়েছে।", show_alert=True)
             
-            balance, _ = get_user(user_id, call.from_user.first_name)
+            balance, _ = get_user(user_id, first_name)
             bot.send_message(
                 call.message.chat.id,
                 f"✅ রিওয়ার্ড সফলভাবে যোগ হয়েছে!\nবর্তমান ব্যালেন্স: ${balance:.4f} USDT",
@@ -517,22 +520,20 @@ def callback_inline(call):
             f"📝 আপনার {method} নম্বর বা এড্রেসটি লিখে মেসেজ পাঠান:"
         )
 
-# --- BOT RUNNER WITH ERROR 409 FIX ---
+# --- BOT RUNNER ---
 if __name__ == "__main__":
     keep_alive()
     start_auto_post()
     print("Bot is starting...")
     
-    # পুরোনো রানিং ওয়েবহুক মুছে ফেলার জন্য
     try:
         bot.remove_webhook()
     except Exception as e:
         print("Webhook remove error:", e)
 
-    # Error 409/Auto reconnect handler loop
     while True:
         try:
             bot.polling(none_stop=True, interval=0, timeout=20, skip_pending=True)
         except Exception as e:
             print(f"Bot Polling Error: {e}")
-            time.sleep(3) # ৩ সেকেন্ড অপেক্ষা করে স্বয়ংক্রিয়ভাবে আবার কানেক্ট হবে
+            time.sleep(3)
