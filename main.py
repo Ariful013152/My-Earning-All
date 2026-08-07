@@ -29,7 +29,7 @@ SUPPORT_GROUP = 'https://t.me/allinoneg1'
 ADMIN_USERNAME = '@akadmin02'
 ADMIN_ID = 8615856288 
 
-# পাবলিক চ্যানেল ইউজারনেম (বটকে চ্যানেলে Admin বানিয়ে রাখবেন)
+# পাবলিক চ্যানেল ইউজারনেম (বটকে চ্যানেলে Admin বানিয়ে রাখবেন)
 PAYMENT_CHANNEL = '@myearningall' 
 REQUIRED_CHANNELS = ['@allinoneg1', '@myearningall']
 
@@ -64,7 +64,7 @@ user_last_click = {}
 user_withdraw_step = {}
 bot = TeleBot(TOKEN)
 
-# --- MONGODB CONNECTION ---
+# --- MONGO DB CONNECTION ---
 MONGO_URI = os.environ.get('MONGO_URI')
 client = MongoClient(MONGO_URI)
 db = client['telegram_bot']
@@ -90,10 +90,10 @@ def send_force_join_msg(chat_id):
     markup.add(btn1, btn2, btn_check)
 
     text = (
-        "🛑 **আমাদের বটের সার্ভিস ব্যবহার করতে হলে নিচের ২টি চ্যানেলে জয়েন থাকা বাধ্যতামুলক:**\n\n"
+        "🛑 **আমাদের বটের সার্ভিস ব্যবহার করতে হলে নিচের ২টি চ্যানেলে জয়েন থাকা বাধ্যতামূলক:**\n\n"
         "১. https://t.me/allinoneg1\n"
         "২. https://t.me/myearningall\n\n"
-        "জয়েন করার পর নিচে **'✅ Joined / Verified'** বাটনে ক্লিক করুন।"
+        "জয়েন করার পর নিচে **'✅ Joined / Verified'** বাটনে ক্লিক করুন।"
     )
     bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
 
@@ -182,7 +182,7 @@ def auto_payment_poster():
         except Exception as e:
             print("Auto post error:", e)
             
-        time.sleep(60)
+        time.sleep(3600)
 
 def start_auto_post():
     t = Thread(target=auto_payment_poster)
