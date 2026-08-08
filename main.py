@@ -54,16 +54,14 @@ ADSTERRA_LINKS = [
 ]
 
 # --- DATABASE SETUP ---
-try:
-    if MONGO_URI:
+users_col = None
+if MONGO_URI:
+    try:
         client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
         db = client["telegram_bot"]
         users_col = db["users"]
-    else:
-        users_col = None
-except Exception as e:
-    print(f"MongoDB Warning: {e}")
-    users_col = None
+    except Exception as e:
+        print(f"MongoDB Connection Error: {e}")
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
 app = Flask(__name__)
@@ -158,7 +156,6 @@ def main_menu_keyboard():
 
 # --- ADMIN COMMANDS ---
 
-# 1. ADD BALANCE
 @bot.message_handler(commands=['addbalance'])
 def add_balance_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -187,7 +184,6 @@ def add_balance_cmd(message):
     except Exception as e:
         bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
 
-# 2. CUT BALANCE
 @bot.message_handler(commands=['cutbalance'])
 def cut_balance_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -216,7 +212,6 @@ def cut_balance_cmd(message):
     except Exception as e:
         bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
 
-# 3. CHECK USER BALANCE
 @bot.message_handler(commands=['balance'])
 def check_user_balance_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -231,7 +226,7 @@ def check_user_balance_cmd(message):
 
         target_id = int(args[1])
         if users_col is None:
-            bot.reply_to(message, "❌ ডাটাবেজ কানেকশন সমস্যা!")
+            bot.reply_to(message, "❌ ডাটাবেজ কানেকশন নেই!")
             return
 
         user = users_col.find_one({"user_id": target_id})
@@ -260,7 +255,6 @@ def check_user_balance_cmd(message):
     except Exception as e:
         bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
 
-# 4. BAN USER
 @bot.message_handler(commands=['ban'])
 def ban_user_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -285,7 +279,6 @@ def ban_user_cmd(message):
     except Exception as e:
         bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
 
-# 5. UNBAN USER
 @bot.message_handler(commands=['unban'])
 def unban_user_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -370,18 +363,19 @@ def handle_all_messages(message):
         withdraw_amount = balance
         update_user_field(user_id, {"balance": 0.0})
 
+        # Masking phone number for channel post
+        masked_acc = text[:3] + "*****" + text[-3:]
+
+        # Auto Paid Message Format for Channel
         msg = (
-            f"📥 **NEW WITHDRAW REQUEST!**\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 **Name:** `{first_name}`\n"
-            f"🆔 **User ID:** `{user_id}`\n"
-            f"💰 **Amount:** `${withdraw_amount:.4f} USDT`\n"
-            f"⚡ **Method:** {method}\n"
-            f"📱 **Account:** `{text}`\n"
-            f"━━━━━━━━━━━━━━━━━━━"
+            f"**My Earning All Payment**\n"
+            f"✅ **Withdrawal Paid**\n\n"
+            f"💵 **{withdraw_amount:.3f} USDT**\n"
+            f"🌐 **{method}**\n"
+            f"👛 **{masked_acc}**"
         )
 
-        bot.send_message(message.chat.id, f"✅ **আপনার উইথড্র রিকোয়েস্ট জমা হয়েছে!**\n\n💳 **পরিমাণ:** `${withdraw_amount:.4f} USDT`\n🔷 **মেথড:** {method}\n📱 **ডিটেইলস:** `{text}`\n\nধন্যবাদ!", reply_markup=main_menu_keyboard(), parse_mode="Markdown")
+        bot.send_message(message.chat.id, f"✅ **আপনার উইথড্র রিকোয়েস্ট সফলভাবে প্রসেস হয়েছে!**\n\n💳 **পরিমাণ:** `${withdraw_amount:.4f} USDT`\n🔷 **মেথড:** {method}\n📱 **ডিটেইলস:** `{text}`\n\nধন্যবাদ!", reply_markup=main_menu_keyboard(), parse_mode="Markdown")
 
         try:
             bot.send_message(PROOF_CHANNEL, msg, parse_mode="Markdown")
@@ -612,38 +606,28 @@ def callback_inline(call):
         )
 
 # --- AUTO POST ONLY BKASH & NAGAD (EVERY 4 MINUTES) ---
-def start_auto_post():
-    def loop():
-        prefixes = ["017", "018", "019", "016", "015", "013", "014"]
-        methods = ["bKash", "Nagad"]
-        
-        while True:
-            try:
-                amount = round(random.uniform(2.000, 10.000), 3)
-                net = random.choice(methods)
-                phone_num = random.choice(prefixes) + "".join([str(random.randint(0, 9)) for _ in range(5)]) + "***"
+def auto_post_loop():
+    prefixes = ["017", "018", "019", "016", "015", "013", "014"]
+    methods = ["bKash", "Nagad"]
+    
+    while True:
+        try:
+            time.sleep(240)  # ৪ মিনিট পর পর ফেক মেসেজ যাবে
+            amount = round(random.uniform(2.000, 10.000), 3)
+            net = random.choice(methods)
+            phone_num = random.choice(prefixes) + "".join([str(random.randint(0, 9)) for _ in range(5)]) + "***"
 
-                msg = (
-                    f"**My Earning All Payment**\n"
-                    f"✅ **Withdrawal Paid**\n\n"
-                    f"💵 **{amount:.3f} USDT**\n"
-                    f"🌐 **{net}**\n"
-                    f"👛 **{phone_num}**"
-                )
+            msg = (
+                f"**My Earning All Payment**\n"
+                f"✅ **Withdrawal Paid**\n\n"
+                f"💵 **{amount:.3f} USDT**\n"
+                f"🌐 **{net}**\n"
+                f"👛 **{phone_num}**"
+            )
 
-                try:
-                    bot.send_message(PROOF_CHANNEL, msg, parse_mode="Markdown")
-                except Exception as e:
-                    print(f"Error sending to {PROOF_CHANNEL}: {e}")
-
-                time.sleep(240)
-            except Exception as e:
-                print(f"Auto post error: {e}")
-                time.sleep(60)
-
-    t = threading.Thread(target=loop)
-    t.daemon = True
-    t.start()
+            bot.send_message(PROOF_CHANNEL, msg, parse_mode="Markdown")
+        except Exception as e:
+            print(f"Auto post error: {e}")
 
 # --- FLASK WEB SERVER ---
 def keep_alive():
@@ -662,6 +646,11 @@ def keep_alive():
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
     keep_alive()
-    start_auto_post()
+    
+    # Start auto posting thread properly
+    t_auto = threading.Thread(target=auto_post_loop)
+    t_auto.daemon = True
+    t_auto.start()
+
     print("Bot is running...")
     bot.infinity_polling(skip_pending=True)
