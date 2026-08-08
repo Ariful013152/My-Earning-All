@@ -429,11 +429,16 @@ def callback_inline(call):
     user_id = call.from_user.id
     first_name = call.from_user.first_name
 
+    try:
+        bot.answer_callback_query(call.id)
+    except Exception:
+        pass
+
     balance, user = get_user(user_id, first_name)
 
     if call.data == "check_join":
         if check_user_channels(user_id):
-            bot.answer_callback_query(call.id, "✅ ধন্যবাদ! আপনি সব চ্যানেলে জয়েন আছেন।", show_alert=True)
+            bot.send_message(call.message.chat.id, "✅ ধন্যবাদ! আপনি সব চ্যানেলে জয়েন আছেন।")
             
             if user.get("referred_by") and not user.get("ref_reward_given", False):
                 referrer_id = user.get("referred_by")
@@ -449,16 +454,18 @@ def callback_inline(call):
                 pass
             bot.send_message(call.message.chat.id, "🎉 স্বাগতম! কাজ শুরু করতে নিচের বাটন ব্যবহার করুন:", reply_markup=main_menu_keyboard())
         else:
-            bot.answer_callback_query(call.id, "❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি!", show_alert=True)
+            bot.send_message(call.message.chat.id, "❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি!")
 
     elif call.data == "claim_reward":
         if not check_user_channels(user_id):
-            bot.answer_callback_query(call.id, "⚠️ আগে চ্যানেলগুলোতে জয়েন করুন!", show_alert=True)
             send_force_join_msg(call.message.chat.id)
             return
 
         if not user.get("can_claim", False):
-            bot.answer_callback_query(call.id, "⚠️ আগে 'Watch Ad' এ ক্লিক করে লিংকে ভিজিট করুন!", show_alert=True)
+            bot.send_message(
+                call.message.chat.id, 
+                "⚠️ **আপনি লিংকে প্রবেশ করেননি!**\nআগে **Visit Ad / Link** বাটনে ক্লিক করে অ্যাড দেখুন, তারপর এখানে চেষ্টা করুন।"
+            )
             return
 
         current_time = time.time()
@@ -467,7 +474,11 @@ def callback_inline(call):
 
         if elapsed_time < 15:
             remaining = int(15 - elapsed_time)
-            bot.answer_callback_query(call.id, f"⚠️ অন্তত ১৫ সেকেন্ড অপেক্ষা করুন (আর {remaining} সেকেন্ড বাকি)।", show_alert=True)
+            bot.send_message(
+                call.message.chat.id, 
+                f"⏳ **১৫ সেকেন্ড পূর্ণ হয়নি!**\nঅনুগ্রহ করে আরো **{remaining} সেকেন্ড** এড পেজে সময় দিন এবং তারপর ক্লেম করুন।",
+                parse_mode="Markdown"
+            )
         else:
             daily_count = user.get("daily_count", 0)
             last_reset = user.get("last_reset", current_time)
@@ -477,7 +488,7 @@ def callback_inline(call):
                 last_reset = current_time
 
             if daily_count >= 30:
-                bot.answer_callback_query(call.id, "❌ আজকের কাজের সীমা (৩০/৩০) পূর্ণ হয়েছে!", show_alert=True)
+                bot.send_message(call.message.chat.id, "❌ **আজকের কাজের সীমা (৩০/৩০) পূর্ণ হয়েছে!**")
                 return
 
             add_balance(user_id, 0.001)
@@ -487,8 +498,6 @@ def callback_inline(call):
                 "can_claim": False
             })
 
-            bot.answer_callback_query(call.id, "🎉 $0.001 আপনার অ্যাকাউন্টে যোগ করা হয়েছে।", show_alert=True)
-
             updated_balance, _ = get_user(user_id, first_name)
             try:
                 bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -497,7 +506,10 @@ def callback_inline(call):
 
             bot.send_message(
                 call.message.chat.id,
-                f"✅ রিওয়ার্ড সফলভাবে যোগ হয়েছে!\nবর্তমান ব্যালেন্স: `${updated_balance:.4f} USDT`\nআজকের সম্পূর্ণ কাজ: `{daily_count + 1}/30`",
+                f"🎉 **রিওয়ার্ড সফলভাবে যোগ হয়েছে!**\n\n"
+                f"💰 **প্রাপ্ত বোনাস:** `$0.0010 USDT`\n"
+                f"💳 **বর্তমান ব্যালেন্স:** `${updated_balance:.4f} USDT`\n"
+                f"📊 **আজকের টাস্ক:** `{daily_count + 1}/30`",
                 reply_markup=main_menu_keyboard(),
                 parse_mode="Markdown"
             )
