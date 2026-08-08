@@ -62,7 +62,6 @@ bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
 app = Flask(__name__)
 
 # --- MEMORY TRACKING ---
-user_last_action = {}
 user_withdraw_step = {}
 
 # --- DATABASE HELPERS ---
@@ -89,7 +88,7 @@ def update_user_field(user_id, field_dict):
     users_col.update_one({"user_id": user_id}, {"$set": field_dict}, upsert=True)
 
 def add_balance(user_id, amount):
-    users_col.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
+    users_col.update_one({"user_id": user_id}, {"$inc": {"balance": float(amount)}})
 
 def check_user_channels(user_id):
     for channel in REQUIRED_CHANNELS:
@@ -135,6 +134,35 @@ def main_menu_keyboard():
         KeyboardButton("📊 Status")
     )
     return markup
+
+# --- ADMIN COMMANDS ---
+@bot.message_handler(commands=['addbalance'])
+def add_balance_cmd(message):
+    if message.from_user.id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
+        return
+
+    try:
+        args = message.text.split()
+        if len(args) < 3:
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/addbalance [USER_ID] [AMOUNT]`\nযেমন: `/addbalance 5034445579 3`", parse_mode="Markdown")
+            return
+
+        target_id = int(args[1])
+        amount = float(args[2])
+
+        add_balance(target_id, amount)
+        _, target_user = get_user(target_id)
+        new_bal = target_user.get("balance", 0.0)
+
+        bot.reply_to(message, f"✅ সফলভাবে `{target_id}` আইডি-তে `${amount:.4f} USDT` যোগ করা হয়েছে।\nবর্তমান ব্যালেন্স: `${new_bal:.4f} USDT`", parse_mode="Markdown")
+
+        try:
+            bot.send_message(target_id, f"🎉 অ্যাডমিন আপনার অ্যাকাউন্টে `${amount:.4f} USDT` যোগ করেছেন!\nবর্তমান ব্যালেন্স: `${new_bal:.4f} USDT`", parse_mode="Markdown")
+        except Exception:
+            pass
+    except Exception as e:
+        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
 
 # --- USER COMMAND HANDLERS ---
 @bot.message_handler(commands=['start'])
@@ -196,22 +224,23 @@ def handle_all_messages(message):
         update_user_field(user_id, {"balance": 0.0})
 
         msg = (
-            f"📥 **REAL WITHDRAW REQUEST!**\n"
+            f"📥 **NEW WITHDRAW REQUEST!**\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 **Name:** 👤 `{first_name}`\n"
+            f"👤 **Name:** `{first_name}`\n"
             f"🆔 **User ID:** `{user_id}`\n"
             f"💰 **Amount:** `${withdraw_amount:.4f} USDT`\n"
             f"⚡ **Method:** {method}\n"
             f"📱 **Account:** `{text}`\n"
-            f"━━━━━━━━━━━━━━━━━━━\n\n"
-            f"✅ **আপনার উইথড্র রিকোয়েস্ট জমা হয়েছে!**\n\n"
-            f"💳 **পরিমাণ:** `${withdraw_amount:.4f} USDT`\n"
-            f"🔷 **মেথড:** {method}\n"
-            f"📱 **ডিটেইলস:** `{text}`\n\n"
-            f"পেমেন্ট প্রুফ চ্যানেলে চেক করুন। ধন্যবাদ!"
+            f"━━━━━━━━━━━━━━━━━━━"
         )
 
-        bot.send_message(message.chat.id, msg, reply_markup=main_menu_keyboard(), parse_mode="Markdown")
+        bot.send_message(message.chat.id, f"✅ **আপনার উইথড্র রিকোয়েস্ট জমা হয়েছে!**\n\n💳 **পরিমাণ:** `${withdraw_amount:.4f} USDT`\n🔷 **মেথড:** {method}\n📱 **ডিটেইলস:** `{text}`\n\nধন্যবাদ!", reply_markup=main_menu_keyboard(), parse_mode="Markdown")
+
+        # Send withdraw alert to proof channel
+        try:
+            bot.send_message(PROOF_CHANNEL, msg, parse_mode="Markdown")
+        except Exception as e:
+            print(f"Error posting withdraw request: {e}")
         return
 
     if not check_user_channels(user_id):
@@ -469,7 +498,7 @@ def start_auto_post():
     t.daemon = True
     t.start()
 
-# --- FLASK WEB SERVER & KEEP ALIVE PING ---
+# --- FLASK WEB SERVER ---
 def keep_alive():
     @app.route('/')
     def home():
