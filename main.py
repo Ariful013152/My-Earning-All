@@ -1,491 +1,248 @@
 import os
-import time
 import random
+import threading
+import time
+import pymongo
+import telebot
 from flask import Flask
-from threading import Thread
-from telebot import TeleBot, types
-from pymongo import MongoClient
-
-# Render Port Binding & Server keep-alive setup
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is running perfectly!"
-
-def run():
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.daemon = True
-    t.start()
+from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # --- CONFIGURATION ---
-TOKEN = '8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqnftct1C8' 
-WHATSAPP_LINK = 'https://wa.me/qr/TLGSBEYHL74LD1'
-SUPPORT_GROUP = 'https://t.me/allinoneg1'
-ADMIN_USERNAMES = '@akadmin01 / @akadmin02'
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+MONGO_URI = os.environ.get("MONGO_URI", "YOUR_MONGO_URI_HERE")
 
-ADMIN_IDS = [8414665404, 5034445579] 
+REQUIRED_CHANNELS = ["@myearningall", "@earningdesh0"]
 
-PAYMENT_CHANNEL = '@myearningall' 
-REQUIRED_CHANNELS = ['@allinoneg1', '@myearningall']
-
-MONETAG_LINKS = [
-    'https://omg10.com/4/11522087',
-    'https://omg10.com/4/11522086',
-    'https://omg10.com/4/11522081',
-    'https://omg10.com/4/11522080',
-    'https://omg10.com/4/11522079',
-    'https://omg10.com/4/11522078',
-    'https://omg10.com/4/11522077',
-    'https://omg10.com/4/11522076',
-    'https://omg10.com/4/11522074',
-    'https://omg10.com/4/11516146'
+# Task / Ad Links
+TASK_LINKS = [
+    "https://poawooptugpoup.com/4/8991730",
+    "https://poawooptugpoup.com/4/8991732",
+    "https://poawooptugpoup.com/4/8991734",
+    "https://poawooptugpoup.com/4/8991735",
+    "https://poawooptugpoup.com/4/8991736",
+    "https://poawooptugpoup.com/4/8991737",
+    "https://poawooptugpoup.com/4/8991738",
+    "https://poawooptugpoup.com/4/8991739",
+    "https://poawooptugpoup.com/4/8991740",
+    "https://poawooptugpoup.com/4/8991741",
 ]
 
-ADSTERRA_LINKS = [
-    'https://www.effectivecpmnetwork.com/nx2nqegj3p?key=8fb4f6d68a89919faeee5ec3846d4292',
-    'https://www.effectivecpmnetwork.com/bbjq6k48?key=4707c2aa3827755848d5332b72a9c955',
-    'https://www.effectivecpmnetwork.com/hqrjr5jzm?key=fe9a5012689a62a78d579d93d0864575',
-    'https://www.effectivecpmnetwork.com/nqch6m5jc?key=3eecd9428d8b55066d6cfdcadeda271c',
-    'https://www.effectivecpmnetwork.com/ie1pgkmbcc?key=1298a27dc3477c9aef05ead4c6778088',
-    'https://www.effectivecpmnetwork.com/wg9r001v7?key=4f2213d1fb414c2e0c9ac7dde1c72402',
-    'https://www.effectivecpmnetwork.com/m36r7xvy?key=e8b267b7b19cae2daee8f96118e5326e',
-    'https://www.effectivecpmnetwork.com/jwsp4r2rtr?key=63a26410a1f920c6de29b0e73bf69055',
-    'https://www.effectivecpmnetwork.com/dwja24niv?key=6a9552e41b528897598e4eec709d5115',
-    'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
-]
+# --- DATABASE SETUP ---
+client = pymongo.MongoClient(MONGO_URI)
+db = client["earning_bot_db"]
+users_col = db["users"]
 
-user_last_click = {}
-user_withdraw_step = {}
-temp_referrer = {}
-bot = TeleBot(TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__)
 
-# --- MONGO DB CONNECTION ---
-MONGO_URI = os.environ.get('MONGO_URI', 'mongodb+srv://test:test@cluster0.example.mongodb.net/?retryWrites=true&w=majority')
-client = MongoClient(MONGO_URI)
-db = client['telegram_bot']
-users_col = db['users']
+# --- MEMORY TRACKING FOR RATE LIMITING & STATES ---
+user_last_action = {}  # {user_id: timestamp}
+user_states = {}       # {user_id: "waiting_for_bkash" / "waiting_for_nagad"}
 
-# --- FORCE JOIN CHECKER ---
+# --- DATABASE HELPERS WITH SECURITY ---
+def get_user(user_id, first_name="User"):
+    user = users_col.find_one({"user_id": user_id})
+    if not user:
+        user = {
+            "user_id": user_id, 
+            "first_name": str(first_name)[:30], # Payload attack prevention
+            "balance": 0.0, 
+            "daily_count": 0,
+            "last_reset": time.time(),
+            "last_task_time": 0,
+            "is_banned": False
+        }
+        users_col.insert_one(user)
+    return user
+
+def update_user_field(user_id, field_dict):
+    users_col.update_one({"user_id": user_id}, {"$set": field_dict}, upsert=True)
+
+def add_balance(user_id, amount):
+    users_col.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
+
+# --- SECURITY & VALIDATION FUNCTIONS ---
+def rate_limit_check(user_id, cooldown_seconds=2):
+    current = time.time()
+    last = user_last_action.get(user_id, 0)
+    if current - last < cooldown_seconds:
+        return False
+    user_last_action[user_id] = current
+    return True
+
 def check_user_channels(user_id):
-    for ch in REQUIRED_CHANNELS:
+    for channel in REQUIRED_CHANNELS:
         try:
-            member = bot.get_chat_member(ch, user_id)
+            member = bot.get_chat_member(channel, user_id)
             if member.status in ['left', 'kicked']:
                 return False
-        except Exception as e:
-            print(f"Channel Check Error ({ch}):", e)
+        except Exception:
             return False
     return True
 
 def send_force_join_msg(chat_id):
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    btn1 = types.InlineKeyboardButton("📢 Channel 1 Join", url="https://t.me/allinoneg1")
-    btn2 = types.InlineKeyboardButton("📢 Channel 2 Join", url="https://t.me/myearningall")
-    btn_check = types.InlineKeyboardButton("✅ Joined / Verified", callback_data="check_channels")
-    markup.add(btn1, btn2, btn_check)
-
-    text = (
-        "🛑 আমাদের বটের সার্ভিস ব্যবহার করতে হলে নিচের ২টি চ্যানেলে জয়েন থাকা বাধ্যতামূলক\n\n"
-        "১. https://t.me/allinoneg1\n"
-        "২. https://t.me/myearningall\n\n"
-        "জয়েন করার পর নিচে '✅ Joined / Verified' বাটনে ক্লিক করুন।"
-    )
-    bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
-
-# --- DATABASE FUNCTIONS ---
-def is_user_banned(user_id):
-    user = users_col.find_one({'user_id': user_id})
-    return True if user and user.get('is_banned', 0) == 1 else False
-
-def get_user(user_id, first_name):
-    user = users_col.find_one({'user_id': user_id})
-    if not user:
-        return 0.0, 0
-    return user.get('balance', 0.0), user.get('referrals_count', 0)
-
-def create_user(user_id, first_name, referrer_id=0):
-    user = users_col.find_one({'user_id': user_id})
-    if not user:
-        new_user = {
-            'user_id': user_id,
-            'first_name': first_name,
-            'balance': 0.0,
-            'referred_by': referrer_id,
-            'referrals_count': 0,
-            'is_banned': 0
-        }
-        users_col.insert_one(new_user)
-
-def add_balance(user_id, amount):
-    users_col.update_one({'user_id': user_id}, {'$inc': {'balance': amount}})
-
-def deduct_balance(user_id, amount):
-    users_col.update_one({'user_id': user_id}, {'$inc': {'balance': -amount}})
-
-def add_referral(referrer_id):
-    users_col.update_one(
-        {'user_id': referrer_id},
-        {'$inc': {'balance': 0.003, 'referrals_count': 1}}
-    )
-
-def get_total_users():
-    return users_col.count_documents({})
-
-# --- MAIN KEYBOARD (Without Start button) ---
-def main_keyboard():
-    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    btn_ad = types.KeyboardButton("📺 Watch Ad")
-    btn_acc = types.KeyboardButton("🖥️ Account")
-    btn_ref = types.KeyboardButton("✨ Referral")
-    btn_with = types.KeyboardButton("💸 Withdraw")
-    btn_rules = types.KeyboardButton("🛑 Rule's")
-    btn_wa = types.KeyboardButton("🔰 Whatsapp")
-    btn_sup = types.KeyboardButton("📤 Support")
-    btn_stat = types.KeyboardButton("📊 Status")
+    markup = InlineKeyboardMarkup(row_width=1)
+    for channel in REQUIRED_CHANNELS:
+        markup.add(InlineKeyboardButton(f"🔗 Join {channel}", url=f"https://t.me/{channel.replace('@', '')}"))
+    markup.add(InlineKeyboardButton("✅ Checked / Verified", callback_data="check_join"))
     
-    markup.add(btn_ad, btn_acc, btn_ref, btn_with, btn_rules, btn_wa, btn_sup, btn_stat)
+    bot.send_message(
+        chat_id,
+        "⚠️ **বটটি ব্যবহার করতে আপনাকে নিচের সকল চ্যানেলে জয়েন করতে হবে:**",
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
+
+def is_valid_bd_number(number_str):
+    number_str = str(number_str).strip()
+    if len(number_str) == 11 and number_str.isdigit():
+        if number_str.startswith(("017", "018", "019", "016", "015", "013", "014")):
+            return True
+    return False
+
+# --- MAIN MENU KEYBOARD ---
+def main_menu_keyboard():
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        InlineKeyboardButton("💰 Balance", callback_data="menu_balance"),
+        InlineKeyboardButton("🚀 Start Task", callback_data="menu_task"),
+        InlineKeyboardButton("💳 Withdraw", callback_data="menu_withdraw"),
+        InlineKeyboardButton("📊 Stats", callback_data="menu_stats")
+    )
     return markup
 
-# --- AUTO FAKE PAYMENT SENDER (Every 5 Minutes) ---
-def auto_payment_poster():
-    hex_chars = "0123456789abcdefABCDEF"
-    methods = ["bKash (Personal)", "Nagad (Personal)", "BSC (BEP20)", "Binance USDT", "Payeer"]
-    
-    # প্রথম ফেক পোস্ট ৫ মিনিট (৩০০ সেকেন্ড) পর যাবে
-    time.sleep(300)
-    
-    while True:
-        try:
-            amount = round(random.uniform(5.5, 35.0), 3)
-            method = random.choice(methods)
-            
-            if "BSC" in method:
-                start_hex = ''.join(random.choices(hex_chars, k=3))
-                end_hex = ''.join(random.choices(hex_chars, k=4))
-                address = f"0x{start_hex}****{end_hex}"
-            elif "bKash" in method or "Nagad" in method:
-                prefix = random.choice(["017", "018", "019", "013", "014", "016", "015"])
-                digits = ''.join(random.choices("0123456789", k=2))
-                last = ''.join(random.choices("0123456789", k=2))
-                address = f"{prefix}{digits}***{last}"
-            else:
-                address = f"P10{''.join(random.choices('0123456789', k=6))}"
-
-            text = (
-                f"✅ Withdrawal Paid\n\n"
-                f"💵 {amount:.3f} USDT\n"
-                f"🌐 {method}\n"
-                f"👛 {address}"
-            )
-            
-            bot.send_message(PAYMENT_CHANNEL, text, parse_mode="Markdown")
-        except Exception as e:
-            print("Auto post error (Ensure Bot is Admin in Channel):", e)
-            
-        # প্রতি ৫ মিনিট (৩০০ সেকেন্ড) পর পর পরবর্তী ফেক পোস্ট পাঠানো হবে
-        time.sleep(300)
-
-def start_auto_post():
-    t = Thread(target=auto_payment_poster)
-    t.daemon = True
-    t.start()
-
-# --- ADMIN COMMANDS ---
-@bot.message_handler(commands=['ban'])
-def ban_user_cmd(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    args = message.text.split()
-    if len(args) > 1 and args[1].isdigit():
-        target_id = int(args[1])
-        users_col.update_one({'user_id': target_id}, {'$set': {'is_banned': 1}})
-        bot.reply_to(message, f"❌ ইউজার {target_id} কে ব্যান করা হয়েছে।", parse_mode="Markdown")
-
-@bot.message_handler(commands=['unban'])
-def unban_user_cmd(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    args = message.text.split()
-    if len(args) > 1 and args[1].isdigit():
-        target_id = int(args[1])
-        users_col.update_one({'user_id': target_id}, {'$set': {'is_banned': 0}})
-        bot.reply_to(message, f"✅ ইউজার {target_id} এর ব্যান তুলে নেওয়া হয়েছে।", parse_mode="Markdown")
-
-@bot.message_handler(commands=['addbalance'])
-def add_balance_cmd(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    args = message.text.split()
-    if len(args) == 3 and args[1].isdigit():
-        target_id = int(args[1])
-        try:
-            amount = float(args[2])
-            add_balance(target_id, amount)
-            bot.reply_to(message, f"✅ {target_id} একাউন্টে ${amount} যোগ করা হয়েছে।", parse_mode="Markdown")
-        except ValueError:
-            bot.reply_to(message, "⚠️ সঠিক পরিমাণ লিখুন।")
-
-@bot.message_handler(commands=['cutbalance'])
-def cut_balance_cmd(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    args = message.text.split()
-    if len(args) == 3 and args[1].isdigit():
-        target_id = int(args[1])
-        try:
-            amount = float(args[2])
-            deduct_balance(target_id, amount)
-            bot.reply_to(message, f"✂️ {target_id} একাউন্ট থেকে ${amount} কাটা হয়েছে।", parse_mode="Markdown")
-        except ValueError:
-            bot.reply_to(message, "⚠️ সঠিক পরিমাণ লিখুন।")
-
-# --- MAIN BOT HANDLERS ---
+# --- BOT COMMAND HANDLERS ---
 @bot.message_handler(commands=['start'])
-def send_welcome(message):
+def start_cmd(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name
     
-    if is_user_banned(user_id):
-        bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", parse_mode="Markdown")
-        return
-
-    args = message.text.split()
-    if len(args) > 1 and args[1].isdigit():
-        ref_id = int(args[1])
-        if ref_id != user_id:
-            temp_referrer[user_id] = ref_id
-
-    if not check_user_channels(user_id):
-        send_force_join_msg(message.chat.id)
-        return
-
-    create_user(user_id, first_name)
-    balance, ref_count = get_user(user_id, first_name)
-    text = f"👋 স্বাগতম, {first_name}!\n\nআমাদের বটে কাজ করে আপনি সহজেই ইনকাম করতে পারবেন। নিচের বাটনগুলো ব্যবহার করে কাজ শুরু করুন:"
-    bot.send_message(message.chat.id, text, reply_markup=main_keyboard(), parse_mode="Markdown")
-
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    user_id = message.from_user.id
-    first_name = message.from_user.first_name
-    text_input = message.text.strip()
-
-    if is_user_banned(user_id):
-        bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", parse_mode="Markdown")
+    user = get_user(user_id, first_name)
+    if user.get("is_banned", False):
+        bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি অ্যাক্টিভিটি লঙ্ঘনের জন্য স্থায়ীভাবে ব্যান করা হয়েছে!")
         return
 
     if not check_user_channels(user_id):
         send_force_join_msg(message.chat.id)
-        return
-
-    # REAL WITHDRAW REQUEST HANDLER
-    if user_id in user_withdraw_step:
-        method = user_withdraw_step[user_id]['method']
-        acc_details = text_input
-        balance, _ = get_user(user_id, first_name)
-        
-        if balance < 2.0:
-            bot.send_message(message.chat.id, "⚠️ আপনার পর্যাপ্ত ব্যালেন্স নেই! সর্বনিম্ন উইথড্র $2.00 USDT।", reply_markup=main_keyboard())
-            del user_withdraw_step[user_id]
-            return
-
-        deduct_balance(user_id, balance)
-        
-        channel_post = (
-            f"✅ Withdrawal Paid\n\n"
-            f"💵 {balance:.3f} USDT\n"
-            f"🌐 {method}\n"
-            f"👛 {acc_details}"
-        )
-
-        admin_post = (
-            f"📥 REAL WITHDRAW REQUEST!\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 Name: {first_name}\n"
-            f"🆔 User ID: {user_id}\n"
-            f"💰 Amount: ${balance:.4f} USDT\n"
-            f"⚡ Method: {method}\n"
-            f"📱 Account: {acc_details}"
-        )
-
-        try:
-            bot.send_message(PAYMENT_CHANNEL, channel_post, parse_mode="Markdown")
-        except Exception as e:
-            print("Channel Post Error (Ensure Bot is Admin in Channel):", e)
-
-        for admin_id in ADMIN_IDS:
-            try:
-                bot.send_message(admin_id, admin_post, parse_mode="Markdown")
-            except Exception as e:
-                print(f"Admin Notify Error for {admin_id}:", e)
-
-        bot.send_message(
-            message.chat.id, 
-            f"✅ আপনার উইথড্র রিকোয়েস্ট জমা হয়েছে!\n\n"
-            f"💳 পরিমাণ: ${balance:.4f} USDT\n"
-            f"🔹 মেথড: {method}\n"
-            f"📱 ডিটেইলস: {acc_details}\n\n"
-            f"পেমেন্ট প্রুফ চ্যানেলে চেক করুন। ধন্যবাদ!",
-            reply_markup=main_keyboard()
-        )
-        del user_withdraw_step[user_id]
-        return
-
-    if "Watch Ad" in text_input:
-        user_last_click[user_id] = time.time()
-        inline_markup = types.InlineKeyboardMarkup(row_width=2)
-        
-        m_btns = [types.InlineKeyboardButton(text=f"📺 Monetag {i}", url=link) for i, link in enumerate(MONETAG_LINKS, 1)]
-        a_btns = [types.InlineKeyboardButton(text=f"⭐ Adsterra {i}", url=link) for i, link in enumerate(ADSTERRA_LINKS, 1)]
-            
-        for i in range(0, 10, 2):
-            inline_markup.add(m_btns[i], m_btns[i+1])
-        for i in range(0, 10, 2):
-            inline_markup.add(a_btns[i], a_btns[i+1])
-            
-        btn_claim = types.InlineKeyboardButton(text="✅ Claim Reward ($0.001)", callback_data="claim_reward")
-        inline_markup.add(btn_claim)
-
+    else:
         bot.send_message(
             message.chat.id,
-            "🎯 যে কোনো বিজ্ঞাপনে ক্লিক করুন!\n\n"
-            "১. নিচের যেকোনো বিজ্ঞাপনে ক্লিক করে ১৫ সেকেন্ড অপেক্ষা করুন।\n"
-            "২. সময় শেষ হলে Claim Reward বাটনে চাপ দিয়ে $0.001 পয়েন্ট যোগ করে নিন!",
-            reply_markup=inline_markup,
+            f"👋 **হ্যালো {first_name}!**\n\nআমাদের আনিং বটে আপনাকে স্বাগতম। কাজ শুরু করতে নিচের মেনু ব্যবহার করুন:",
+            reply_markup=main_menu_keyboard(),
             parse_mode="Markdown"
         )
 
-    elif "Account" in text_input or "My Balance" in text_input:
-        balance, ref_count = get_user(user_id, first_name)
-        text = (
-            f"👤 ইউজার প্রোফাইল\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🆔 ID: `{user_id}`\n"
-            f"📛 নাম: {first_name}\n"
-            f"💳 মোট ব্যালেন্স: ${balance:.4f} USDT\n"
-            f"👥 মোট রেফার: {ref_count} জন"
-        )
-        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+# --- TEXT MESSAGE HANDLER FOR WITHDRAW NUMBER VALIDATION ---
+@bot.message_handler(func=lambda message: True)
+def handle_all_messages(message):
+    user_id = message.from_user.id
+    text = message.text.strip() if message.text else ""
 
-    elif "Referral" in text_input:
-        bot_info = bot.get_me()
-        ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
-        text = (
-            f"✨ আপনার রেফারেল লিঙ্ক:\n`{ref_link}`\n\n"
-            f"🎁 প্রতি সফল রেফারে আপনি পাবেন: $0.003 USDT!\n"
-            f"লিঙ্কটি বন্ধুদের সাথে শেয়ার করুন এবং বেশি ইনকাম করুন।"
-        )
-        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+    user = get_user(user_id, message.from_user.first_name)
+    if user.get("is_banned", False):
+        return
 
-    elif "Withdraw" in text_input:
-        balance, _ = get_user(user_id, first_name)
-        if balance < 2.0:
-            bot.send_message(
-                message.chat.id,
-                f"💸 উইথড্র ইনফরমেশন\n"
-                f"━━━━━━━━━━━━━━━━━━━━━\n"
-                f"💳 আপনার বর্তমান ব্যালেন্স: ${balance:.4f} USDT\n"
-                f"📌 সর্বনিম্ন উইথড্র: $2.00 USDT\n\n"
-                f"⚠️ আপনার অ্যাকাউন্টে পর্যাপ্ত ব্যালেন্স নেই।",
+    if not rate_limit_check(user_id, 2):
+        return
+
+    if user_id in user_states:
+        state = user_states[user_id]
+        
+        # মোবাইল নম্বর ফিল্টারিং ও কড়া ভ্যালিডেশন
+        if not is_valid_bd_number(text):
+            bot.reply_to(
+                message,
+                "❌ **ভুল ইনপুট!**\n\nঅনুগ্যহ করে সঠিক ১১ ডিজিটের মোবাইল নম্বর লিখুন (যেমন: 01712345678)। অন্য কোনো লেখা বা সংকেত সিস্টেম গ্রহণ করবে না।",
                 parse_mode="Markdown"
             )
-        else:
-            inline_markup = types.InlineKeyboardMarkup(row_width=2)
-            inline_markup.add(
-                types.InlineKeyboardButton("bKash", callback_data="with_bKash"),
-                types.InlineKeyboardButton("Nagad", callback_data="with_Nagad"),
-                types.InlineKeyboardButton("Binance USDT", callback_data="with_Binance"),
-                types.InlineKeyboardButton("Payeer", callback_data="with_Payeer")
-            )
-            bot.send_message(
-                message.chat.id,
-                f"💳 আপনার ব্যালেন্স: ${balance:.4f} USDT\n\nপেমেন্ট মেথড সিলেক্ট করুন:",
-                reply_markup=inline_markup
-            )
+            return
 
-    elif "Rule" in text_input:
-        text = (
-            f"🛑 বটের নিয়মাবলী:\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"১. কোনো প্রকার অটো-ক্লিক বা বট ব্যবহার করা যাবে না।\n"
-            f"২. ভিপিএন (VPN) ব্যবহার করে কাজ করা সম্পূর্ণ নিষেধ।\n"
-            f"৩. ফেক বা ভুয়া রেফারেল করলে অ্যাকাউন্ট পার্মানেন্ট ব্যান করা হবে।"
-        )
-        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+        method_name = "bKash" if state == "waiting_for_bkash" else "Nagad"
+        del user_states[user_id]
 
-    elif "Whatsapp" in text_input:
-        inline_markup = types.InlineKeyboardMarkup()
-        btn_wa = types.InlineKeyboardButton(text="💬 WhatsApp-এ যোগাযোগ করুন", url=WHATSAPP_LINK)
-        inline_markup.add(btn_wa)
+        current_balance = user.get("balance", 0.0)
+        if current_balance < 0.5:
+            bot.send_message(message.chat.id, "❌ আপনার পর্যাপ্ত ব্যালেন্স নেই। মিনিমাম উইথড্র $0.50 USDT।")
+            return
+
+        # সেফ ব্যালেন্স কাটা
+        update_user_field(user_id, {"balance": current_balance - 0.5})
+
         bot.send_message(
             message.chat.id,
-            "🔰 অফিসিয়াল হোয়াটসঅ্যাপ সাপোর্ট",
-            reply_markup=inline_markup,
+            f"✅ **উইথড্র রিকোয়েস্ট সফল হয়েছে!**\n\n"
+            f"💳 **মেথড:** {method_name}\n"
+            f"📱 **নম্বর:** `{text}`\n"
+            f"💵 **পরিমাণ:** $0.50 USDT\n\n"
+            f"⏳ আগামী ২৪ ঘণ্টার মধ্যে অ্যাডমিন রিভিউ করে পেমেন্ট পাঠিয়ে দেবে।",
+            reply_markup=main_menu_keyboard(),
             parse_mode="Markdown"
         )
+        return
 
-    elif "Support" in text_input:
-        inline_markup = types.InlineKeyboardMarkup(row_width=1)
-        btn_group = types.InlineKeyboardButton(text="🖇️ সাপোর্ট গ্রুপে জয়েন করুন", url=SUPPORT_GROUP)
-        btn_admin_wa = types.InlineKeyboardButton(text="✅ WhatsApp এডমিন", url=WHATSAPP_LINK)
-        inline_markup.add(btn_group, btn_admin_wa)
+    if not check_user_channels(user_id):
+        send_force_join_msg(message.chat.id)
+    else:
+        bot.send_message(message.chat.id, "নিচের মেনু থেকে অপশন নির্বাচন করুন:", reply_markup=main_menu_keyboard())
 
-        text = (
-            f"🌐 ALL IN ONE SUPPORT CENTER 🌐\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ টেলিগ্রাম এডমিন: {ADMIN_USERNAMES}\n"
-            f"🖇️ সাপোর্ট গ্রুপ: {SUPPORT_GROUP}"
-        )
-        bot.send_message(message.chat.id, text, reply_markup=inline_markup, parse_mode="Markdown")
-
-    elif "Status" in text_input:
-        total_users = get_total_users()
-        text = (
-            f"📊 বট লাইভ স্ট্যাটিস্টিকস\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👥 মোট রেজিস্ট্রেশন ইউজার: {total_users} জন\n"
-            f"🟢 সার্ভার স্ট্যাটাস: ১০০% অনলাইন ও নিরাপদ"
-        )
-        bot.send_message(message.chat.id, text, parse_mode="Markdown")
-
-@bot.callback_query_handler(func=lambda call: True)
+# --- CALLBACK QUERY HANDLER ---
+@bot.message_handler(func=lambda call: True)
 def callback_inline(call):
     user_id = call.from_user.id
     first_name = call.from_user.first_name
 
-    if is_user_banned(user_id):
-        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
+    # স্প্যাম প্রটেকশন
+    if not rate_limit_check(user_id, 2):
+        bot.answer_callback_query(call.id, "⚠️ খুব দ্রুত চাপছেন! একটু ধীরে চেষ্টা করুন।", show_alert=False)
         return
 
-    if call.data == "check_channels":
-        if check_user_channels(user_id):
-            bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে!", show_alert=True)
-            bot.delete_message(call.message.chat.id, call.message.message_id)
-            
-            existing_user = users_col.find_one({'user_id': user_id})
-            if not existing_user:
-                ref_id = temp_referrer.get(user_id, 0)
-                create_user(user_id, first_name, ref_id)
-                
-                if ref_id != 0:
-                    add_referral(ref_id)
-                    try:
-                        bot.send_message(ref_id, "🎉 আপনার রেফারকৃত সদস্য চ্যানেলগুলোতে জয়েন করে সফলভাবে ভেরিফাই সম্পন্ন করেছেন! আপনি $0.003 USDT বোনাস পেয়েছেন।")
-                    except Exception as e:
-                        print("Referral Notify Error:", e)
-                
-                if user_id in temp_referrer:
-                    del temp_referrer[user_id]
+    user = get_user(user_id, first_name)
+    if user.get("is_banned", False):
+        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্ট ব্যান করা রয়েছে!", show_alert=True)
+        return
 
-            bot.send_message(
-                call.message.chat.id,
-                f"👋 স্বাগতম {first_name}!\n\nআপনি সফলভাবে চ্যানেলগুলোতে জয়েন করেছেন। নিচের বাটনগুলো ব্যবহার করে ইনকাম শুরু করুন:",
-                reply_markup=main_keyboard(),
-                parse_mode="Markdown"
-            )
+    if call.data == "check_join":
+        if check_user_channels(user_id):
+            bot.answer_callback_query(call.id, "✅ ধন্যবাদ! আপনি সব চ্যানেলে জয়েন আছেন।", show_alert=True)
+            try:
+                bot.delete_message(call.message.chat.id, call.message.message_id)
+            except Exception:
+                pass
+            bot.send_message(call.message.chat.id, "🎉 স্বাগতম! মেনু সিলেক্ট করুন:", reply_markup=main_menu_keyboard())
         else:
-            bot.answer_callback_query(call.id, "❌ আপনি এখনও ২টি চ্যানেলে জয়েন করেননি!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি!", show_alert=True)
+
+    elif call.data == "menu_balance":
+        balance = user.get("balance", 0.0)
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            f"👤 **ইউজার:** {first_name}\n💰 **বর্তমান ব্যালেন্স:** `${balance:.4f} USDT`",
+            reply_markup=main_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+
+    elif call.data == "menu_task":
+        if not check_user_channels(user_id):
+            send_force_join_msg(call.message.chat.id)
+            return
+
+        # টাস্ক শুরুর টাইম ডাটাবেজে স্টোর
+        update_user_field(user_id, {"last_task_time": time.time()})
+
+        random_url = random.choice(TASK_LINKS)
+        markup = InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            InlineKeyboardButton("🌐 Visit Ad / Link", url=random_url),
+            InlineKeyboardButton("✅ Claim Reward", callback_data="claim_reward")
+        )
+        
+        bot.send_message(
+            call.message.chat.id,
+            "📌 **টাস্ক নিয়মাবলী:**\n1. নিচের লিংকে ক্লিক করে কমপক্ষে **১৫ সেকেন্ড** ওয়েবসাইট বা অ্যাডে অপেক্ষা করুন।\n2. ১৫ সেকেন্ড পর **Claim Reward** বাটনে ক্লিক করুন।",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
 
     elif call.data == "claim_reward":
         if not check_user_channels(user_id):
@@ -494,46 +251,144 @@ def callback_inline(call):
             return
 
         current_time = time.time()
-        last_click = user_last_click.get(user_id, 0)
-        time_passed = current_time - last_click
+        last_task_time = user.get("last_task_time", 0)
 
-        if time_passed < 15:
-            remaining = int(15 - time_passed)
-            bot.answer_callback_query(call.id, f"⚠️ অন্তত ১৫ সেকেন্ড থাকুন (আর {remaining} সেকেন্ড বাকি)।", show_alert=True)
-        else:
-            add_balance(user_id, 0.001)
-            user_last_click[user_id] = current_time + 10
-            bot.answer_callback_query(call.id, "🎉 $0.001 আপনার অ্যাকাউন্টে যোগ করা হয়েছে।", show_alert=True)
-            
-            balance, _ = get_user(user_id, first_name)
-            bot.send_message(
-                call.message.chat.id,
-                f"✅ রিওয়ার্ড সফলভাবে যোগ হয়েছে!\nবর্তমান ব্যালেন্স: ${balance:.4f} USDT",
-                parse_mode="Markdown"
+        # ⏱️ ১৫ সেকেন্ড বাধ্যবাধকতা চেক
+        elapsed_time = current_time - last_task_time
+        if elapsed_time < 15:
+            remaining_sec = int(15 - elapsed_time)
+            bot.answer_callback_query(
+                call.id, 
+                f"⚠️ খুব দ্রুত ক্লেইম করার চেষ্টা করছেন!\nঅনুগ্যহ করে অ্যাডে আরও {remaining_sec} সেকেন্ড অপেক্ষা করুন।", 
+                show_alert=True
             )
+            return
 
-    elif call.data.startswith("with_"):
-        method = call.data.split("_")[1]
-        user_withdraw_step[user_id] = {'method': method}
+        daily_count = user.get("daily_count", 0)
+        last_reset = user.get("last_reset", current_time)
+
+        # ২৪ ঘণ্টা পর পর কাউন্টার ০ তে রিসেট
+        if current_time - last_reset >= 86400:
+            daily_count = 0
+            last_reset = current_time
+            update_user_field(user_id, {"daily_count": 0, "last_reset": current_time})
+
+        # প্রতিদিন সর্বোচ্চ ৩০ বার দেখার সীমা
+        if daily_count >= 30:
+            remaining_hours = max(1, int((86400 - (current_time - last_reset)) / 3600))
+            bot.answer_callback_query(
+                call.id, 
+                f"❌ আজকের দেখার সীমা (৩০/৩০) পূর্ণ হয়েছে!\nআবার {remaining_hours} ঘণ্টা পর চেষ্টা করুন।", 
+                show_alert=True
+            )
+            return
+
+        # ক্লেইম সাকসেসফুল হলে টাইম জিরো করা ও পয়েন্ট যোগ করা
+        daily_count += 1
+        update_user_field(user_id, {"daily_count": daily_count, "last_reset": last_reset, "last_task_time": 0})
+        add_balance(user_id, 0.001)
+
+        clicks_left = 30 - daily_count
+        bot.answer_callback_query(call.id, f"🎉 $0.001 যোগ হয়েছে! আজকের বাকি: {clicks_left}টি", show_alert=True)
+
+        updated_user = get_user(user_id)
         bot.send_message(
             call.message.chat.id,
-            f"📝 আপনার {method} নম্বর বা এড্রেসটি লিখে মেসেজ পাঠান:"
+            f"✅ **রিওয়ার্ড সফলভাবে যোগ হয়েছে!**\n"
+            f"💰 **বর্তমান ব্যালেন্স:** `${updated_user.get('balance', 0.0):.4f} USDT`\n"
+            f"📊 **আজকের লিমিট:** {daily_count}/৩০",
+            parse_mode="Markdown"
         )
 
-# --- BOT RUNNER ---
-if __name__ == "__main__":
-    keep_alive()
-    start_auto_post()
-    print("Bot is starting...")
-    
-    try:
-        bot.remove_webhook()
-    except Exception as e:
-        print("Webhook remove error:", e)
+    elif call.data == "menu_withdraw":
+        balance = user.get("balance", 0.0)
+        if balance < 0.5:
+            bot.answer_callback_query(call.id, f"❌ মিনিমাম উইথড্র $0.50 USDT! আপনার আছে ${balance:.4f}", show_alert=True)
+            return
 
+        markup = InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            InlineKeyboardButton("বিকাশ (bKash)", callback_data="withdraw_bkash"),
+            InlineKeyboardButton("নগদ (Nagad)", callback_data="withdraw_nagad")
+        )
+        bot.send_message(
+            call.message.chat.id,
+            f"💳 **পেমেন্ট মেথড সিলেক্ট করুন:**\n\nবর্তমান ব্যালেন্স: `${balance:.4f} USDT`\nমিনিমাম উইথড্র: `$0.50 USDT`",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+
+    elif call.data == "withdraw_bkash":
+        user_states[user_id] = "waiting_for_bkash"
+        bot.send_message(
+            call.message.chat.id,
+            "📝 **আপনার bKash নম্বর 01********* টি লিখে পাঠান:**",
+            parse_mode="Markdown"
+        )
+
+    elif call.data == "withdraw_nagad":
+        user_states[user_id] = "waiting_for_nagad"
+        bot.send_message(
+            call.message.chat.id,
+            "📝 **আপনার Nagad নম্বর 01********* টি লিখে পাঠান:**",
+            parse_mode="Markdown"
+        )
+
+    elif call.data == "menu_stats":
+        total_users = users_col.count_documents({})
+        bot.send_message(
+            call.message.chat.id,
+            f"📊 **বট স্ট্যাটাস্টিকস:**\n\n👥 মোট সক্রিয় ইউজার: `{total_users}` জন",
+            parse_mode="Markdown"
+        )
+
+# --- AUTO FAKE WITHDRAW NOTIFICATION TO CHANNELS ---
+def send_fake_withdraw_loop():
     while True:
         try:
-            bot.polling(none_stop=True, interval=0, timeout=20, skip_pending=True)
+            amount = round(random.uniform(0.50, 2.50), 2)
+            digits = "".join([str(random.randint(0, 9)) for _ in range(6)])
+            fake_num = f"017{digits}***"
+            method = random.choice(["bKash", "Nagad"])
+
+            msg = (
+                f"🎉 **New Successful Withdrawal!**\n\n"
+                f"👤 **User ID:** `{random.randint(10000000, 99999999)}`\n"
+                f"💵 **Amount:** `${amount} USDT`\n"
+                f"📱 **Method:** {method} (`{fake_num}`)\n"
+                f"✅ **Status:** Paid\n\n"
+                f"🤖 **Bot:** @myearningall"
+            )
+
+            for ch in REQUIRED_CHANNELS:
+                try:
+                    bot.send_message(ch, msg, parse_mode="Markdown")
+                except Exception as e:
+                    print(f"Error sending to {ch}: {e}")
+
+            time.sleep(300) # প্রতি ৫ মিনিট পরপর
         except Exception as e:
-            print(f"Bot Polling Error: {e}")
-            time.sleep(3)
+            print(f"Fake withdraw error: {e}")
+            time.sleep(60)
+
+# --- FLASK WEB SERVER ---
+@app.route('/')
+def home():
+    return "Fully secured Telegram Bot is running continuously!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+# --- MAIN STARTUP ---
+if __name__ == "__main__":
+    t_flask = threading.Thread(target=run_flask)
+    t_flask.daemon = True
+    t_flask.start()
+
+    t_fake = threading.Thread(target=send_fake_withdraw_loop)
+    t_fake.daemon = True
+    t_fake.start()
+
+    print("Secure bot startup complete. Polling active...")
+    bot.infinity_polling(skip_pending=True)
