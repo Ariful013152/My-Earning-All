@@ -14,7 +14,7 @@ from telebot.types import (
 
 # --- CONFIGURATION ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqnftct1C8")
-MONGO_URI = os.environ.get("MONGO_URI", "YOUR_MONGO_URI_HERE")
+MONGO_URI = os.environ.get("MONGO_URI", "")
 
 BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1"]
@@ -54,9 +54,16 @@ ADSTERRA_LINKS = [
 ]
 
 # --- DATABASE SETUP ---
-client = pymongo.MongoClient(MONGO_URI)
-db = client["telegram_bot"]
-users_col = db["users"]
+try:
+    if MONGO_URI:
+        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        db = client["telegram_bot"]
+        users_col = db["users"]
+    else:
+        users_col = None
+except Exception as e:
+    print(f"MongoDB Warning: {e}")
+    users_col = None
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
 app = Flask(__name__)
@@ -66,29 +73,43 @@ user_withdraw_step = {}
 
 # --- DATABASE HELPERS ---
 def get_user(user_id, first_name="User", referred_by=None):
-    user = users_col.find_one({"user_id": user_id})
-    if not user:
-        user = {
-            "user_id": user_id, 
-            "first_name": str(first_name)[:30],
-            "balance": 0.0, 
-            "daily_count": 0,
-            "last_reset": time.time(),
-            "last_task_time": 0,
-            "can_claim": False,
-            "referred_by": referred_by,
-            "referrals_count": 0,
-            "ref_reward_given": False,
-            "is_banned": False
-        }
-        users_col.insert_one(user)
-    return user.get("balance", 0.0), user
+    if users_col is None:
+        return 0.0, {"user_id": user_id, "first_name": first_name, "balance": 0.0, "is_banned": False}
+    try:
+        user = users_col.find_one({"user_id": user_id})
+        if not user:
+            user = {
+                "user_id": user_id, 
+                "first_name": str(first_name)[:30],
+                "balance": 0.0, 
+                "daily_count": 0,
+                "last_reset": time.time(),
+                "last_task_time": 0,
+                "can_claim": False,
+                "referred_by": referred_by,
+                "referrals_count": 0,
+                "ref_reward_given": False,
+                "is_banned": False
+            }
+            users_col.insert_one(user)
+        return user.get("balance", 0.0), user
+    except Exception as e:
+        print(f"DB Error: {e}")
+        return 0.0, {"user_id": user_id, "first_name": first_name, "balance": 0.0, "is_banned": False}
 
 def update_user_field(user_id, field_dict):
-    users_col.update_one({"user_id": user_id}, {"$set": field_dict}, upsert=True)
+    if users_col is not None:
+        try:
+            users_col.update_one({"user_id": user_id}, {"$set": field_dict}, upsert=True)
+        except Exception as e:
+            print(f"DB Update Error: {e}")
 
 def add_balance(user_id, amount):
-    users_col.update_one({"user_id": user_id}, {"$inc": {"balance": float(amount)}})
+    if users_col is not None:
+        try:
+            users_col.update_one({"user_id": user_id}, {"$inc": {"balance": float(amount)}})
+        except Exception as e:
+            print(f"DB Balance Error: {e}")
 
 def check_user_channels(user_id):
     for channel in REQUIRED_CHANNELS:
@@ -209,6 +230,10 @@ def check_user_balance_cmd(message):
             return
 
         target_id = int(args[1])
+        if users_col is None:
+            bot.reply_to(message, "❌ ডাটাবেজ কানেকশন সমস্যা!")
+            return
+
         user = users_col.find_one({"user_id": target_id})
 
         if not user:
@@ -358,7 +383,6 @@ def handle_all_messages(message):
 
         bot.send_message(message.chat.id, f"✅ **আপনার উইথড্র রিকোয়েস্ট জমা হয়েছে!**\n\n💳 **পরিমাণ:** `${withdraw_amount:.4f} USDT`\n🔷 **মেথড:** {method}\n📱 **ডিটেইলস:** `{text}`\n\nধন্যবাদ!", reply_markup=main_menu_keyboard(), parse_mode="Markdown")
 
-        # Send withdraw alert to proof channel
         try:
             bot.send_message(PROOF_CHANNEL, msg, parse_mode="Markdown")
         except Exception as e:
@@ -486,7 +510,7 @@ def handle_all_messages(message):
         bot.send_message(message.chat.id, msg, reply_markup=main_menu_keyboard(), disable_web_page_preview=True)
 
     elif text == "📊 Status":
-        total_users = users_col.count_documents({})
+        total_users = users_col.count_documents({}) if users_col is not None else 0
         bot.send_message(
             message.chat.id,
             f"📊 **বট স্ট্যাটাস্টিকস:**\n\n👥 মোট সক্রিয় ইউজার: `{total_users}` জন",
@@ -513,7 +537,8 @@ def callback_inline(call):
             if user.get("referred_by") and not user.get("ref_reward_given", False):
                 referrer_id = user.get("referred_by")
                 add_balance(referrer_id, REFERRAL_BONUS)
-                users_col.update_one({"user_id": referrer_id}, {"$inc": {"referrals_count": 1}})
+                if users_col is not None:
+                    users_col.update_one({"user_id": referrer_id}, {"$inc": {"referrals_count": 1}})
                 update_user_field(user_id, {"ref_reward_given": True})
 
             try:
