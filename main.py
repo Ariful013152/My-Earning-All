@@ -8,10 +8,12 @@ from flask import Flask
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # --- CONFIGURATION ---
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqnftct1C8")
 MONGO_URI = os.environ.get("MONGO_URI", "YOUR_MONGO_URI_HERE")
 
+BOT_USERNAME = "myearningall01_bot"  # আপনার বটের ইউজারনেম
 REQUIRED_CHANNELS = ["@myearningall", "@earningdesh0"]
+REFERRAL_BONUS = 0.005  # প্রতি সফল রেফারে কত বোনাস পাবে ($0.005 USDT)
 
 # Task / Ad Links
 TASK_LINKS = [
@@ -40,16 +42,19 @@ user_last_action = {}  # {user_id: timestamp}
 user_states = {}       # {user_id: "waiting_for_bkash" / "waiting_for_nagad"}
 
 # --- DATABASE HELPERS WITH SECURITY ---
-def get_user(user_id, first_name="User"):
+def get_user(user_id, first_name="User", referred_by=None):
     user = users_col.find_one({"user_id": user_id})
     if not user:
         user = {
             "user_id": user_id, 
-            "first_name": str(first_name)[:30], # Payload attack prevention
+            "first_name": str(first_name)[:30],
             "balance": 0.0, 
             "daily_count": 0,
             "last_reset": time.time(),
             "last_task_time": 0,
+            "referred_by": referred_by,
+            "referrals_count": 0,
+            "ref_reward_given": False,
             "is_banned": False
         }
         users_col.insert_one(user)
@@ -107,6 +112,7 @@ def main_menu_keyboard():
         InlineKeyboardButton("💰 Balance", callback_data="menu_balance"),
         InlineKeyboardButton("🚀 Start Task", callback_data="menu_task"),
         InlineKeyboardButton("💳 Withdraw", callback_data="menu_withdraw"),
+        InlineKeyboardButton("👥 Referral", callback_data="menu_referral"),
         InlineKeyboardButton("📊 Stats", callback_data="menu_stats")
     )
     return markup
@@ -117,7 +123,15 @@ def start_cmd(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name
     
-    user = get_user(user_id, first_name)
+    # রেফারার আইডি এক্সট্র্যাক্ট করা (/start 12345678)
+    args = message.text.split()
+    referred_by = None
+    if len(args) > 1 and args[1].isdigit():
+        ref_id = int(args[1])
+        if ref_id != user_id:  # নিজের লিংকে নিজে ক্লিক করলে কাউন্ট হবে না
+            referred_by = ref_id
+
+    user = get_user(user_id, first_name, referred_by=referred_by)
     if user.get("is_banned", False):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি অ্যাক্টিভিটি লঙ্ঘনের জন্য স্থায়ীভাবে ব্যান করা হয়েছে!")
         return
@@ -148,7 +162,6 @@ def handle_all_messages(message):
     if user_id in user_states:
         state = user_states[user_id]
         
-        # মোবাইল নম্বর ফিল্টারিং ও কড়া ভ্যালিডেশন
         if not is_valid_bd_number(text):
             bot.reply_to(
                 message,
@@ -165,7 +178,6 @@ def handle_all_messages(message):
             bot.send_message(message.chat.id, "❌ আপনার পর্যাপ্ত ব্যালেন্স নেই। মিনিমাম উইথড্র $0.50 USDT।")
             return
 
-        # সেফ ব্যালেন্স কাটা
         update_user_field(user_id, {"balance": current_balance - 0.5})
 
         bot.send_message(
@@ -191,7 +203,6 @@ def callback_inline(call):
     user_id = call.from_user.id
     first_name = call.from_user.first_name
 
-    # স্প্যাম প্রটেকশন
     if not rate_limit_check(user_id, 2):
         bot.answer_callback_query(call.id, "⚠️ খুব দ্রুত চাপছেন! একটু ধীরে চেষ্টা করুন।", show_alert=False)
         return
@@ -204,6 +215,28 @@ def callback_inline(call):
     if call.data == "check_join":
         if check_user_channels(user_id):
             bot.answer_callback_query(call.id, "✅ ধন্যবাদ! আপনি সব চ্যানেলে জয়েন আছেন।", show_alert=True)
+            
+            # --- REFERRAL COMMISSION LOGIC ---
+            # ইউজার ভেরিফাই হওয়ার পর রেফারারকে কমিশন দেওয়া
+            if user.get("referred_by") and not user.get("ref_reward_given", False):
+                referrer_id = user.get("referred_by")
+                referrer = users_col.find_one({"user_id": referrer_id})
+                if referrer and not referrer.get("is_banned", False):
+                    add_balance(referrer_id, REFERRAL_BONUS)
+                    users_col.update_one({"user_id": referrer_id}, {"$inc": {"referrals_count": 1}})
+                    update_user_field(user_id, {"ref_reward_given": True})
+                    
+                    try:
+                        bot.send_message(
+                            referrer_id,
+                            f"🎉 **নতুন সফল রেফারেল!**\n\n"
+                            f"👤 `{first_name}` চ্যানেলে জয়েন করে ভেরিফাই করেছে।\n"
+                            f"🎁 আপনি পাবেন: `${REFERRAL_BONUS:.3f} USDT` বোনাস!",
+                            parse_mode="Markdown"
+                        )
+                    except Exception:
+                        pass
+
             try:
                 bot.delete_message(call.message.chat.id, call.message.message_id)
             except Exception:
@@ -222,12 +255,24 @@ def callback_inline(call):
             parse_mode="Markdown"
         )
 
+    elif call.data == "menu_referral":
+        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+        ref_count = user.get("referrals_count", 0)
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            f"👥 **আপনার রেফারেল প্যানেল**\n\n"
+            f"🔗 **রেফারেল লিংক:**\n`{ref_link}`\n\n"
+            f"📊 **মোট সফল রেফারেল:** `{ref_count}` জন\n"
+            f"🎁 **রেফার কমিশন:** প্রতি রেফারে `${REFERRAL_BONUS:.3f} USDT` (নতুন ইউজার চ্যানেলে জয়েন ও ভেরিফাই করলে কমিশন যোগ হবে)।",
+            parse_mode="Markdown"
+        )
+
     elif call.data == "menu_task":
         if not check_user_channels(user_id):
             send_force_join_msg(call.message.chat.id)
             return
 
-        # টাস্ক শুরুর টাইম ডাটাবেজে স্টোর
         update_user_field(user_id, {"last_task_time": time.time()})
 
         random_url = random.choice(TASK_LINKS)
@@ -253,7 +298,6 @@ def callback_inline(call):
         current_time = time.time()
         last_task_time = user.get("last_task_time", 0)
 
-        # ⏱️ ১৫ সেকেন্ড বাধ্যবাধকতা চেক
         elapsed_time = current_time - last_task_time
         if elapsed_time < 15:
             remaining_sec = int(15 - elapsed_time)
@@ -267,13 +311,11 @@ def callback_inline(call):
         daily_count = user.get("daily_count", 0)
         last_reset = user.get("last_reset", current_time)
 
-        # ২৪ ঘণ্টা পর পর কাউন্টার ০ তে রিসেট
         if current_time - last_reset >= 86400:
             daily_count = 0
             last_reset = current_time
             update_user_field(user_id, {"daily_count": 0, "last_reset": current_time})
 
-        # প্রতিদিন সর্বোচ্চ ৩০ বার দেখার সীমা
         if daily_count >= 30:
             remaining_hours = max(1, int((86400 - (current_time - last_reset)) / 3600))
             bot.answer_callback_query(
@@ -283,7 +325,6 @@ def callback_inline(call):
             )
             return
 
-        # ক্লেইম সাকসেসফুল হলে টাইম জিরো করা ও পয়েন্ট যোগ করা
         daily_count += 1
         update_user_field(user_id, {"daily_count": daily_count, "last_reset": last_reset, "last_task_time": 0})
         add_balance(user_id, 0.001)
@@ -357,7 +398,7 @@ def send_fake_withdraw_loop():
                 f"💵 **Amount:** `${amount} USDT`\n"
                 f"📱 **Method:** {method} (`{fake_num}`)\n"
                 f"✅ **Status:** Paid\n\n"
-                f"🤖 **Bot:** @myearningall"
+                f"🤖 **Bot:** @{BOT_USERNAME}"
             )
 
             for ch in REQUIRED_CHANNELS:
@@ -366,7 +407,7 @@ def send_fake_withdraw_loop():
                 except Exception as e:
                     print(f"Error sending to {ch}: {e}")
 
-            time.sleep(300) # প্রতি ৫ মিনিট পরপর
+            time.sleep(300)
         except Exception as e:
             print(f"Fake withdraw error: {e}")
             time.sleep(60)
