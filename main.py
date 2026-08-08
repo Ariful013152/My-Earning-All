@@ -646,11 +646,25 @@ def keep_alive():
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
     keep_alive()
-    
-    # Start auto posting thread properly
+
+    # Clear old webhooks and pending updates to prevent Conflict 409
+    try:
+        bot.remove_webhook()
+        time.sleep(2)
+    except Exception as e:
+        print(f"Webhook Removal Error: {e}")
+
+    # Start auto posting thread
     t_auto = threading.Thread(target=auto_post_loop)
     t_auto.daemon = True
     t_auto.start()
 
-    print("Bot is running...")
-    bot.infinity_polling(skip_pending=True)
+    print("Bot is starting polling...")
+
+    # Safe Polling Loop
+    while True:
+        try:
+            bot.polling(none_stop=True, interval=1, timeout=60)
+        except Exception as e:
+            print(f"Polling loop error: {e}")
+            time.sleep(5)
