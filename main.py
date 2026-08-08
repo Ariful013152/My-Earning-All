@@ -58,7 +58,7 @@ client = pymongo.MongoClient(MONGO_URI)
 db = client["telegram_bot"]
 users_col = db["users"]
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
 app = Flask(__name__)
 
 # --- MEMORY TRACKING ---
@@ -90,14 +90,6 @@ def update_user_field(user_id, field_dict):
 
 def add_balance(user_id, amount):
     users_col.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
-
-def rate_limit_check(user_id, cooldown_seconds=1):
-    current = time.time()
-    last = user_last_action.get(user_id, 0)
-    if current - last < cooldown_seconds:
-        return False
-    user_last_action[user_id] = current
-    return True
 
 def check_user_channels(user_id):
     for channel in REQUIRED_CHANNELS:
@@ -144,71 +136,6 @@ def main_menu_keyboard():
     )
     return markup
 
-# --- ADMIN COMMAND HANDLERS ---
-@bot.message_handler(commands=['ban'])
-def ban_user_cmd(message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-    args = message.text.split()
-    if len(args) < 2 or not args[1].isdigit():
-        bot.reply_to(message, "❌ ব্যবহার: `/ban USER_ID`", parse_mode="Markdown")
-        return
-    
-    target_id = int(args[1])
-    update_user_field(target_id, {"is_banned": True})
-    bot.reply_to(message, f"✅ ইউজার `{target_id}` সফলভাবে ব্যান করা হয়েছে।", parse_mode="Markdown")
-
-@bot.message_handler(commands=['unban'])
-def unban_user_cmd(message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-    args = message.text.split()
-    if len(args) < 2 or not args[1].isdigit():
-        bot.reply_to(message, "❌ ব্যবহার: `/unban USER_ID`", parse_mode="Markdown")
-        return
-    
-    target_id = int(args[1])
-    update_user_field(target_id, {"is_banned": False})
-    bot.reply_to(message, f"✅ ইউজার `{target_id}` সফলভাবে আনব্যান করা হয়েছে।", parse_mode="Markdown")
-
-@bot.message_handler(commands=['addbalance'])
-def add_balance_cmd(message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-    args = message.text.split()
-    if len(args) < 3 or not args[1].isdigit():
-        bot.reply_to(message, "❌ ব্যবহার: `/addbalance USER_ID AMOUNT`", parse_mode="Markdown")
-        return
-    
-    target_id = int(args[1])
-    try:
-        amount = float(args[2])
-    except ValueError:
-        bot.reply_to(message, "❌ সঠিক অ্যামাউন্ট লিখুন।")
-        return
-
-    add_balance(target_id, amount)
-    bot.reply_to(message, f"✅ ইউজার `{target_id}`-এর অ্যাকাউন্টে `${amount}` যোগ করা হয়েছে।", parse_mode="Markdown")
-
-@bot.message_handler(commands=['cutbalance'])
-def cut_balance_cmd(message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-    args = message.text.split()
-    if len(args) < 3 or not args[1].isdigit():
-        bot.reply_to(message, "❌ ব্যবহার: `/cutbalance USER_ID AMOUNT`", parse_mode="Markdown")
-        return
-    
-    target_id = int(args[1])
-    try:
-        amount = float(args[2])
-    except ValueError:
-        bot.reply_to(message, "❌ সঠিক অ্যামাউন্ট লিখুন।")
-        return
-
-    add_balance(target_id, -amount)
-    bot.reply_to(message, f"✅ ইউজার `{target_id}`-এর অ্যাকাউন্ট থেকে `${amount}` কাটা হয়েছে।", parse_mode="Markdown")
-
 # --- USER COMMAND HANDLERS ---
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
@@ -246,9 +173,6 @@ def handle_all_messages(message):
 
     balance, user = get_user(user_id, first_name)
     if user.get("is_banned", False):
-        return
-
-    if not rate_limit_check(user_id, 1):
         return
 
     # Withdraw Number Step
@@ -300,7 +224,6 @@ def handle_all_messages(message):
         last_reset = user.get("last_reset", current_time)
         daily_count = user.get("daily_count", 0)
 
-        # 24 hour reset check
         if current_time - last_reset >= 86400:
             daily_count = 0
             last_reset = current_time
@@ -314,7 +237,6 @@ def handle_all_messages(message):
             )
             return
 
-        # 15 Adsterra + 15 Monetag rotation
         if daily_count < 15:
             selected_url = ADSTERRA_LINKS[daily_count % len(ADSTERRA_LINKS)]
             provider = "Adsterra"
@@ -420,17 +342,15 @@ def handle_all_messages(message):
             reply_markup=main_menu_keyboard(),
             parse_mode="Markdown"
         )
-    else:
-        bot.send_message(message.chat.id, "নিচের বাটনগুলো ব্যবহার করে অপশন সিলেক্ট করুন:", reply_markup=main_menu_keyboard())
 
 # --- CALLBACK QUERY HANDLER ---
-@bot.message_handler(func=lambda call: True)
+@bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     user_id = call.from_user.id
     first_name = call.from_user.first_name
 
     try:
-        bot.answer_callback_query(call.id)
+        bot.answer_callback_query(call.id, text="প্রসেস করা হচ্ছে...")
     except Exception:
         pass
 
@@ -439,14 +359,11 @@ def callback_inline(call):
     if call.data == "check_join":
         if check_user_channels(user_id):
             bot.send_message(call.message.chat.id, "✅ ধন্যবাদ! আপনি সব চ্যানেলে জয়েন আছেন।")
-            
             if user.get("referred_by") and not user.get("ref_reward_given", False):
                 referrer_id = user.get("referred_by")
-                referrer = users_col.find_one({"user_id": referrer_id})
-                if referrer and not referrer.get("is_banned", False):
-                    add_balance(referrer_id, REFERRAL_BONUS)
-                    users_col.update_one({"user_id": referrer_id}, {"$inc": {"referrals_count": 1}})
-                    update_user_field(user_id, {"ref_reward_given": True})
+                add_balance(referrer_id, REFERRAL_BONUS)
+                users_col.update_one({"user_id": referrer_id}, {"$inc": {"referrals_count": 1}})
+                update_user_field(user_id, {"ref_reward_given": True})
 
             try:
                 bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -457,10 +374,6 @@ def callback_inline(call):
             bot.send_message(call.message.chat.id, "❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি!")
 
     elif call.data == "claim_reward":
-        if not check_user_channels(user_id):
-            send_force_join_msg(call.message.chat.id)
-            return
-
         if not user.get("can_claim", False):
             bot.send_message(
                 call.message.chat.id, 
@@ -556,7 +469,7 @@ def start_auto_post():
     t.daemon = True
     t.start()
 
-# --- FLASK WEB SERVER ---
+# --- FLASK WEB SERVER & KEEP ALIVE PING ---
 def keep_alive():
     @app.route('/')
     def home():
