@@ -18,15 +18,15 @@ MONGO_URI = os.environ.get("MONGO_URI", "YOUR_MONGO_URI_HERE")
 
 BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1"]
-PROOF_CHANNEL = "@myearningall"  # অটো পোস্ট প্রুফ চ্যানেল
+PROOF_CHANNEL = "@myearningall"
 
-MIN_WITHDRAW = 2.0  # মিনিমাম উইথড্র $2.00 USDT
-REFERRAL_BONUS = 0.005  # রেফার কমিশন $0.005 USDT
+MIN_WITHDRAW = 2.0
+REFERRAL_BONUS = 0.005
 
 # --- ADMIN IDS ---
 ADMIN_IDS = [8414665404, 5034445579]
 
-# --- MONETAG & ADSTERRA LINKS ---
+# --- 10 MONETAG & 10 ADSTERRA LINKS ---
 MONETAG_LINKS = [
     'https://omg10.com/4/11522087',
     'https://omg10.com/4/11522086',
@@ -53,8 +53,6 @@ ADSTERRA_LINKS = [
     'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
 ]
 
-ALL_TASK_LINKS = MONETAG_LINKS + ADSTERRA_LINKS
-
 # --- DATABASE SETUP ---
 client = pymongo.MongoClient(MONGO_URI)
 db = client["telegram_bot"]
@@ -78,6 +76,7 @@ def get_user(user_id, first_name="User", referred_by=None):
             "daily_count": 0,
             "last_reset": time.time(),
             "last_task_time": 0,
+            "can_claim": False,
             "referred_by": referred_by,
             "referrals_count": 0,
             "ref_reward_given": False,
@@ -92,7 +91,6 @@ def update_user_field(user_id, field_dict):
 def add_balance(user_id, amount):
     users_col.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
 
-# --- HELPER FUNCTIONS ---
 def rate_limit_check(user_id, cooldown_seconds=1):
     current = time.time()
     last = user_last_action.get(user_id, 0)
@@ -253,7 +251,7 @@ def handle_all_messages(message):
     if not rate_limit_check(user_id, 1):
         return
 
-    # 1. Withdraw Process Number Entry
+    # Withdraw Number Step
     if user_id in user_withdraw_step:
         method = user_withdraw_step[user_id].get('method', 'bKash')
         del user_withdraw_step[user_id]
@@ -292,23 +290,53 @@ def handle_all_messages(message):
         bot.send_message(message.chat.id, msg, reply_markup=main_menu_keyboard(), parse_mode="Markdown")
         return
 
-    # Check required channels
     if not check_user_channels(user_id):
         send_force_join_msg(message.chat.id)
         return
 
-    # 2. Reply Keyboard Routing
+    # Menu Options
     if text == "📺 Watch Ad":
-        update_user_field(user_id, {"last_task_time": time.time()})
-        random_url = random.choice(ALL_TASK_LINKS)
+        current_time = time.time()
+        last_reset = user.get("last_reset", current_time)
+        daily_count = user.get("daily_count", 0)
+
+        # 24 hour reset check
+        if current_time - last_reset >= 86400:
+            daily_count = 0
+            last_reset = current_time
+
+        if daily_count >= 30:
+            bot.send_message(
+                message.chat.id,
+                "❌ **আজকের কাজের সীমা (৩০/৩০) পূর্ণ হয়েছে!**\nআগামী ২৪ ঘণ্টা পর আবার নতুন কাজ করতে পারবেন।",
+                reply_markup=main_menu_keyboard(),
+                parse_mode="Markdown"
+            )
+            return
+
+        # 15 Adsterra + 15 Monetag rotation
+        if daily_count < 15:
+            selected_url = ADSTERRA_LINKS[daily_count % len(ADSTERRA_LINKS)]
+            provider = "Adsterra"
+        else:
+            selected_url = MONETAG_LINKS[(daily_count - 15) % len(MONETAG_LINKS)]
+            provider = "Monetag"
+
+        update_user_field(user_id, {
+            "last_task_time": current_time, 
+            "can_claim": True,
+            "daily_count": daily_count,
+            "last_reset": last_reset
+        })
+
         markup = InlineKeyboardMarkup(row_width=1)
         markup.add(
-            InlineKeyboardButton("🌐 Visit Ad / Link", url=random_url),
+            InlineKeyboardButton("🌐 Visit Ad / Link", url=selected_url),
             InlineKeyboardButton("✅ Claim Reward", callback_data="claim_reward")
         )
         bot.send_message(
             message.chat.id,
-            "📌 **টাস্ক নিয়মাবলী:**\n1. নিচের লিংকে ক্লিক করে কমপক্ষে **১৫ সেকেন্ড** অপেক্ষা করুন।\n2. ১৫ সেকেন্ড পর **Claim Reward** বাটনে চাপ দিন।",
+            f"📌 **টাস্ক নিয়মাবলী (আজ দেখা হয়েছে: {daily_count}/30 - {provider}):**\n1. নিচের লিংকে ক্লিক করে কমপক্ষে **১৫ সেকেন্ড** অপেক্ষা করুন।\n2. ১৫ সেকেন্ড পর **Claim Reward** বাটনে চাপ দিন।",
             reply_markup=markup,
             parse_mode="Markdown"
         )
@@ -429,13 +457,17 @@ def callback_inline(call):
             send_force_join_msg(call.message.chat.id)
             return
 
+        if not user.get("can_claim", False):
+            bot.answer_callback_query(call.id, "⚠️ আগে 'Watch Ad' এ ক্লিক করে লিংকে ভিজিট করুন!", show_alert=True)
+            return
+
         current_time = time.time()
         last_task_time = user.get("last_task_time", 0)
         elapsed_time = current_time - last_task_time
 
         if elapsed_time < 15:
             remaining = int(15 - elapsed_time)
-            bot.answer_callback_query(call.id, f"⚠️ অন্তত ১৫ সেকেন্ড থাকুন (আর {remaining} সেকেন্ড বাকি)।", show_alert=True)
+            bot.answer_callback_query(call.id, f"⚠️ অন্তত ১৫ সেকেন্ড অপেক্ষা করুন (আর {remaining} সেকেন্ড বাকি)।", show_alert=True)
         else:
             daily_count = user.get("daily_count", 0)
             last_reset = user.get("last_reset", current_time)
@@ -449,14 +481,23 @@ def callback_inline(call):
                 return
 
             add_balance(user_id, 0.001)
-            update_user_field(user_id, {"daily_count": daily_count + 1, "last_reset": last_reset, "last_task_time": 0})
+            update_user_field(user_id, {
+                "daily_count": daily_count + 1, 
+                "last_reset": last_reset, 
+                "can_claim": False
+            })
 
             bot.answer_callback_query(call.id, "🎉 $0.001 আপনার অ্যাকাউন্টে যোগ করা হয়েছে।", show_alert=True)
 
             updated_balance, _ = get_user(user_id, first_name)
+            try:
+                bot.delete_message(call.message.chat.id, call.message.message_id)
+            except Exception:
+                pass
+
             bot.send_message(
                 call.message.chat.id,
-                f"✅ রিওয়ার্ড সফলভাবে যোগ হয়েছে!\nবর্তমান ব্যালেন্স: ${updated_balance:.4f} USDT",
+                f"✅ রিওয়ার্ড সফলভাবে যোগ হয়েছে!\nবর্তমান ব্যালেন্স: `${updated_balance:.4f} USDT`\nআজকের সম্পূর্ণ কাজ: `{daily_count + 1}/30`",
                 reply_markup=main_menu_keyboard(),
                 parse_mode="Markdown"
             )
@@ -469,27 +510,24 @@ def callback_inline(call):
             f"📝 আপনার {method} নম্বর বা এড্রেসটি লিখে মেসেজ পাঠান:"
         )
 
-# --- AUTO POST (EVERY 4 MINUTES / EXACT SCREENSHOT MATCH) ---
+# --- AUTO POST ONLY BKASH & NAGAD (EVERY 4 MINUTES) ---
 def start_auto_post():
     def loop():
-        methods_and_nets = [
-            ("BSC (BEP20)", "0x" + "".join(random.choices("0123456789abcdefABCDEF", k=8))),
-            ("Binance USDT", "P" + "".join([str(random.randint(0, 9)) for _ in range(8)])),
-            ("Payeer", "P" + "".join([str(random.randint(0, 9)) for _ in range(8)])),
-            ("bKash", "017" + "".join([str(random.randint(0, 9)) for _ in range(5)]) + "***")
-        ]
+        prefixes = ["017", "018", "019", "016", "015", "013", "014"]
+        methods = ["bKash", "Nagad"]
         
         while True:
             try:
-                amount = round(random.uniform(2.000, 35.000), 3)
-                net, acc = random.choice(methods_and_nets)
+                amount = round(random.uniform(2.000, 10.000), 3)
+                net = random.choice(methods)
+                phone_num = random.choice(prefixes) + "".join([str(random.randint(0, 9)) for _ in range(5)]) + "***"
 
                 msg = (
                     f"**My Earning All Payment**\n"
                     f"✅ **Withdrawal Paid**\n\n"
                     f"💵 **{amount:.3f} USDT**\n"
                     f"🌐 **{net}**\n"
-                    f"👛 **{acc}**"
+                    f"👛 **{phone_num}**"
                 )
 
                 try:
@@ -497,7 +535,6 @@ def start_auto_post():
                 except Exception as e:
                     print(f"Error sending to {PROOF_CHANNEL}: {e}")
 
-                # ২৪০ সেকেন্ড = ৪ মিনিট পর পর মেসেজ যাবে
                 time.sleep(240)
             except Exception as e:
                 print(f"Auto post error: {e}")
