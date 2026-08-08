@@ -156,6 +156,23 @@ def main_menu_keyboard():
 
 # --- ADMIN COMMANDS ---
 
+@bot.message_handler(commands=['testpost'])
+def test_post_cmd(message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    try:
+        msg = (
+            f"**My Earning All Payment**\n"
+            f"✅ **Withdrawal Paid**\n\n"
+            f"💵 **5.250 USDT**\n"
+            f"🌐 **bKash**\n"
+            f"👛 **017*****123**"
+        )
+        bot.send_message(PROOF_CHANNEL, msg, parse_mode="Markdown")
+        bot.reply_to(message, "✅ চ্যানেলে টেস্ট মেসেজ পাঠানো হয়েছে!")
+    except Exception as e:
+        bot.reply_to(message, f"❌ পোস্ট পাঠাতে ব্যর্থ! এরর: {e}")
+
 @bot.message_handler(commands=['addbalance'])
 def add_balance_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -165,7 +182,7 @@ def add_balance_cmd(message):
     try:
         args = message.text.split()
         if len(args) < 3:
-            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/addbalance [USER_ID] [AMOUNT]`\nযেমন: `/addbalance 5034445579 3`", parse_mode="Markdown")
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/addbalance [USER_ID] [AMOUNT]`", parse_mode="Markdown")
             return
 
         target_id = int(args[1])
@@ -182,7 +199,7 @@ def add_balance_cmd(message):
         except Exception:
             pass
     except Exception as e:
-        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
+        bot.reply_to(message, f"❌ ভুল ইনপুট! এরর: {e}")
 
 @bot.message_handler(commands=['cutbalance'])
 def cut_balance_cmd(message):
@@ -193,7 +210,7 @@ def cut_balance_cmd(message):
     try:
         args = message.text.split()
         if len(args) < 3:
-            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/cutbalance [USER_ID] [AMOUNT]`\nযেমন: `/cutbalance 5034445579 1.5`", parse_mode="Markdown")
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/cutbalance [USER_ID] [AMOUNT]`", parse_mode="Markdown")
             return
 
         target_id = int(args[1])
@@ -210,7 +227,7 @@ def cut_balance_cmd(message):
         except Exception:
             pass
     except Exception as e:
-        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
+        bot.reply_to(message, f"❌ ভুল ইনপুট! এরর: {e}")
 
 @bot.message_handler(commands=['balance'])
 def check_user_balance_cmd(message):
@@ -221,7 +238,7 @@ def check_user_balance_cmd(message):
     try:
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/balance [USER_ID]`\nযেমন: `/balance 5034445579`", parse_mode="Markdown")
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/balance [USER_ID]`", parse_mode="Markdown")
             return
 
         target_id = int(args[1])
@@ -232,7 +249,7 @@ def check_user_balance_cmd(message):
         user = users_col.find_one({"user_id": target_id})
 
         if not user:
-            bot.reply_to(message, f"❌ `{target_id}` আইডি দিয়ে কোনো ইউজার ডাটাবেজে পাওয়া যায়নি।", parse_mode="Markdown")
+            bot.reply_to(message, f"❌ `{target_id}` আইডি পাওয়া যায়নি।", parse_mode="Markdown")
             return
 
         user_bal = user.get("balance", 0.0)
@@ -253,7 +270,7 @@ def check_user_balance_cmd(message):
         bot.reply_to(message, msg, parse_mode="Markdown")
 
     except Exception as e:
-        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
+        bot.reply_to(message, f"❌ ভুল ইনপুট! এরর: {e}")
 
 @bot.message_handler(commands=['ban'])
 def ban_user_cmd(message):
@@ -264,20 +281,20 @@ def ban_user_cmd(message):
     try:
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/ban [USER_ID]`\nযেমন: `/ban 5034445579`", parse_mode="Markdown")
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/ban [USER_ID]`", parse_mode="Markdown")
             return
 
         target_id = int(args[1])
         update_user_field(target_id, {"is_banned": True})
 
-        bot.reply_to(message, f"🚫 ইউজার `{target_id}` কে সফলভাবে **ব্যান** করা হয়েছে।", parse_mode="Markdown")
+        bot.reply_to(message, f"🚫 ইউজার `{target_id}` কে **ব্যান** করা হয়েছে।", parse_mode="Markdown")
 
         try:
             bot.send_message(target_id, "🚫 আপনার অ্যাকাউন্টটি অ্যাডমিন কর্তৃক ব্যান করা হয়েছে।")
         except Exception:
             pass
     except Exception as e:
-        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
+        bot.reply_to(message, f"❌ ভুল ইনপুট! এরর: {e}")
 
 @bot.message_handler(commands=['unban'])
 def unban_user_cmd(message):
@@ -288,20 +305,20 @@ def unban_user_cmd(message):
     try:
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/unban [USER_ID]`\nযেমন: `/unban 5034445579`", parse_mode="Markdown")
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/unban [USER_ID]`", parse_mode="Markdown")
             return
 
         target_id = int(args[1])
         update_user_field(target_id, {"is_banned": False})
 
-        bot.reply_to(message, f"✅ ইউজার `{target_id}` কে সফলভাবে **আনব্যান** করা হয়েছে।", parse_mode="Markdown")
+        bot.reply_to(message, f"✅ ইউজার `{target_id}` কে **আনব্যান** করা হয়েছে।", parse_mode="Markdown")
 
         try:
-            bot.send_message(target_id, "🎉 আপনার অ্যাকাউন্টটি আনব্যান করা হয়েছে! এখন কাজ করতে পারবেন।")
+            bot.send_message(target_id, "🎉 আপনার অ্যাকাউন্টটি আনব্যান করা হয়েছে!")
         except Exception:
             pass
     except Exception as e:
-        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
+        bot.reply_to(message, f"❌ ভুল ইনপুট! এরর: {e}")
 
 # --- USER COMMAND HANDLERS ---
 @bot.message_handler(commands=['start'])
@@ -363,10 +380,8 @@ def handle_all_messages(message):
         withdraw_amount = balance
         update_user_field(user_id, {"balance": 0.0})
 
-        # Masking phone number for channel post
         masked_acc = text[:3] + "*****" + text[-3:]
 
-        # Auto Paid Message Format for Channel
         msg = (
             f"**My Earning All Payment**\n"
             f"✅ **Withdrawal Paid**\n\n"
@@ -605,14 +620,16 @@ def callback_inline(call):
             f"📝 আপনার {method} নম্বর বা এড্রেসটি লিখে মেসেজ পাঠান:"
         )
 
-# --- AUTO POST ONLY BKASH & NAGAD (EVERY 4 MINUTES) ---
+# --- AUTO POST ONLY BKASH & NAGAD (EVERY 20 SECONDS FOR FAST TESTING) ---
 def auto_post_loop():
     prefixes = ["017", "018", "019", "016", "015", "013", "014"]
     methods = ["bKash", "Nagad"]
     
+    # প্রথম পোস্ট সাথে সাথে দেওয়ার জন্য
+    time.sleep(5)
+    
     while True:
         try:
-            time.sleep(240)  # ৪ মিনিট পর পর ফেক মেসেজ যাবে
             amount = round(random.uniform(2.000, 10.000), 3)
             net = random.choice(methods)
             phone_num = random.choice(prefixes) + "".join([str(random.randint(0, 9)) for _ in range(5)]) + "***"
@@ -628,6 +645,8 @@ def auto_post_loop():
             bot.send_message(PROOF_CHANNEL, msg, parse_mode="Markdown")
         except Exception as e:
             print(f"Auto post error: {e}")
+        
+        time.sleep(20) # ২০ সেকেন্ড পর পর অটো পোস্ট হবে
 
 # --- FLASK WEB SERVER ---
 def keep_alive():
