@@ -136,6 +136,8 @@ def main_menu_keyboard():
     return markup
 
 # --- ADMIN COMMANDS ---
+
+# 1. ADD BALANCE
 @bot.message_handler(commands=['addbalance'])
 def add_balance_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -159,6 +161,125 @@ def add_balance_cmd(message):
 
         try:
             bot.send_message(target_id, f"🎉 অ্যাডমিন আপনার অ্যাকাউন্টে `${amount:.4f} USDT` যোগ করেছেন!\nবর্তমান ব্যালেন্স: `${new_bal:.4f} USDT`", parse_mode="Markdown")
+        except Exception:
+            pass
+    except Exception as e:
+        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
+
+# 2. CUT BALANCE
+@bot.message_handler(commands=['cutbalance'])
+def cut_balance_cmd(message):
+    if message.from_user.id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
+        return
+
+    try:
+        args = message.text.split()
+        if len(args) < 3:
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/cutbalance [USER_ID] [AMOUNT]`\nযেমন: `/cutbalance 5034445579 1.5`", parse_mode="Markdown")
+            return
+
+        target_id = int(args[1])
+        amount = float(args[2])
+
+        add_balance(target_id, -amount)
+        _, target_user = get_user(target_id)
+        new_bal = target_user.get("balance", 0.0)
+
+        bot.reply_to(message, f"✂️ সফলভাবে `{target_id}` আইডি থেকে `${amount:.4f} USDT` কেটে নেওয়া হয়েছে।\nবর্তমান ব্যালেন্স: `${new_bal:.4f} USDT`", parse_mode="Markdown")
+
+        try:
+            bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে `${amount:.4f} USDT` কেটে নিয়েছেন।\nবর্তমান ব্যালেন্স: `${new_bal:.4f} USDT`", parse_mode="Markdown")
+        except Exception:
+            pass
+    except Exception as e:
+        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
+
+# 3. CHECK USER BALANCE
+@bot.message_handler(commands=['balance'])
+def check_user_balance_cmd(message):
+    if message.from_user.id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
+        return
+
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/balance [USER_ID]`\nযেমন: `/balance 5034445579`", parse_mode="Markdown")
+            return
+
+        target_id = int(args[1])
+        user = users_col.find_one({"user_id": target_id})
+
+        if not user:
+            bot.reply_to(message, f"❌ `{target_id}` আইডি দিয়ে কোনো ইউজার ডাটাবেজে পাওয়া যায়নি।", parse_mode="Markdown")
+            return
+
+        user_bal = user.get("balance", 0.0)
+        name = user.get("first_name", "Unknown")
+        ref_count = user.get("referrals_count", 0)
+        is_banned = "হ্যাঁ (Banned)" if user.get("is_banned", False) else "না (Active)"
+
+        msg = (
+            f"👤 **ইউজার ডিটেইলস:**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"📛 **নাম:** `{name}`\n"
+            f"🆔 **ইউজার আইডি:** `{target_id}`\n"
+            f"💰 **বর্তমান ব্যালেন্স:** `${user_bal:.4f} USDT`\n"
+            f"👥 **মোট রেফার:** `{ref_count}` জন\n"
+            f"🚫 **ব্যান স্ট্যাটাস:** {is_banned}\n"
+            f"━━━━━━━━━━━━━━━━━━━"
+        )
+        bot.reply_to(message, msg, parse_mode="Markdown")
+
+    except Exception as e:
+        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
+
+# 4. BAN USER
+@bot.message_handler(commands=['ban'])
+def ban_user_cmd(message):
+    if message.from_user.id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
+        return
+
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/ban [USER_ID]`\nযেমন: `/ban 5034445579`", parse_mode="Markdown")
+            return
+
+        target_id = int(args[1])
+        update_user_field(target_id, {"is_banned": True})
+
+        bot.reply_to(message, f"🚫 ইউজার `{target_id}` কে সফলভাবে **ব্যান** করা হয়েছে।", parse_mode="Markdown")
+
+        try:
+            bot.send_message(target_id, "🚫 আপনার অ্যাকাউন্টটি অ্যাডমিন কর্তৃক ব্যান করা হয়েছে।")
+        except Exception:
+            pass
+    except Exception as e:
+        bot.reply_to(message, f"❌ ভুল ইনপুট! সঠিক ফরম্যাটে লিখুন। এরর: {e}")
+
+# 5. UNBAN USER
+@bot.message_handler(commands=['unban'])
+def unban_user_cmd(message):
+    if message.from_user.id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
+        return
+
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ **ফরম্যাট:** `/unban [USER_ID]`\nযেমন: `/unban 5034445579`", parse_mode="Markdown")
+            return
+
+        target_id = int(args[1])
+        update_user_field(target_id, {"is_banned": False})
+
+        bot.reply_to(message, f"✅ ইউজার `{target_id}` কে সফলভাবে **আনব্যান** করা হয়েছে।", parse_mode="Markdown")
+
+        try:
+            bot.send_message(target_id, "🎉 আপনার অ্যাকাউন্টটি আনব্যান করা হয়েছে! এখন কাজ করতে পারবেন।")
         except Exception:
             pass
     except Exception as e:
@@ -201,6 +322,7 @@ def handle_all_messages(message):
 
     balance, user = get_user(user_id, first_name)
     if user.get("is_banned", False):
+        bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
     # Withdraw Number Step
