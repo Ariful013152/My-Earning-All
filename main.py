@@ -20,7 +20,8 @@ BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1"]
 PROOF_CHANNEL = "@myearningall"
 
-MIN_WITHDRAW = 2.0
+MIN_WITHDRAW = 1.0  # সর্বনিম্ন উইথড্র ১ ডলার
+USDT_TO_BDT = 110.0  # ১ ডলার = ১১০ টাকা
 REFERRAL_BONUS = 0.005
 
 # --- ADMIN IDS ---
@@ -160,10 +161,11 @@ def test_post_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
         return
     try:
+        bdt_amount = 1.0 * USDT_TO_BDT
         msg = (
             "My Earning All Payment\n"
             "✅ Withdrawal Paid\n\n"
-            "💵 5.250 USDT\n"
+            f"💵 1.000 USDT ({bdt_amount:.2f} BDT)\n"
             "🌐 bKash\n"
             "👛 017xxxxx123"
         )
@@ -190,11 +192,12 @@ def add_balance_cmd(message):
         add_balance(target_id, amount)
         _, target_user = get_user(target_id)
         new_bal = target_user.get("balance", 0.0)
+        bdt_val = new_bal * USDT_TO_BDT
 
-        bot.reply_to(message, f"✅ সফলভাবে {target_id} আইডি-তে ${amount:.4f} USDT যোগ করা হয়েছে।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT")
+        bot.reply_to(message, f"✅ সফলভাবে {target_id} আইডি-তে ${amount:.4f} USDT যোগ করা হয়েছে।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
 
         try:
-            bot.send_message(target_id, f"🎉 অ্যাডমিন আপনার অ্যাকাউন্টে ${amount:.4f} USDT যোগ করেছেন!\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT")
+            bot.send_message(target_id, f"🎉 অ্যাডমিন আপনার অ্যাকাউন্টে ${amount:.4f} USDT যোগ করেছেন!\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
         except Exception:
             pass
     except Exception as e:
@@ -218,11 +221,12 @@ def cut_balance_cmd(message):
         add_balance(target_id, -amount)
         _, target_user = get_user(target_id)
         new_bal = target_user.get("balance", 0.0)
+        bdt_val = new_bal * USDT_TO_BDT
 
-        bot.reply_to(message, f"✂️ সফলভাবে {target_id} আইডি থেকে ${amount:.4f} USDT কেটে নেওয়া হয়েছে।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT")
+        bot.reply_to(message, f"✂️ সফলভাবে {target_id} আইডি থেকে ${amount:.4f} USDT কেটে নেওয়া হয়েছে।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
 
         try:
-            bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে ${amount:.4f} USDT কেটে নিয়েছেন।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT")
+            bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে ${amount:.4f} USDT কেটে নিয়েছেন।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
         except Exception:
             pass
     except Exception as e:
@@ -252,6 +256,7 @@ def check_user_balance_cmd(message):
             return
 
         user_bal = user.get("balance", 0.0)
+        bdt_val = user_bal * USDT_TO_BDT
         name = user.get("first_name", "Unknown")
         ref_count = user.get("referrals_count", 0)
         is_banned = "হ্যাঁ (Banned)" if user.get("is_banned", False) else "না (Active)"
@@ -262,6 +267,7 @@ def check_user_balance_cmd(message):
             f"📛 নাম: {name}\n"
             f"🆔 ইউজার আইডি: {target_id}\n"
             f"💰 বর্তমান ব্যালেন্স: ${user_bal:.4f} USDT\n"
+            f"                   = {bdt_val:.2f} টাকা\n"
             f"👥 মোট রেফার: {ref_count} জন\n"
             f"🚫 ব্যান স্ট্যাটাস: {is_banned}\n"
             f"━━━━━━━━━━━━━━━━━━━"
@@ -375,6 +381,7 @@ def handle_all_messages(message):
             return
 
         withdraw_amount = balance
+        bdt_amount = withdraw_amount * USDT_TO_BDT
         update_user_field(user_id, {"balance": 0.0})
 
         masked_acc = text[:3] + "xxxxx" + text[-3:]
@@ -382,12 +389,16 @@ def handle_all_messages(message):
         msg = (
             "My Earning All Payment\n"
             "✅ Withdrawal Paid\n\n"
-            f"💵 {withdraw_amount:.3f} USDT\n"
+            f"💵 {withdraw_amount:.3f} USDT ({bdt_amount:.2f} BDT)\n"
             f"🌐 {method}\n"
             f"👛 {masked_acc}"
         )
 
-        bot.send_message(message.chat.id, f"✅ আপনার উইথড্র রিকোয়েস্ট সফলভাবে প্রসেস হয়েছে!\n\n💳 পরিমাণ: ${withdraw_amount:.4f} USDT\n🔷 মেথড: {method}\n📱 ডিটেইলস: {text}\n\nধন্যবাদ!", reply_markup=main_menu_keyboard())
+        bot.send_message(
+            message.chat.id, 
+            f"✅ আপনার উইথড্র রিকোয়েস্ট সফলভাবে প্রসেস হয়েছে!\n\n💳 পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} টাকা)\n🔷 মেথড: {method}\n📱 ডিটেইলস: {text}\n\nধন্যবাদ!", 
+            reply_markup=main_menu_keyboard()
+        )
 
         try:
             bot.send_message(PROOF_CHANNEL, msg)
@@ -443,31 +454,41 @@ def handle_all_messages(message):
         )
 
     elif text == "🖥 Account":
+        bdt_balance = balance * USDT_TO_BDT
+        account_text = (
+            f"👤 ইউজার: {first_name}\n"
+            f"🆔 আইডি: {user_id}\n"
+            f"💰 বর্তমান ব্যালেন্স: ${balance:.4f} USDT\n"
+            f"                   = {bdt_balance:.2f} টাকা"
+        )
         bot.send_message(
             message.chat.id,
-            f"👤 ইউজার: {first_name}\n🆔 আইডি: {user_id}\n💰 বর্তমান ব্যালেন্স: ${balance:.4f} USDT",
+            account_text,
             reply_markup=main_menu_keyboard()
         )
 
     elif text == "✨ Referral":
         ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
         ref_count = user.get("referrals_count", 0)
+        ref_bdt = REFERRAL_BONUS * USDT_TO_BDT
         bot.send_message(
             message.chat.id,
             f"👥 আপনার রেফারেল লিংক\n\n"
             f"🔗 {ref_link}\n\n"
             f"📊 মোট সফল রেফারেল: {ref_count} জন\n"
-            f"🎁 রেফার কমিশন: ${REFERRAL_BONUS:.3f} USDT",
+            f"🎁 রেফার কমিশন: ${REFERRAL_BONUS:.3f} USDT (={ref_bdt:.2f} টাকা)",
             reply_markup=main_menu_keyboard()
         )
 
     elif text == "💸 Withdraw":
+        bdt_balance = balance * USDT_TO_BDT
+        min_bdt = MIN_WITHDRAW * USDT_TO_BDT
         if balance < MIN_WITHDRAW:
             msg = (
                 f"💸 উইথড্র ইনফরমেশন\n"
                 f"━━━━━━━━━━━━━━━━━━━\n"
-                f"💳 আপনার বর্তমান ব্যালেন্স: ${balance:.4f} USDT\n"
-                f"📌 সর্বনিম্ন উইথড্র: ${MIN_WITHDRAW:.2f} USDT\n\n"
+                f"💳 আপনার বর্তমান ব্যালেন্স: ${balance:.4f} USDT (={bdt_balance:.2f} টাকা)\n"
+                f"📌 সর্বনিম্ন উইথড্র: ${MIN_WITHDRAW:.2f} USDT (={min_bdt:.2f} টাকা)\n\n"
                 f"⚠️ আপনার অ্যাকাউন্টে পর্যাপ্ত ব্যালেন্স নেই।"
             )
             bot.send_message(message.chat.id, msg, reply_markup=main_menu_keyboard())
@@ -479,17 +500,18 @@ def handle_all_messages(message):
             )
             bot.send_message(
                 message.chat.id,
-                f"💳 পেমেন্ট মেথড সিলেক্ট করুন:\n\nবর্তমান ব্যালেন্স: ${balance:.4f} USDT\nমিনিমাম উইথড্র: ${MIN_WITHDRAW:.2f} USDT",
+                f"💳 পেমেন্ট মেথড সিলেক্ট করুন:\n\nবর্তমান ব্যালেন্স: ${balance:.4f} USDT (={bdt_balance:.2f} টাকা)\nমিনিমাম উইথড্র: ${MIN_WITHDRAW:.2f} USDT (={min_bdt:.2f} টাকা)",
                 reply_markup=markup
             )
 
     elif text == "🛑 Rule's":
+        min_bdt = MIN_WITHDRAW * USDT_TO_BDT
         rules = (
             "📌 বট নিয়মাবলী:\n\n"
             "১. প্রতিদিন সর্বোচ্চ ৩০টি অ্যাড দেখতে পারবেন।\n"
             "২. অ্যাড লিংকে অন্তত ১৫ সেকেন্ড অপেক্ষা করতে হবে।\n"
             "৩. ফেক রেফারেল করলে অ্যাকাউন্ট ব্যান করা হবে।\n"
-            "৪. সর্বনিম্ন উইথড্র $২.০০ USDT।"
+            f"৪. সর্বনিম্ন উইথড্র ${MIN_WITHDRAW:.2f} USDT (={min_bdt:.2f} টাকা)।"
         )
         bot.send_message(message.chat.id, rules, reply_markup=main_menu_keyboard())
 
@@ -587,6 +609,7 @@ def callback_inline(call):
             })
 
             updated_balance, _ = get_user(user_id, first_name)
+            bdt_balance = updated_balance * USDT_TO_BDT
             try:
                 bot.delete_message(call.message.chat.id, call.message.message_id)
             except Exception:
@@ -596,7 +619,7 @@ def callback_inline(call):
                 call.message.chat.id,
                 f"🎉 রিওয়ার্ড সফলভাবে যোগ হয়েছে!\n\n"
                 f"💰 প্রাপ্ত বোনাস: $0.0010 USDT\n"
-                f"💳 বর্তমান ব্যালেন্স: ${updated_balance:.4f} USDT\n"
+                f"💳 বর্তমান ব্যালেন্স: ${updated_balance:.4f} USDT (={bdt_balance:.2f} টাকা)\n"
                 f"📊 আজকের টাস্ক: {daily_count + 1}/30",
                 reply_markup=main_menu_keyboard()
             )
@@ -618,14 +641,15 @@ def auto_post_loop():
     
     while True:
         try:
-            amount = round(random.uniform(2.000, 10.000), 3)
+            amount = round(random.uniform(1.000, 10.000), 3)
+            bdt_amount = amount * USDT_TO_BDT
             net = random.choice(methods)
             phone_num = random.choice(prefixes) + "".join([str(random.randint(0, 9)) for _ in range(5)]) + "xxxxx"
 
             msg = (
                 "My Earning All Payment\n"
                 "✅ Withdrawal Paid\n\n"
-                f"💵 {amount:.3f} USDT\n"
+                f"💵 {amount:.3f} USDT ({bdt_amount:.2f} BDT)\n"
                 f"🌐 {net}\n"
                 f"👛 {phone_num}"
             )
@@ -634,7 +658,7 @@ def auto_post_loop():
         except Exception as e:
             print(f"Auto post error: {e}")
         
-        time.sleep(60) # ১ মিনিট (৬০ সেকেন্ড) পর পর অটো পোস্ট হবে
+        time.sleep(60)
 
 # --- FLASK WEB SERVER ---
 def keep_alive():
@@ -654,7 +678,7 @@ def keep_alive():
 if __name__ == "__main__":
     keep_alive()
 
-    # Clear old webhooks and pending updates to prevent Conflict 409
+    # Clear old webhooks and pending updates
     try:
         bot.remove_webhook()
         time.sleep(2)
