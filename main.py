@@ -17,7 +17,8 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqn
 MONGO_URI = os.environ.get("MONGO_URI", "")
 
 BOT_USERNAME = "myearningall01_bot"
-REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1"]
+# ৩টি চ্যানেলই এখানে যুক্ত করা হয়েছে
+REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
 
 MIN_WITHDRAW = 1.0  # সর্বনিম্ন উইথড্র ১ ডলার
@@ -128,7 +129,7 @@ def send_force_join_msg(chat_id):
     
     bot.send_message(
         chat_id,
-        "⚠️ বটটি ব্যবহার করতে আপনাকে নিচের সকল চ্যানেলগুলোতে জয়েন করতে হবে:",
+        "⚠️ বটটি ব্যবহার করতে আপনাকে নিচের সকল চ্যানেলগুলোতে জয়েন করতে হবে:",
         reply_markup=markup
     )
 
@@ -155,7 +156,6 @@ def main_menu_keyboard():
     return markup
 
 # --- ADMIN COMMANDS ---
-
 @bot.message_handler(commands=['testpost'])
 def test_post_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -170,7 +170,7 @@ def test_post_cmd(message):
             "👛 017xxxxx123"
         )
         bot.send_message(PROOF_CHANNEL, msg)
-        bot.reply_to(message, "✅ চ্যানেলে টেস্ট মেসেজ পাঠানো হয়েছে!")
+        bot.reply_to(message, "✅ চ্যানেলে টেস্ট মেসেজ পাঠানো হয়েছে!")
     except Exception as e:
         bot.reply_to(message, f"❌ পোস্ট পাঠাতে ব্যর্থ! এরর: {e}")
 
@@ -194,7 +194,7 @@ def add_balance_cmd(message):
         new_bal = target_user.get("balance", 0.0)
         bdt_val = new_bal * USDT_TO_BDT
 
-        bot.reply_to(message, f"✅ সফলভাবে {target_id} আইডি-তে ${amount:.4f} USDT যোগ করা হয়েছে।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
+        bot.reply_to(message, f"✅ সফলভাবে {target_id} আইডি-তে ${amount:.4f} USDT যোগ করা হয়েছে।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
 
         try:
             bot.send_message(target_id, f"🎉 অ্যাডমিন আপনার অ্যাকাউন্টে ${amount:.4f} USDT যোগ করেছেন!\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
@@ -223,10 +223,10 @@ def cut_balance_cmd(message):
         new_bal = target_user.get("balance", 0.0)
         bdt_val = new_bal * USDT_TO_BDT
 
-        bot.reply_to(message, f"✂️ সফলভাবে {target_id} আইডি থেকে ${amount:.4f} USDT কেটে নেওয়া হয়েছে।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
+        bot.reply_to(message, f"✂️ সফলভাবে {target_id} আইডি থেকে ${amount:.4f} USDT কেটে নেওয়া হয়েছে।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
 
         try:
-            bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে ${amount:.4f} USDT কেটে নিয়েছেন।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
+            bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে ${amount:.4f} USDT কেটে নিয়েছেন।\nবর্তমান ব্যালেন্স: ${new_bal:.4f} USDT (={bdt_val:.2f} টাকা)")
         except Exception:
             pass
     except Exception as e:
@@ -252,7 +252,7 @@ def check_user_balance_cmd(message):
         user = users_col.find_one({"user_id": target_id})
 
         if not user:
-            bot.reply_to(message, f"❌ {target_id} আইডি পাওয়া যায়নি।")
+            bot.reply_to(message, f"❌ {target_id} আইডি পাওয়া যায়নি।")
             return
 
         user_bal = user.get("balance", 0.0)
@@ -267,7 +267,7 @@ def check_user_balance_cmd(message):
             f"📛 নাম: {name}\n"
             f"🆔 ইউজার আইডি: {target_id}\n"
             f"💰 বর্তমান ব্যালেন্স: ${user_bal:.4f} USDT\n"
-            f"                   = {bdt_val:.2f} টাকা\n"
+            f"                    = {bdt_val:.2f} টাকা\n"
             f"👥 মোট রেফার: {ref_count} জন\n"
             f"🚫 ব্যান স্ট্যাটাস: {is_banned}\n"
             f"━━━━━━━━━━━━━━━━━━━"
@@ -292,10 +292,10 @@ def ban_user_cmd(message):
         target_id = int(args[1])
         update_user_field(target_id, {"is_banned": True})
 
-        bot.reply_to(message, f"🚫 ইউজার {target_id} কে ব্যান করা হয়েছে।")
+        bot.reply_to(message, f"🚫 ইউজার {target_id} কে ব্যান করা হয়েছে।")
 
         try:
-            bot.send_message(target_id, "🚫 আপনার অ্যাকাউন্টটি অ্যাডমিন কর্তৃক ব্যান করা হয়েছে।")
+            bot.send_message(target_id, "🚫 আপনার অ্যাকাউন্টটি অ্যাডমিন কর্তৃক ব্যান করা হয়েছে।")
         except Exception:
             pass
     except Exception as e:
@@ -316,10 +316,10 @@ def unban_user_cmd(message):
         target_id = int(args[1])
         update_user_field(target_id, {"is_banned": False})
 
-        bot.reply_to(message, f"✅ ইউজার {target_id} কে আনব্যান করা হয়েছে।")
+        bot.reply_to(message, f"✅ ইউজার {target_id} কে আনব্যান করা হয়েছে।")
 
         try:
-            bot.send_message(target_id, "🎉 আপনার অ্যাকাউন্টটি আনব্যান করা হয়েছে!")
+            bot.send_message(target_id, "🎉 আপনার অ্যাকাউন্টটি আনব্যান করা হয়েছে!")
         except Exception:
             pass
     except Exception as e:
@@ -340,7 +340,7 @@ def start_cmd(message):
 
     _, user = get_user(user_id, first_name, referred_by=referred_by)
     if user.get("is_banned", False):
-        bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
+        bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
     if not check_user_channels(user_id):
@@ -361,7 +361,7 @@ def handle_all_messages(message):
 
     balance, user = get_user(user_id, first_name)
     if user.get("is_banned", False):
-        bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
+        bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
     # Withdraw Number Step
@@ -386,7 +386,8 @@ def handle_all_messages(message):
 
         masked_acc = text[:3] + "xxxxx" + text[-3:]
 
-        msg = (
+        # প্রুফ চ্যানেলের মাস্ক করা মেসেজ
+        proof_msg = (
             "My Earning All Payment\n"
             "✅ Withdrawal Paid\n\n"
             f"💵 {withdraw_amount:.3f} USDT ({bdt_amount:.2f} BDT)\n"
@@ -394,16 +395,37 @@ def handle_all_messages(message):
             f"👛 {masked_acc}"
         )
 
+        # রিয়েল ইউজারের অরিজিনাল মেসেজ অ্যাডমিনদের ইনবক্সে যাওয়ার ফরম্যাট
+        admin_alert_msg = (
+            "🚨 **নতুন রিয়েল উইথড্র রিকোয়েস্ট!**\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 নাম: {first_name}\n"
+            f"🆔 আইডি: `{user_id}`\n"
+            f"💰 পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} BDT)\n"
+            f"💳 মেথড: {method}\n"
+            f"📱 মোবাইল নম্বর: `{text}`\n"
+            "━━━━━━━━━━━━━━━━━━━"
+        )
+
+        # ইউজারকে মেসেজ পাঠানো
         bot.send_message(
             message.chat.id, 
-            f"✅ আপনার উইথড্র রিকোয়েস্ট সফলভাবে প্রসেস হয়েছে!\n\n💳 পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} টাকা)\n🔷 মেথড: {method}\n📱 ডিটেইলস: {text}\n\nধন্যবাদ!", 
+            f"✅ আপনার উইথড্র রিকোয়েস্ট সফলভাবে প্রসেস হয়েছে!\n\n💳 পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} টাকা)\n🔷 মেথড: {method}\n📱 ডিটেইলস: {text}\n\nধন্যবাদ!", 
             reply_markup=main_menu_keyboard()
         )
 
+        # প্রুফ চ্যানেলে পোস্ট করা
         try:
-            bot.send_message(PROOF_CHANNEL, msg)
+            bot.send_message(PROOF_CHANNEL, proof_msg)
         except Exception as e:
             print(f"Error posting withdraw request: {e}")
+
+        # অ্যাডমিনদের ইনবক্সে সরাসরি মেসেজ পাঠানো
+        for admin_id in ADMIN_IDS:
+            try:
+                bot.send_message(admin_id, admin_alert_msg, parse_mode="Markdown")
+            except Exception as e:
+                print(f"Failed to send admin notification to {admin_id}: {e}")
         return
 
     if not check_user_channels(user_id):
@@ -423,7 +445,7 @@ def handle_all_messages(message):
         if daily_count >= 30:
             bot.send_message(
                 message.chat.id,
-                "❌ আজকের কাজের সীমা (৩০/৩০) পূর্ণ হয়েছে!\nআগামী ২৪ ঘণ্টা পর আবার নতুন কাজ করতে পারবেন।",
+                "❌ আজকের কাজের সীমা (৩০/৩০) পূর্ণ হয়েছে!\nআগামী ২৪ ঘণ্টা পর আবার নতুন কাজ করতে পারবেন।",
                 reply_markup=main_menu_keyboard()
             )
             return
@@ -449,7 +471,7 @@ def handle_all_messages(message):
         )
         bot.send_message(
             message.chat.id,
-            f"📌 টাস্ক নিয়মাবলী (আজ দেখা হয়েছে: {daily_count}/30 - {provider}):\n1. নিচের লিংকে ক্লিক করে কমপক্ষে ১৫ সেকেন্ড অপেক্ষা করুন。\n2. ১৫ সেকেন্ড পর Claim Reward বাটনে চাপ দিন।",
+            f"📌 টাস্ক নিয়মাবলী (আজ দেখা হয়েছে: {daily_count}/30 - {provider}):\n1. নিচের লিংকে ক্লিক করে কমপক্ষে ১৫ সেকেন্ড অপেক্ষা করুন。\n2. ১৫ সেকেন্ড পর Claim Reward বাটনে চাপ দিন।",
             reply_markup=markup
         )
 
@@ -459,7 +481,7 @@ def handle_all_messages(message):
             f"👤 ইউজার: {first_name}\n"
             f"🆔 আইডি: {user_id}\n"
             f"💰 বর্তমান ব্যালেন্স: ${balance:.4f} USDT\n"
-            f"                   = {bdt_balance:.2f} টাকা"
+            f"                    = {bdt_balance:.2f} টাকা"
         )
         bot.send_message(
             message.chat.id,
@@ -555,7 +577,7 @@ def callback_inline(call):
 
     if call.data == "check_join":
         if check_user_channels(user_id):
-            bot.send_message(call.message.chat.id, "✅ ধন্যবাদ! আপনি সব চ্যানেলে জয়েন আছেন।")
+            bot.send_message(call.message.chat.id, "✅ ধন্যবাদ! আপনি সব চ্যানেলে জয়েন আছেন।")
             if user.get("referred_by") and not user.get("ref_reward_given", False):
                 referrer_id = user.get("referred_by")
                 add_balance(referrer_id, REFERRAL_BONUS)
@@ -569,7 +591,7 @@ def callback_inline(call):
                 pass
             bot.send_message(call.message.chat.id, "🎉 স্বাগতম! কাজ শুরু করতে নিচের বাটন ব্যবহার করুন:", reply_markup=main_menu_keyboard())
         else:
-            bot.send_message(call.message.chat.id, "❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি!")
+            bot.send_message(call.message.chat.id, "❌ আপনি এখনো সব চ্যানেলে জয়েন করেননি!")
 
     elif call.data == "claim_reward":
         if not user.get("can_claim", False):
@@ -587,7 +609,7 @@ def callback_inline(call):
             remaining = int(15 - elapsed_time)
             bot.send_message(
                 call.message.chat.id, 
-                f"⏳ ১৫ সেকেন্ড পূর্ণ হয়নি!\nঅনুগ্রহ করে আরো {remaining} সেকেন্ড এড পেজে সময় দিন এবং তারপর ক্লেম করুন।"
+                f"⏳ ১৫ সেকেন্ড পূর্ণ হয়নি!\nঅনুগ্রহ করে আরো {remaining} সেকেন্ড এড পেজে সময় দিন এবং তারপর ক্লেম করুন।"
             )
         else:
             daily_count = user.get("daily_count", 0)
@@ -598,7 +620,7 @@ def callback_inline(call):
                 last_reset = current_time
 
             if daily_count >= 30:
-                bot.send_message(call.message.chat.id, "❌ আজকের কাজের সীমা (৩০/৩০) পূর্ণ হয়েছে!")
+                bot.send_message(call.message.chat.id, "❌ আজকের কাজের সীমা (৩০/৩০) পূর্ণ হয়েছে!")
                 return
 
             add_balance(user_id, 0.001)
