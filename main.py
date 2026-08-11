@@ -17,7 +17,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqn
 MONGO_URI = os.environ.get("MONGO_URI", "")
 
 BOT_USERNAME = "myearningall01_bot"
-# ৩টি চ্যানেলই এখানে যুক্ত করা হয়েছে
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
 
@@ -265,14 +264,14 @@ def check_user_balance_cmd(message):
             f"👤 ইউজার ডিটেইলস:\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"📛 নাম: {name}\n"
-            f"🆔 ইউজার আইডি: {target_id}\n"
+            f"🆔 ইউজার আইডি: `{target_id}`\n"
             f"💰 বর্তমান ব্যালেন্স: ${user_bal:.4f} USDT\n"
             f"                    = {bdt_val:.2f} টাকা\n"
             f"👥 মোট রেফার: {ref_count} জন\n"
             f"🚫 ব্যান স্ট্যাটাস: {is_banned}\n"
             f"━━━━━━━━━━━━━━━━━━━"
         )
-        bot.reply_to(message, msg)
+        bot.reply_to(message, msg, parse_mode="Markdown")
 
     except Exception as e:
         bot.reply_to(message, f"❌ ভুল ইনপুট! এরর: {e}")
@@ -386,7 +385,6 @@ def handle_all_messages(message):
 
         masked_acc = text[:3] + "xxxxx" + text[-3:]
 
-        # প্রুফ চ্যানেলের মাস্ক করা মেসেজ
         proof_msg = (
             "My Earning All Payment\n"
             "✅ Withdrawal Paid\n\n"
@@ -395,7 +393,6 @@ def handle_all_messages(message):
             f"👛 {masked_acc}"
         )
 
-        # রিয়েল ইউজারের অরিজিনাল মেসেজ অ্যাডমিনদের ইনবক্সে যাওয়ার ফরম্যাট
         admin_alert_msg = (
             "🚨 **নতুন রিয়েল উইথড্র রিকোয়েস্ট!**\n"
             "━━━━━━━━━━━━━━━━━━━\n"
@@ -407,20 +404,18 @@ def handle_all_messages(message):
             "━━━━━━━━━━━━━━━━━━━"
         )
 
-        # ইউজারকে মেসেজ পাঠানো
         bot.send_message(
             message.chat.id, 
-            f"✅ আপনার উইথড্র রিকোয়েস্ট সফলভাবে প্রসেস হয়েছে!\n\n💳 পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} টাকা)\n🔷 মেথড: {method}\n📱 ডিটেইলস: {text}\n\nধন্যবাদ!", 
-            reply_markup=main_menu_keyboard()
+            f"✅ আপনার উইথড্র রিকোয়েস্ট সফলভাবে প্রসেস হয়েছে!\n\n💳 পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} টাকা)\n🔷 মেথড: {method}\n📱 ডিটেইলস: `{text}`\n\nধন্যবাদ!", 
+            reply_markup=main_menu_keyboard(),
+            parse_mode="Markdown"
         )
 
-        # প্রুফ চ্যানেলে পোস্ট করা
         try:
             bot.send_message(PROOF_CHANNEL, proof_msg)
         except Exception as e:
             print(f"Error posting withdraw request: {e}")
 
-        # অ্যাডমিনদের ইনবক্সে সরাসরি মেসেজ পাঠানো
         for admin_id in ADMIN_IDS:
             try:
                 bot.send_message(admin_id, admin_alert_msg, parse_mode="Markdown")
@@ -477,29 +472,33 @@ def handle_all_messages(message):
 
     elif text == "🖥 Account":
         bdt_balance = balance * USDT_TO_BDT
+        # আইডি ক্লিক করলে কপি করার জন্য `user_id` ফরম্যাটে রাখা হয়েছে
         account_text = (
             f"👤 ইউজার: {first_name}\n"
-            f"🆔 আইডি: {user_id}\n"
+            f"🆔 আইডি: `{user_id}`\n"
             f"💰 বর্তমান ব্যালেন্স: ${balance:.4f} USDT\n"
             f"                    = {bdt_balance:.2f} টাকা"
         )
         bot.send_message(
             message.chat.id,
             account_text,
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(),
+            parse_mode="Markdown"
         )
 
     elif text == "✨ Referral":
         ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
         ref_count = user.get("referrals_count", 0)
         ref_bdt = REFERRAL_BONUS * USDT_TO_BDT
+        # লিংক ক্লিক করলেই কপি হওয়ার জন্য `ref_link` ফরম্যাটে রাখা হয়েছে
         bot.send_message(
             message.chat.id,
-            f"👥 আপনার রেফারেল লিংক\n\n"
-            f"🔗 {ref_link}\n\n"
+            f"👥 **আপনার রেফারেল লিংক**\n\n"
+            f"`{ref_link}`\n\n"
             f"📊 মোট সফল রেফারেল: {ref_count} জন\n"
             f"🎁 রেফার কমিশন: ${REFERRAL_BONUS:.3f} USDT (={ref_bdt:.2f} টাকা)",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(),
+            parse_mode="Markdown"
         )
 
     elif text == "💸 Withdraw":
@@ -700,21 +699,18 @@ def keep_alive():
 if __name__ == "__main__":
     keep_alive()
 
-    # Clear old webhooks and pending updates
     try:
         bot.remove_webhook()
         time.sleep(2)
     except Exception as e:
         print(f"Webhook Removal Error: {e}")
 
-    # Start auto posting thread
     t_auto = threading.Thread(target=auto_post_loop)
     t_auto.daemon = True
     t_auto.start()
 
     print("Bot is starting polling...")
 
-    # Safe Polling Loop
     while True:
         try:
             bot.polling(none_stop=True, interval=1, timeout=60)
