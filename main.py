@@ -14,13 +14,13 @@ from telebot.types import (
 
 # --- CONFIGURATION ---
 BOT_TOKEN = "8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqnftct1C8"
-MONGO_URI = os.environ.get("MONGO_URI", "") # মঙ্গোডিবি থাকলে Render Environment-এ MONGO_URI দিতে পারেন অথবা এখানে সরাসরি ক্লাস্টার লিংক দিতে পারেন
+MONGO_URI = os.environ.get("MONGO_URI", "")
 
 BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
 
-MIN_WITHDRAW = 1.0   # সর্বনিম্ন উইথড্র ১ ডলার
+MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার
 USDT_TO_BDT = 110.0   # ১ ডলার = ১১০ টাকা
 REFERRAL_BONUS = 0.005
 FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট
@@ -242,7 +242,7 @@ def manage_user_cmd(message):
         bdt_val = user_bal * USDT_TO_BDT
         name = user.get("first_name", "Unknown")
         ref_count = user.get("referrals_count", 0)
-        phone = user.get("verified_phone", "ভেরিফাই করা হয়নি")
+        phone = user.get("verified_phone", "ভেরিফাই করা হয়নি")
         is_banned = user.get("is_banned", False)
 
         msg = (
@@ -280,8 +280,24 @@ def add_balance_cmd(message):
             return
         target_id = int(args[1])
         amount = float(args[2])
+        
+        # ব্যালেন্স অ্যাড করা
         add_balance(target_id, amount)
+        
+        # ১. অ্যাডমিনকে নিশ্চিতকরণ বার্তা
         bot.reply_to(message, f"✅ সফলভাবে ${amount:.4f} USDT যোগ করা হয়েছে।")
+
+        # ২. ইউজারকে নোটিফিকেশন বার্তা পাঠানো
+        try:
+            user_msg = (
+                f"🎉 **আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করা হয়েছে!**\n\n"
+                f"💰 **যোগ করা পরিমাণ:** ${amount:.4f} USDT\n"
+                f"নিয়মিত কাজ করে আরও ইনকাম করুন।"
+            )
+            bot.send_message(target_id, user_msg, parse_mode="Markdown")
+        except Exception as e:
+            bot.send_message(message.chat.id, f"⚠️ ব্যালেন্স যোগ হয়েছে কিন্তু ইউজারকে মেসেজ পাঠানো যায়নি (হয়তো বট ব্লক করা)।")
+
     except Exception as e:
         bot.reply_to(message, f"❌ এরর: {e}")
 
@@ -320,11 +336,11 @@ def start_cmd(message):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    # Share Contact Verification Check
+    # Share Contact Verification Check (আপডেট করা টেক্সট)
     if not user.get("verified_phone"):
         bot.send_message(
             message.chat.id,
-            "📱 **ফোন নম্বর ভেরিফিকেশন প্রয়োজন!**\n\nবটটি ব্যবহার শুরু করতে নিচের '📱 Share Contact' বাটনে ক্লিক করে আপনার টেলিগ্রাম নম্বর ভেরিফাই করুন। এতে একই ফোনে একাধিক অ্যাকাউন্ট খোলা প্রতিরোধ করা সম্ভব হয়।",
+            "📱 **ফোন নম্বর ভেরিফিকেশন প্রয়োজন!**\n\nবটটি ব্যবহার শুরু করতে নিচের '📱 Share Contact' বাটনে ক্লিক করে আপনার টেলিগ্রাম নম্বর ভেরিফাই করুন।",
             reply_markup=contact_keyboard(),
             parse_mode="Markdown"
         )
@@ -371,8 +387,9 @@ def handle_all_messages(message):
     if not user.get("verified_phone"):
         bot.send_message(
             message.chat.id,
-            "📱 অনুগ্রহ করে '📱 Share Contact' বাটনে ক্লিক করে আগে আপনার নম্বর ভেরিফাই করুন।",
-            reply_markup=contact_keyboard()
+            "📱 **ফোন নম্বর ভেরিফিকেশন প্রয়োজন!**\n\nবটটি ব্যবহার শুরু করতে নিচের '📱 Share Contact' বাটনে ক্লিক করে আপনার টেলিগ্রাম নম্বর ভেরিফাই করুন।",
+            reply_markup=contact_keyboard(),
+            parse_mode="Markdown"
         )
         return
 
@@ -517,7 +534,7 @@ def handle_all_messages(message):
     elif text == "📜 Payment History":
         history = user.get("history", [])
         if not history:
-            bot.send_message(message.chat.id, "📜 আপনার কোনো পূর্বের পেমেন্ট হিস্ট্রি পাওয়া যায়নি।", reply_markup=main_menu_keyboard())
+            bot.send_message(message.chat.id, "📜 আপনার কোনো পূর্বের পেমেন্ট হিস্ট্রি পাওয়া যায়নি।", reply_markup=main_menu_keyboard())
         else:
             total_paid = sum(item.get("amount_usdt", 0) for item in history)
             msg = f"📜 **আপনার পেমেন্ট হিস্ট্রি**\n💰 মোট সফল পেমেন্ট: ${total_paid:.3f} USDT\n━━━━━━━━━━━━━━━━━━━\n"
@@ -611,13 +628,13 @@ def callback_inline(call):
         if user_id in ADMIN_IDS:
             target = int(call.data.split("_")[2])
             update_user_field(target, {"is_banned": True})
-            bot.send_message(call.message.chat.id, f"🚫 ইউজার {target} কে ব্যান করা হয়েছে।")
+            bot.send_message(call.message.chat.id, f"🚫 ইউজার {target} কে ব্যান করা হয়েছে।")
         return
     elif call.data.startswith("adm_unban_"):
         if user_id in ADMIN_IDS:
             target = int(call.data.split("_")[2])
             update_user_field(target, {"is_banned": False})
-            bot.send_message(call.message.chat.id, f"✅ ইউজার {target} কে আনব্যান করা হয়েছে।")
+            bot.send_message(call.message.chat.id, f"✅ ইউজার {target} কে আনব্যান করা হয়েছে।")
         return
 
     if call.data == "check_join":
