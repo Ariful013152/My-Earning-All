@@ -2,6 +2,8 @@ import os
 import random
 import threading
 import time
+from datetime import datetime
+import pytz
 import pymongo
 import telebot
 from flask import Flask
@@ -24,6 +26,12 @@ MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ড�
 USDT_TO_BDT = 110.0   # ১ ডলার = ১১০ টাকা
 REFERRAL_BONUS = 0.005
 FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট
+
+# --- TIMEZONE FUNCTION (Bangladesh Time GMT+6) ---
+def get_bd_time_str():
+    bd_tz = pytz.timezone('Asia/Dhaka')
+    bd_now = datetime.now(bd_tz)
+    return bd_now.strftime("%Y-%m-%d %I:%M:%S %p")
 
 # --- ADMIN IDS ---
 ADMIN_IDS = [8414665404, 5034445579]
@@ -124,7 +132,7 @@ def add_payment_history(user_id, method, amount_usdt, amount_bdt, number):
                 "amount_usdt": amount_usdt,
                 "amount_bdt": amount_bdt,
                 "number": str(number).strip(),
-                "date": time.strftime("%Y-%m-%d %H:%M:%S")
+                "date": get_bd_time_str() # BD Time Added
             }
             users_col.update_one({"user_id": user_id}, {"$push": {"history": record}})
         except Exception as e:
@@ -427,28 +435,56 @@ def handle_all_messages(message):
             bot.send_message(message.chat.id, "❌ ভুল উত্তর! আবার চেষ্টা করুন (যেমন: 7 + 3 = ?)।")
         return
 
-    # Withdraw Number Step
-    if user_id in user_withdraw_step:
-        method = user_withdraw_step[user_id].get('method', 'bKash')
+    # STEP 1: Withdraw Amount Selection
+    if user_id in user_withdraw_step and user_withdraw_step[user_id].get('step') == 'amount':
+        try:
+            req_amount = float(text)
+            if req_amount < MIN_WITHDRAW:
+                bot.reply_to(message, f"❌ সর্বনিম্ন উইথড্র পরিমাণ ${MIN_WITHDRAW:.2f} USDT। অনুগ্রহ করে সঠিক পরিমাণ লিখুন।")
+                return
+            if req_amount > balance:
+                bot.reply_to(message, f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই! আপনার বর্তমান ব্যালেন্স: ${balance:.4f} USDT।")
+                return
+            
+            method = user_withdraw_step[user_id]['method']
+            user_withdraw_step[user_id] = {
+                'step': 'number',
+                'method': method,
+                'amount': req_amount
+            }
+
+            bdt_calc = req_amount * USDT_TO_BDT
+            bot.send_message(
+                message.chat.id,
+                f"📝 **{method} নম্বর ইনপুট দিন**\n━━━━━━━━━━━━━━━━━━━\n"
+                f"💵 আপনি উইথড্র করছেন: **${req_amount:.4f} USDT**\n"
+                f"💰 টাকার পরিমাণ: **{bdt_calc:.2f} BDT**\n\n"
+                f"👉 আপনার ১১ ডিজিটের {method} নম্বরটি লিখে পাঠান:",
+                parse_mode="Markdown"
+            )
+            return
+        except ValueError:
+            bot.reply_to(message, "❌ অনুগ্রহ করে সঠিক সংখ্যায় (যেমন: 1, 2.5, 5) উইথড্র পরিমাণ লিখুন।")
+            return
+
+    # STEP 2: Withdraw Number Input & Confirmation
+    if user_id in user_withdraw_step and user_withdraw_step[user_id].get('step') == 'number':
+        method = user_withdraw_step[user_id]['method']
+        withdraw_amount = user_withdraw_step[user_id]['amount']
         del user_withdraw_step[user_id]
 
         if not is_valid_bd_number(text):
             bot.reply_to(message, "❌ ভুল ইনপুট! অনুগ্রহ করে সঠিক ১১ ডিজিটের মোবাইল নম্বর লিখুন।")
             return
 
-        if balance < MIN_WITHDRAW:
-            bot.send_message(message.chat.id, f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই। মিনিমাম উইথড্র ${MIN_WITHDRAW:.2f} USDT।")
-            return
-
-        withdraw_amount = balance
         bdt_amount = withdraw_amount * USDT_TO_BDT
 
-        # 🔍 ডুপ্লিকেট নম্বর ফিল্টার (পূর্বের রেকর্ড চেক করে অ্যাডমিনকে সতর্ক করার ব্যবস্থা)
+        # 🔍 ডুপ্লিকেট নম্বর ফিল্টার (অন্য ইউজারের ডুপ্লিকেট নম্বর চেক)
         check_duplicate_withdraw_number(user_id, first_name, text, method, withdraw_amount, bdt_amount)
 
-        # ইতিহাস আপডেট ও ব্যালেন্স শূন্যকরণ
+        # ইতিহাস আপডেট ও ব্যালেন্স মাইনাস
         add_payment_history(user_id, method, withdraw_amount, bdt_amount, text)
-        update_user_field(user_id, {"balance": 0.0})
+        add_balance(user_id, -withdraw_amount)
 
         masked_acc = text[:3] + "xxxxx" + text[-3:]
         proof_msg = (
@@ -473,7 +509,8 @@ def handle_all_messages(message):
         bot.send_message(
             message.chat.id, 
             f"✅ আপনার উইথড্র রিকোয়েস্ট সফলভাবে প্রসেস হয়েছে!\n\n💳 পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} টাকা)\n🔷 মেথড: {method}\n📱 নম্বর: `{text}`\n\nধন্যবাদ!", 
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(),
+            parse_mode="Markdown"
         )
 
         try:
@@ -593,8 +630,9 @@ def handle_all_messages(message):
             )
             bot.send_message(
                 message.chat.id,
-                f"💳 পেমেন্ট মেথড সিলেক্ট করুন:\n\nবর্তমান ব্যালেন্স: ${balance:.4f} USDT (={bdt_balance:.2f} টাকা)",
-                reply_markup=markup
+                f"💳 **পেমেন্ট মেথড সিলেক্ট করুন:**\n\n💰 বর্তমান ব্যালেন্স: ${balance:.4f} USDT (={bdt_balance:.2f} টাকা)",
+                reply_markup=markup,
+                parse_mode="Markdown"
             )
 
     elif text == "🛑 Rule's":
@@ -645,7 +683,7 @@ def callback_inline(call):
 
     balance, user = get_user(user_id, first_name)
 
-    # Admin Ban / Unban Handlers from Notification Message
+    # Admin Ban / Unban Handlers
     if call.data.startswith("adm_ban_"):
         if user_id in ADMIN_IDS:
             target = int(call.data.split("_")[2])
@@ -723,8 +761,21 @@ def callback_inline(call):
 
     elif call.data.startswith("with_"):
         method = call.data.split("_")[1]
-        user_withdraw_step[user_id] = {'method': method}
-        bot.send_message(call.message.chat.id, f"📝 আপনার {method} নম্বরটি লিখে মেসেজ পাঠান:")
+        user_withdraw_step[user_id] = {'step': 'amount', 'method': method}
+        
+        bdt_rate = USDT_TO_BDT
+        min_bdt = MIN_WITHDRAW * bdt_rate
+        
+        msg = (
+            f"💵 **উইথড্র অ্যামাউন্ট ইনপুট দিন ({method})**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 ১ USDT = {bdt_rate:.2f} BDT\n"
+            f"📌 মিনিমাম উইথড্র: ${MIN_WITHDRAW:.2f} USDT (={min_bdt:.2f} BDT)\n"
+            f"💳 আপনার মোট ব্যালেন্স: ${balance:.4f} USDT\n"
+            f"━━━━━━━━━━━━━━━━━━━\n\n"
+            f"👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে মেসেজ দিন (যেমন: 1, 1.5, 2):"
+        )
+        bot.send_message(call.message.chat.id, msg, parse_mode="Markdown")
 
 # --- FLASK WEB SERVER FOR KEEP ALIVE ---
 def keep_alive():
