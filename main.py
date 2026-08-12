@@ -13,8 +13,8 @@ from telebot.types import (
 )
 
 # --- CONFIGURATION ---
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-MONGO_URI = os.environ.get("MONGO_URI", "")
+BOT_TOKEN = "8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqnftct1C8"
+MONGO_URI = os.environ.get("MONGO_URI", "") # মঙ্গোডিবি থাকলে Render Environment-এ MONGO_URI দিতে পারেন অথবা এখানে সরাসরি ক্লাস্টার লিংক দিতে পারেন
 
 BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
@@ -197,7 +197,7 @@ def main_menu_keyboard():
 def auto_post_loop():
     while True:
         try:
-            time.sleep(120)  # স্ক্রিনশট অনুযায়ী ২ মিনিট (১২০ সেকেন্ড)
+            time.sleep(120)
             methods = ["bKash", "Nagad"]
             m = random.choice(methods)
             rand_usdt = round(random.uniform(1.0, 5.0), 3)
@@ -463,7 +463,6 @@ def handle_all_messages(message):
             last_reset = current_time
 
         if daily_count >= 30:
-            # 30 Ads Completed -> Math Captcha Trigger
             num1, num2 = random.randint(1, 10), random.randint(1, 10)
             user_captcha_step[user_id] = num1 + num2
             bot.send_message(
@@ -480,7 +479,6 @@ def handle_all_messages(message):
             selected_url = MONETAG_LINKS[(daily_count - 15) % len(MONETAG_LINKS)]
             provider = "Monetag"
 
-        # Log Device / IP Fingerprint
         add_ip_log(user_id, daily_count + 1)
 
         update_user_field(user_id, {
@@ -523,7 +521,7 @@ def handle_all_messages(message):
         else:
             total_paid = sum(item.get("amount_usdt", 0) for item in history)
             msg = f"📜 **আপনার পেমেন্ট হিস্ট্রি**\n💰 মোট সফল পেমেন্ট: ${total_paid:.3f} USDT\n━━━━━━━━━━━━━━━━━━━\n"
-            for idx, h in enumerate(history[-5:], 1):  # গত ৫টি পেমেন্ট
+            for idx, h in enumerate(history[-5:], 1):
                 msg += f"💳 **রেকর্ড {idx}:**\n• মেথড: {h.get('method')}\n• পরিমাণ: ${h.get('amount_usdt'):.3f} USDT ({h.get('amount_bdt'):.2f} BDT)\n• তারিখ: {h.get('date')}\n━━━━━━━━━━━━━━━━━━━\n"
             bot.send_message(message.chat.id, msg, reply_markup=main_menu_keyboard(), parse_mode="Markdown")
 
@@ -588,7 +586,7 @@ def handle_all_messages(message):
 
     elif text == "📊 Status":
         real_users = users_col.count_documents({}) if users_col is not None else 0
-        displayed_users = FAKE_USER_OFFSET + real_users  # ৫০৬ + রিয়েল ইউজার
+        displayed_users = FAKE_USER_OFFSET + real_users
         bot.send_message(
             message.chat.id,
             f"📊 **বট স্ট্যাটাস্টিকস**:\n\n👥 মোট সক্রিয় ইউজার: {displayed_users} জন",
@@ -609,7 +607,6 @@ def callback_inline(call):
 
     balance, user = get_user(user_id, first_name)
 
-    # Admin Ban/Unban Callbacks
     if call.data.startswith("adm_ban_"):
         if user_id in ADMIN_IDS:
             target = int(call.data.split("_")[2])
@@ -708,7 +705,6 @@ def keep_alive():
 if __name__ == "__main__":
     keep_alive()
 
-    # ২ মিনিট পর পর Auto Payment Proof Thread চালু
     t_auto = threading.Thread(target=auto_post_loop)
     t_auto.daemon = True
     t_auto.start()
