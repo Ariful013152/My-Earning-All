@@ -131,17 +131,39 @@ def add_payment_history(user_id, method, amount_usdt, amount_bdt, number):
         except Exception as e:
             print(f"DB History Error: {e}")
 
-def add_ip_log(user_id, task_index):
-    if users_col is not None:
-        try:
-            log_data = {
-                "task_index": task_index,
-                "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "device_fp": f"fp_{user_id}_{random.randint(1000, 9999)}"
-            }
-            users_col.update_one({"user_id": user_id}, {"$push": {"ip_logs": log_data}})
-        except Exception as e:
-            print(f"DB IP Log Error: {e}")
+# --- MULTI-ACCOUNT DETECTION ALERT ---
+def check_and_alert_multi_account(user_id, first_name, phone_num):
+    if users_col is None or not phone_num:
+        return
+    try:
+        # একই মোবাইল নম্বর ব্যবহার করে কোনো আইডি আছে কি না দেখা
+        same_phone_users = list(users_col.find({"verified_phone": phone_num}))
+        if len(same_phone_users) > 1:
+            other_ids = [str(u.get("user_id")) for u in same_phone_users if u.get("user_id") != user_id]
+            if other_ids:
+                other_ids_str = ", ".join(other_ids)
+                alert_msg = (
+                    "🚨 **সন্দেহভাজন মাল্টি-অ্যাকাউন্ট ব্যবহারকারী ধরা পড়েছে!**\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    f"👤 নাম: {first_name}\n"
+                    f"🆔 বর্তমান আইডি: `{user_id}`\n"
+                    f"📱 ফোন: `{phone_num}`\n"
+                    f"⚠️ একই ফোন দিয়ে অন্য আইডি: `{other_ids_str}`\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    "আপনি চাইলে নিচে ক্লিক করে অ্যাকশন নিতে পারেন:"
+                )
+                markup = InlineKeyboardMarkup()
+                markup.row(
+                    InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{user_id}"),
+                    InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{user_id}")
+                )
+                for admin_id in ADMIN_IDS:
+                    try:
+                        bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
+                    except Exception:
+                        pass
+    except Exception as e:
+        print(f"Multi-account alert error: {e}")
 
 def check_user_channels(user_id):
     for channel in REQUIRED_CHANNELS:
@@ -295,7 +317,7 @@ def add_balance_cmd(message):
                 f"নিয়মিত কাজ করে আরও ইনকাম করুন।"
             )
             bot.send_message(target_id, user_msg, parse_mode="Markdown")
-        except Exception as e:
+        except Exception:
             bot.send_message(message.chat.id, f"⚠️ ব্যালেন্স যোগ হয়েছে কিন্তু ইউজারকে মেসেজ পাঠানো যায়নি (হয়তো বট ব্লক করা)।")
 
     except Exception as e:
@@ -336,7 +358,7 @@ def start_cmd(message):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    # Share Contact Verification Check (আপডেট করা টেক্সট)
+    # Share Contact Verification Check
     if not user.get("verified_phone"):
         bot.send_message(
             message.chat.id,
@@ -368,6 +390,10 @@ def handle_contact(message):
             "✅ আপনার ফোন নম্বর সফলভাবে ভেরিফাই হয়েছে!",
             reply_markup=main_menu_keyboard()
         )
+
+        # চেক করা হবে একই নম্বর একাধিক অ্যাকাউন্টে ব্যবহার হচ্ছে কি না
+        check_and_alert_multi_account(user_id, message.from_user.first_name, phone_number)
+
         if not check_user_channels(user_id):
             send_force_join_msg(message.chat.id)
 
@@ -471,6 +497,10 @@ def handle_all_messages(message):
 
     # Menu Options
     if text == "📺 Watch Ad":
+        # এড দেখার সময় একই ডিভাইসে অন্য কোনো আইডি খোলা রয়েছে কি না চেক
+        phone = user.get("verified_phone")
+        check_and_alert_multi_account(user_id, first_name, phone)
+
         current_time = time.time()
         last_reset = user.get("last_reset", current_time)
         daily_count = user.get("daily_count", 0)
@@ -495,8 +525,6 @@ def handle_all_messages(message):
         else:
             selected_url = MONETAG_LINKS[(daily_count - 15) % len(MONETAG_LINKS)]
             provider = "Monetag"
-
-        add_ip_log(user_id, daily_count + 1)
 
         update_user_field(user_id, {
             "last_task_time": current_time, 
@@ -624,17 +652,18 @@ def callback_inline(call):
 
     balance, user = get_user(user_id, first_name)
 
+    # Admin Ban / Unban Handlers from Notification Message
     if call.data.startswith("adm_ban_"):
         if user_id in ADMIN_IDS:
             target = int(call.data.split("_")[2])
             update_user_field(target, {"is_banned": True})
-            bot.send_message(call.message.chat.id, f"🚫 ইউজার {target} কে ব্যান করা হয়েছে।")
+            bot.send_message(call.message.chat.id, f"🚫 ইউজার `{target}` কে সফলভাবে ব্যান করা হয়েছে।", parse_mode="Markdown")
         return
     elif call.data.startswith("adm_unban_"):
         if user_id in ADMIN_IDS:
             target = int(call.data.split("_")[2])
             update_user_field(target, {"is_banned": False})
-            bot.send_message(call.message.chat.id, f"✅ ইউজার {target} কে আনব্যান করা হয়েছে।")
+            bot.send_message(call.message.chat.id, f"✅ ইউজার `{target}` কে সফলভাবে আনব্যান করা হয়েছে।", parse_mode="Markdown")
         return
 
     if call.data == "check_join":
