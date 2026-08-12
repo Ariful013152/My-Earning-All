@@ -1,5 +1,5 @@
 pyTelegramBotAPI
 Flask
-pymongo
+pymongo[srv]
 dnspython
 gunicorn
