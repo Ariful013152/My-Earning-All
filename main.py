@@ -123,33 +123,35 @@ def add_payment_history(user_id, method, amount_usdt, amount_bdt, number):
                 "method": method,
                 "amount_usdt": amount_usdt,
                 "amount_bdt": amount_bdt,
-                "number": number,
+                "number": str(number).strip(),
                 "date": time.strftime("%Y-%m-%d %H:%M:%S")
             }
             users_col.update_one({"user_id": user_id}, {"$push": {"history": record}})
         except Exception as e:
             print(f"DB History Error: {e}")
 
-# --- DUPLICATE WITHDRAW NUMBER CHECK ---
-def check_duplicate_withdraw_number(current_user_id, current_name, number, method):
+# --- DUPLICATE WITHDRAW NUMBER CHECK & ALERT ---
+def check_duplicate_withdraw_number(current_user_id, current_name, number, method, withdraw_amount, bdt_amount):
     if users_col is None:
         return
     try:
-        # ডাটাবেজে সার্চ করা অন্য কোনো আইডি এই নম্বরে উইথড্র করেছে কি না
-        previous_users = list(users_col.find({"history.number": number, "user_id": {"$ne": current_user_id}}))
+        clean_num = str(number).strip()
+        previous_users = list(users_col.find({"history.number": clean_num, "user_id": {"$ne": current_user_id}}))
+        
         if previous_users:
             other_user_ids = [str(u.get("user_id")) for u in previous_users]
             other_ids_str = ", ".join(other_user_ids)
             
             alert_msg = (
-                "🚨 **সন্দেহভাজন মাল্টি-অ্যাকাউন্ট উইথড্র সতর্কবার্তা!**\n"
+                "🚨 **সন্দেহভাজন মাল্টি-অ্যাকাউন্ট উইথড্র অ্যালার্ট!**\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
-                f"👤 বর্তমান নাম: {current_name}\n"
-                f"🆔 বর্তমান আইডি: `{current_user_id}`\n"
-                f"📱 ব্যবহার করা নম্বর: `{number}` ({method})\n"
-                f"⚠️ এই একই নম্বর পূর্বে ব্যবহৃত আইডি: `{other_ids_str}`\n"
+                f"👤 ইউজারের নাম: {current_name}\n"
+                f"🆔 বর্তমান ইউজার আইডি: `{current_user_id}`\n"
+                f"📱 দেওয়া নম্বর: `{clean_num}` ({method})\n"
+                f"💵 উইথড্র পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} BDT)\n"
+                f"⚠️ পূর্বে একই নম্বর ব্যবহারকারী আইডি: `{other_ids_str}`\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
-                "আপনি চাইলে নিচে ক্লিক করে প্রয়োজনীয় ব্যবস্থা নিতে পারেন:"
+                "আপনি চাইলে নিচের বাটনে ক্লিক করে একশনে নিতে পারেন:"
             )
             
             markup = InlineKeyboardMarkup()
@@ -161,8 +163,8 @@ def check_duplicate_withdraw_number(current_user_id, current_name, number, metho
             for admin_id in ADMIN_IDS:
                 try:
                     bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Failed to send alert to admin {admin_id}: {e}")
     except Exception as e:
         print(f"Duplicate withdraw check error: {e}")
 
@@ -440,13 +442,13 @@ def handle_all_messages(message):
 
         withdraw_amount = balance
         bdt_amount = withdraw_amount * USDT_TO_BDT
-        update_user_field(user_id, {"balance": 0.0})
 
-        # Save to history
+        # 🔍 ডুপ্লিকেট নম্বর ফিল্টার (পূর্বের রেকর্ড চেক করে অ্যাডমিনকে সতর্ক করার ব্যবস্থা)
+        check_duplicate_withdraw_number(user_id, first_name, text, method, withdraw_amount, bdt_amount)
+
+        # ইতিহাস আপডেট ও ব্যালেন্স শূন্যকরণ
         add_payment_history(user_id, method, withdraw_amount, bdt_amount, text)
-
-        # 🔍 একই নম্বর অন্য আইডি থেকে উইথড্র দেওয়া হয়েছে কি না চেক করা
-        check_duplicate_withdraw_number(user_id, first_name, text, method)
+        update_user_field(user_id, {"balance": 0.0})
 
         masked_acc = text[:3] + "xxxxx" + text[-3:]
         proof_msg = (
