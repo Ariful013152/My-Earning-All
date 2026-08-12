@@ -2,8 +2,7 @@ import os
 import random
 import threading
 import time
-from datetime import datetime
-import pytz
+from datetime import datetime, timezone, timedelta
 import pymongo
 import telebot
 from flask import Flask
@@ -27,9 +26,9 @@ USDT_TO_BDT = 110.0   # ১ ডলার = ১১০ টাকা
 REFERRAL_BONUS = 0.005
 FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট
 
-# --- TIMEZONE FUNCTION (Bangladesh Time GMT+6) ---
+# --- TIMEZONE FUNCTION (Bangladesh Time GMT+6 without pytz) ---
 def get_bd_time_str():
-    bd_tz = pytz.timezone('Asia/Dhaka')
+    bd_tz = timezone(timedelta(hours=6))
     bd_now = datetime.now(bd_tz)
     return bd_now.strftime("%Y-%m-%d %I:%M:%S %p")
 
