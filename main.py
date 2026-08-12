@@ -66,7 +66,6 @@ if MONGO_URI:
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
 
-# High performance multi-threading
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=20)
 app = Flask(__name__)
 
@@ -131,39 +130,41 @@ def add_payment_history(user_id, method, amount_usdt, amount_bdt, number):
         except Exception as e:
             print(f"DB History Error: {e}")
 
-# --- MULTI-ACCOUNT DETECTION ALERT ---
-def check_and_alert_multi_account(user_id, first_name, phone_num):
-    if users_col is None or not phone_num:
+# --- DUPLICATE WITHDRAW NUMBER CHECK ---
+def check_duplicate_withdraw_number(current_user_id, current_name, number, method):
+    if users_col is None:
         return
     try:
-        # একই মোবাইল নম্বর ব্যবহার করে কোনো আইডি আছে কি না দেখা
-        same_phone_users = list(users_col.find({"verified_phone": phone_num}))
-        if len(same_phone_users) > 1:
-            other_ids = [str(u.get("user_id")) for u in same_phone_users if u.get("user_id") != user_id]
-            if other_ids:
-                other_ids_str = ", ".join(other_ids)
-                alert_msg = (
-                    "🚨 **সন্দেহভাজন মাল্টি-অ্যাকাউন্ট ব্যবহারকারী ধরা পড়েছে!**\n"
-                    "━━━━━━━━━━━━━━━━━━━\n"
-                    f"👤 নাম: {first_name}\n"
-                    f"🆔 বর্তমান আইডি: `{user_id}`\n"
-                    f"📱 ফোন: `{phone_num}`\n"
-                    f"⚠️ একই ফোন দিয়ে অন্য আইডি: `{other_ids_str}`\n"
-                    "━━━━━━━━━━━━━━━━━━━\n"
-                    "আপনি চাইলে নিচে ক্লিক করে অ্যাকশন নিতে পারেন:"
-                )
-                markup = InlineKeyboardMarkup()
-                markup.row(
-                    InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{user_id}"),
-                    InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{user_id}")
-                )
-                for admin_id in ADMIN_IDS:
-                    try:
-                        bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
-                    except Exception:
-                        pass
+        # ডাটাবেজে সার্চ করা অন্য কোনো আইডি এই নম্বরে উইথড্র করেছে কি না
+        previous_users = list(users_col.find({"history.number": number, "user_id": {"$ne": current_user_id}}))
+        if previous_users:
+            other_user_ids = [str(u.get("user_id")) for u in previous_users]
+            other_ids_str = ", ".join(other_user_ids)
+            
+            alert_msg = (
+                "🚨 **সন্দেহভাজন মাল্টি-অ্যাকাউন্ট উইথড্র সতর্কবার্তা!**\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 বর্তমান নাম: {current_name}\n"
+                f"🆔 বর্তমান আইডি: `{current_user_id}`\n"
+                f"📱 ব্যবহার করা নম্বর: `{number}` ({method})\n"
+                f"⚠️ এই একই নম্বর পূর্বে ব্যবহৃত আইডি: `{other_ids_str}`\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "আপনি চাইলে নিচে ক্লিক করে প্রয়োজনীয় ব্যবস্থা নিতে পারেন:"
+            )
+            
+            markup = InlineKeyboardMarkup()
+            markup.row(
+                InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{current_user_id}"),
+                InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{current_user_id}")
+            )
+            
+            for admin_id in ADMIN_IDS:
+                try:
+                    bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
+                except Exception:
+                    pass
     except Exception as e:
-        print(f"Multi-account alert error: {e}")
+        print(f"Duplicate withdraw check error: {e}")
 
 def check_user_channels(user_id):
     for channel in REQUIRED_CHANNELS:
@@ -303,13 +304,9 @@ def add_balance_cmd(message):
         target_id = int(args[1])
         amount = float(args[2])
         
-        # ব্যালেন্স অ্যাড করা
         add_balance(target_id, amount)
-        
-        # ১. অ্যাডমিনকে নিশ্চিতকরণ বার্তা
         bot.reply_to(message, f"✅ সফলভাবে ${amount:.4f} USDT যোগ করা হয়েছে।")
 
-        # ২. ইউজারকে নোটিফিকেশন বার্তা পাঠানো
         try:
             user_msg = (
                 f"🎉 **আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করা হয়েছে!**\n\n"
@@ -318,7 +315,7 @@ def add_balance_cmd(message):
             )
             bot.send_message(target_id, user_msg, parse_mode="Markdown")
         except Exception:
-            bot.send_message(message.chat.id, f"⚠️ ব্যালেন্স যোগ হয়েছে কিন্তু ইউজারকে মেসেজ পাঠানো যায়নি (হয়তো বট ব্লক করা)।")
+            pass
 
     except Exception as e:
         bot.reply_to(message, f"❌ এরর: {e}")
@@ -358,7 +355,6 @@ def start_cmd(message):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    # Share Contact Verification Check
     if not user.get("verified_phone"):
         bot.send_message(
             message.chat.id,
@@ -391,9 +387,6 @@ def handle_contact(message):
             reply_markup=main_menu_keyboard()
         )
 
-        # চেক করা হবে একই নম্বর একাধিক অ্যাকাউন্টে ব্যবহার হচ্ছে কি না
-        check_and_alert_multi_account(user_id, message.from_user.first_name, phone_number)
-
         if not check_user_channels(user_id):
             send_force_join_msg(message.chat.id)
 
@@ -409,7 +402,6 @@ def handle_all_messages(message):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    # Check Contact Verification
     if not user.get("verified_phone"):
         bot.send_message(
             message.chat.id,
@@ -452,6 +444,9 @@ def handle_all_messages(message):
 
         # Save to history
         add_payment_history(user_id, method, withdraw_amount, bdt_amount, text)
+
+        # 🔍 একই নম্বর অন্য আইডি থেকে উইথড্র দেওয়া হয়েছে কি না চেক করা
+        check_duplicate_withdraw_number(user_id, first_name, text, method)
 
         masked_acc = text[:3] + "xxxxx" + text[-3:]
         proof_msg = (
@@ -497,10 +492,6 @@ def handle_all_messages(message):
 
     # Menu Options
     if text == "📺 Watch Ad":
-        # এড দেখার সময় একই ডিভাইসে অন্য কোনো আইডি খোলা রয়েছে কি না চেক
-        phone = user.get("verified_phone")
-        check_and_alert_multi_account(user_id, first_name, phone)
-
         current_time = time.time()
         last_reset = user.get("last_reset", current_time)
         daily_count = user.get("daily_count", 0)
@@ -611,7 +602,7 @@ def handle_all_messages(message):
             "১. প্রতিদিন সর্বোচ্চ ৩০টি এড দেখতে পারবেন।\n"
             "২. এড লিংকে অন্তত ১৫ সেকেন্ড অপেক্ষা করতে হবে।\n"
             "৩. ৩০টি এড দেখা শেষে ম্যাথ ক্যাপচা পূরণ করে অ্যাকাউন্ট আনলক করতে হবে।\n"
-            "৪. একটি ফোনে একটির বেশি একাউন্ট খুললে অটো ব্যান হবে।\n"
+            "৪. একাধিক একাউন্টে একই পেমেন্ট নাম্বার দিলে আপনার অ্যাকাউন্টে সমস্যা হতে পারে।\n"
             f"৫. সর্বনিম্ন উইথড্র ${MIN_WITHDRAW:.2f} USDT (={min_bdt:.2f} টাকা)।"
         )
         bot.send_message(message.chat.id, rules, reply_markup=main_menu_keyboard(), parse_mode="Markdown")
