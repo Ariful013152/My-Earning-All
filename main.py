@@ -80,6 +80,14 @@ if MONGO_URI:
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=20)
 app = Flask(__name__)
 
+# --- WEB SERVER FOR RENDER ---
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
 # --- MEMORY TRACKING ---
 user_withdraw_step = {}
 user_captcha_step = {}
@@ -134,7 +142,6 @@ def get_user(user_id, first_name="User", referred_by=None):
             }
             users_col.insert_one(user)
             
-            # Referral logic
             if referred_by:
                 ref_user = users_col.find_one({"user_id": referred_by})
                 if ref_user and not ref_user.get("is_banned", False):
@@ -408,7 +415,7 @@ def admin_ban_unban_callback(call):
         return
     
     parts = call.data.split("_")
-    action = parts[0] + "_" + parts[1] # adm_ban or adm_unban
+    action = parts[0] + "_" + parts[1]
     target_id = int(parts[2])
     
     if action == "adm_ban":
@@ -451,7 +458,7 @@ def claim_reward_callback(call):
         bot.answer_callback_query(call.id, f"⏳ আরও {remaining} সেকেন্ড অপেক্ষা করুন!", show_alert=True)
         return
 
-    reward = 0.01  # প্রতি এড দেখার রিওয়ার্ড
+    reward = 0.01
     add_balance(user_id, reward)
     
     current_count = user.get("daily_count", 0) + 1
@@ -485,7 +492,7 @@ def withdraw_method_callback(call):
         
     bot.send_message(
         call.message.chat.id,
-        f"💵 আপনি **{method}** এর মাধ্যমে উইথড্র করতে চান।\n\nবর্তমান ব্যালেন্স: **${balance:.4f} USDT**\n👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে পাঠান (যেমন: 1.0):",
+        f"💵 আপনি **{method}** এর মাধ্যমে উইথড্র করতে চান।\n\nবর্তমান ব্যালেন্স: **${balance:.4f} USDT**\n👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে পাঠান (যেমন: 1.0):",
         parse_mode="Markdown"
     )
 
@@ -795,7 +802,7 @@ def handle_all_messages(message):
         send_force_join_msg(message.chat.id)
         return
 
-    # Menu Options
+    # Menu Options Handling
     if text == "📺 Watch Ad":
         current_time = time.time()
         last_reset = user.get("last_reset", current_time)
@@ -804,122 +811,126 @@ def handle_all_messages(message):
         if current_time - last_reset >= 86400:
             daily_count = 0
             last_reset = current_time
+            update_user_field(user_id, {"daily_count": 0, "last_reset": last_reset})
 
         if daily_count >= 30:
-            num1, num2 = random.randint(1, 10), random.randint(1, 10)
-            user_captcha_step[user_id] = num1 + num2
-            bot.send_message(
-                message.chat.id,
-                f"❌ আজকের কাজের সীমা (৩০/৩০) পূর্ণ হয়েছে!\n\n🧩 **Anti-Bot Math Captcha:**\nঅ্যাকাউন্ট রিকভার/আনলক করতে নিচের প্রশ্নের উত্তর দিন:\n\n👉 **{num1} + {num2} = ?**",
-                parse_mode="Markdown"
-            )
+            bot.send_message(message.chat.id, "❌ আজ আপনার ৩০টি এড দেখার লিমিট শেষ হয়েছে আগামকালের জন্য অপেক্ষা করুন!")
             return
 
-        if daily_count < 15:
-            selected_url = ADSTERRA_LINKS[daily_count % len(ADSTERRA_LINKS)]
-            provider = "Adsterra"
-        else:
-            selected_url = MONETAG_LINKS[(daily_count - 15) % len(MONETAG_LINKS)]
-            provider = "Monetag"
-
-        update_user_field(user_id, {
-            "last_task_time": current_time, 
-            "can_claim": True,
-            "daily_count": daily_count,
-            "last_reset": last_reset
-        })
+        ad_link = random.choice(MONETAG_LINKS + ADSTERRA_LINKS)
+        update_user_field(user_id, {"last_task_time": time.time(), "can_claim": True})
 
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton(f"🌐 Visit {provider} Ad", url=selected_url))
-        markup.add(InlineKeyboardButton("✅ Claim Reward", callback_data="claim_reward"))
+        markup.add(InlineKeyboardButton("🌐 Visit Advertisement", url=ad_link))
+        markup.add(InlineKeyboardButton("✅ Claim Reward ($0.01)", callback_data="claim_reward"))
 
         bot.send_message(
             message.chat.id,
-            f"📢 **বিজ্ঞাপন টাস্ক ({daily_count + 1}/30)**\n\nনিচের লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং ১৫ সেকেন্ড পর ফিরে এসে '✅ Claim Reward' বাটনে ক্লিক করে রিওয়ার্ড নিন!",
+            f"📺 **টাস্ক এড ভিজিট করুন**\n━━━━━━━━━━━━━━━━━━━\n"
+            f"👉 নিচের ভিজিট লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং ১৫ সেকেন্ড পর এসে নিচের 'Claim Reward' বাটনে ক্লিক করুন:\n\n"
+            f"📈 আজকের দেখা এড: {daily_count}/30",
             reply_markup=markup,
             parse_mode="Markdown"
         )
 
     elif text == "🖥 Account":
-        bdt_val = balance * USDT_TO_BDT
-        phone = user.get("verified_phone", "ভেরিফাই করা হয়নি")
-        msg = (
-            f"👤 **ইউজার প্রোফাইল**\n\n"
-            f"📛 নাম: {first_name}\n"
+        user_bal = user.get("balance", 0.0)
+        bdt_val = user_bal * USDT_TO_BDT
+        ref_count = user.get("referrals_count", 0)
+        phone = user.get("verified_phone", "ভেরিফাই করা হয়নি")
+
+        acc_msg = (
+            f"🖥 **আপনার অ্যাকাউন্ট ইনফো**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 নাম: {first_name}\n"
             f"🆔 আইডি: `{user_id}`\n"
-            f"📱 ফোন: `{phone}`\n"
-            f"💰 ব্যালেন্স: ${balance:.4f} USDT\n"
-            f" = {bdt_val:.2f} টাকা"
+            f"📱 ফোন নম্বর: `{phone}`\n"
+            f"💰 মূল ব্যালেন্স: ${user_bal:.4f} USDT (={bdt_val:.2f} BDT)\n"
+            f"👥 মোট রেফারেল: {ref_count} জন\n"
+            f"━━━━━━━━━━━━━━━━━━━"
         )
-        bot.send_message(message.chat.id, msg, parse_mode="Markdown")
+        bot.send_message(message.chat.id, acc_msg, parse_mode="Markdown")
 
     elif text == "📜 Payment History":
         history = user.get("history", [])
         if not history:
-            bot.send_message(message.chat.id, "📜 আপনার কোনো পেমেন্ট হিস্ট্রি নেই!")
-        else:
-            hist_text = "📜 **আপনার পেমেন্ট হিস্ট্রি (শেষ ৫টি):**\n━━━━━━━━━━━━━━━━━━━\n"
-            for h in history[-5:]:
-                hist_text += f"💳 {h['method']} | ${h['amount_usdt']:.3f} ({h['amount_bdt']:.2f} BDT)\n📱 `{h['number']}`\n🕒 {h['date']}\n\n"
-            bot.send_message(message.chat.id, hist_text, parse_mode="Markdown")
+            bot.send_message(message.chat.id, "📜 আপনার কোনো পেমেন্ট হিস্ট্রি নেই।")
+            return
+
+        hist_msg = "📜 **আপনার সাম্প্রতিক পেমেন্ট হিস্ট্রি:**\n━━━━━━━━━━━━━━━━━━━\n"
+        for h in history[-5:]:  # শেষ ৫টি লেনদেন দেখাবে
+            hist_msg += f"✅ {h.get('method')} - ${h.get('amount_usdt'):.3f} USDT ({h.get('amount_bdt'):.2f} BDT)\n📱 {h.get('number')}\n📅 {h.get('date')}\n\n"
+        bot.send_message(message.chat.id, hist_msg, parse_mode="Markdown")
 
     elif text == "✨ Referral":
         ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-        ref_count = user.get("referrals_count", 0)
         ref_msg = (
-            f"✨ **রেফারেল প্রোগ্রাম**\n━━━━━━━━━━━━━━━━━━━\n"
-            f"প্রতিটি সফল রেফারে আপনি পাবেন **${REFERRAL_BONUS:.3f} USDT** বোনাস!\n\n"
-            f"👥 আপনার মোট রেফার: **{ref_count} জন**\n\n"
-            f"🔗 আপনার রেফারেল লিংক:\n`{ref_link}`"
+            f"✨ **রেফারেল প্রোগ্রাম**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 আপনার রেফারেল লিংক:\n`{ref_link}`\n\n"
+            f"💡 প্রতি রেফারে আপনি পাবেন **${REFERRAL_BONUS:.3f} USDT** বোনাস!\n"
+            f"👥 আপনার মোট রেফারেল: **{user.get('referrals_count', 0)}** জন"
         )
         bot.send_message(message.chat.id, ref_msg, parse_mode="Markdown")
 
     elif text == "💸 Withdraw":
-        if balance < MIN_WITHDRAW:
-            bot.send_message(message.chat.id, f"❌ পর্যাপ্ত ব্যালেন্স নেই! সর্বনিম্ন উইথড্র ${MIN_WITHDRAW:.2f} USDT। বর্তমান ব্যালেন্স: ${balance:.4f} USDT।")
+        user_bal = user.get("balance", 0.0)
+        if user_bal < MIN_WITHDRAW:
+            bot.send_message(message.chat.id, f"❌ পর্যাপ্ত ব্যালেন্স নেই! সর্বনিম্ন উইথড্র ${MIN_WITHDRAW:.2f} USDT। আপনার বর্তমান ব্যালেন্স: ${user_bal:.4f} USDT।")
             return
-        
-        user_withdraw_step[user_id] = {'step': 'method'}
+
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
             InlineKeyboardButton("bKash", callback_data="w_method_bKash"),
             InlineKeyboardButton("Nagad", callback_data="w_method_Nagad")
         )
-        bot.send_message(message.chat.id, "💳 পেমেন্ট গ্রহণের জন্য আপনার মাধ্যম নির্বাচন করুন:", reply_markup=markup)
+        bot.send_message(
+            message.chat.id,
+            f"💸 **উইথড্র মেথড সিলেক্ট করুন**\n━━━━━━━━━━━━━━━━━━━\nবর্তমান ব্যালেন্স: **${user_bal:.4f} USDT**\nনিচের যেকোনো একটি মাধ্যম বেছে নিন:",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
 
     elif text == "🛑 Rule's":
-        bot.send_message(message.chat.id, "🛑 **বটের নিয়মাবলী:**\n\n১. কোনো প্রকার ফেক বা মাল্টি-অ্যাকাউন্ট ব্যবহার করা যাবে না।\n২. প্রতিদিনের টাস্ক নিয়মিত সম্পন্ন করতে হবে।\n৩. ভুয়া তথ্য দিলে পেমেন্ট বাতিল হবে।")
+        rules_text = (
+            f"🛑 **বটের নিয়মাবলী ও শর্তসমূহ:**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"১. প্রতিদিন নির্ধারিত নিয়ম অনুযায়ী এড দেখতে হবে।\n"
+            f"২. কোনো ধরনের ভুয়া বা মাল্টি-অ্যাকাউন্ট ব্যবহার করলে একাউন্ট চিরতরে ব্যান করা হবে।\n"
+            f"৩. সর্বনিম্ন উইথড্র ${MIN_WITHDRAW} ডলার।\n"
+            f"৪. সঠিক তথ্য দিয়ে উইথড্র রিকোয়েস্ট করতে হবে।"
+        )
+        bot.send_message(message.chat.id, rules_text, parse_mode="Markdown")
 
     elif text == "🔰 Whatsapp":
-        bot.send_message(message.chat.id, "🔰 আমাদের অফিশিয়াল হোয়াটসঅ্যাপ গ্রুপে যুক্ত হতে নিচের চ্যানেলে নজর রাখুন।")
+        bot.send_message(message.chat.id, "🔰 আমাদের অফিশিয়াল হোয়াটসঅ্যাপ গ্রুপে যুক্ত হতে নিচের লিংকে ক্লিক করুন:\nhttps://whatsapp.com")
 
     elif text == "📩 Support":
-        bot.send_message(message.chat.id, "📩 কোনো সমস্যা হলে অ্যাডমিনের সাথে যোগাযোগ করুন: @AdminSupport")
+        bot.send_message(message.chat.id, "📩 কোনো সমস্যায় পড়লে আমাদের সাপোর্ট টিমের সাথে যোগাযোগ করুন:\n@AdminSupport")
 
     elif text == "📊 Status":
         all_u = get_all_active_users()
-        real_u = len(all_u)
-        disp_u = FAKE_USER_OFFSET + real_u
-        bot.send_message(message.chat.id, f"📊 **বট স্ট্যাটাস:**\n\n👥 মোট ইউজার: {disp_u} জন\n🟢 বট একদম সক্রিয় রয়েছে!")
-
-# --- FLASK WEBHOOK ROUTE ---
-@app.route(f"/{BOT_TOKEN}", methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return '', 200
+        real_users = len(all_u)
+        total_display_users = FAKE_USER_OFFSET + real_users
+        status_text = (
+            f"📊 **বটের রিয়েল-টাইম স্ট্যাটাস**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"👥 মোট ব্যবহারকারী: {total_display_users} জন\n"
+            f"🟢 সার্ভার স্ট্যাটাস: Online (Active)\n"
+            f"⚡ পেমেন্ট গেটওয়ে: সচল আছে"
+        )
+        bot.send_message(message.chat.id, status_text, parse_mode="Markdown")
     else:
-        return '', 403
+        bot.send_message(message.chat.id, "❌ সঠিক অপশনটি বেছে নিতে নিচের মেনু ব্যবহার করুন।", reply_markup=main_menu_keyboard())
 
-@app.route('/')
-def index():
-    return "Bot is running successfully!", 200
-
-# --- BACKGROUND THREADS START ---
-threading.Thread(target=auto_post_loop, daemon=True).start()
-threading.Thread(target=inactivity_push_loop, daemon=True).start()
-
+# --- MAIN RUNNER ---
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # Flask ওয়েব সার্ভার থ্রেড চালু (Render এর জন্য আবশ্যক)
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    # ব্যাকগ্রাউন্ড লুপগুলো থ্রেডে চালু
+    threading.Thread(target=auto_post_loop, daemon=True).start()
+    threading.Thread(target=inactivity_push_loop, daemon=True).start()
+    
+    print("Bot is starting and polling...")
+    bot.infinity_polling(none_stop=True, interval=0, timeout=20)
