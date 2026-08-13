@@ -518,7 +518,6 @@ def handle_contact(message):
             })
             
             if existing_user:
-                other_id = existing_user.get("user_id")
                 bot.send_message(
                     message.chat.id, 
                     "❌ **এই ফোন নম্বরটি দিয়ে ইতোমধ্যে একটি অ্যাকাউন্ট ভেরিফাই করা রয়েছে!**"
@@ -641,7 +640,7 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, "❌ সঠিক ইউজার আইডি দিন!")
                 return
             admin_step[user_id] = {"action": "cutbal_step2", "target_id": int(text)}
-            bot.send_message(message.chat.id, f"✂️ আইডি `{text}`-এর থেকে কত USDT কাটতে চান লিখুন (যেমন: 0.50):")
+            bot.send_message(message.chat.id, f"✂️ যে ইউজারের অ্যাকাউন্ট থেকে ব্যালেন্স কাটবেন তার **User ID** দিন:")
             return
 
         elif state == "cutbal_step2":
@@ -931,7 +930,12 @@ if __name__ == "__main__":
     threading.Thread(target=inactivity_push_loop, daemon=True).start()
     threading.Thread(target=run_flask, daemon=True).start()
 
-    # Conflict 409 এড়াতে ওয়েব হুক রিমুভ করা
-    bot.remove_webhook()
-    print("Bot is polling and ready...")
-    bot.infinity_polling(skip_pending=True)
+    # 409 Conflict এড়াতে ওয়েবহুক রিসেট ও সেফ পোলিং লুপ
+    while True:
+        try:
+            bot.remove_webhook()
+            print("Bot is polling and ready...")
+            bot.infinity_polling(skip_pending=True, interval=1, timeout=20)
+        except Exception as e:
+            print(f"Polling error encountered: {e}. Retrying in 5 seconds...")
+            time.sleep(5)
