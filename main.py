@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone, timedelta
 import pymongo
 import telebot
-from flask import Flask
+from flask import Flask, request
 from telebot.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -21,7 +21,7 @@ BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
 
-# 🖼️ পেমেন্ট প্রুফ চ্যানেলের ব্যানার ইমেজ লিংক (100% কাজ করবে এমন সরাসরি Unsplash লিংক)
+# 🖼️ পেমেন্ট প্রুফ চ্যানেলের ব্যানার ইমেজ লিংক
 PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
 
 MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার
@@ -82,12 +82,14 @@ app = Flask(__name__)
 # --- MEMORY TRACKING ---
 user_withdraw_step = {}
 user_captcha_step = {}
+admin_step = {}
 
 # --- DATABASE HELPERS ---
 def get_user(user_id, first_name="User", referred_by=None):
     if users_col is None:
         return 0.0, {"user_id": user_id, "first_name": first_name, "balance": 0.0, "is_banned": False, "verified_phone": None}
     try:
+        current_now = time.time()
         user = users_col.find_one({"user_id": user_id})
         if not user:
             user = {
@@ -95,7 +97,7 @@ def get_user(user_id, first_name="User", referred_by=None):
                 "first_name": str(first_name)[:30],
                 "balance": 0.0, 
                 "daily_count": 0,
-                "last_reset": time.time(),
+                "last_reset": current_now,
                 "last_task_time": 0,
                 "can_claim": False,
                 "referred_by": referred_by,
@@ -104,9 +106,14 @@ def get_user(user_id, first_name="User", referred_by=None):
                 "is_banned": False,
                 "verified_phone": None,
                 "history": [],
-                "ip_logs": []
+                "last_active": current_now,
+                "last_inactivity_push": 0
             }
             users_col.insert_one(user)
+        else:
+            users_col.update_one({"user_id": user_id}, {"$set": {"last_active": current_now}})
+            user["last_active"] = current_now
+
         return user.get("balance", 0.0), user
     except Exception as e:
         print(f"DB Error: {e}")
@@ -161,7 +168,7 @@ def check_duplicate_withdraw_number(current_user_id, current_name, number, metho
                 f"💵 উইথড্র পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} BDT)\n"
                 f"⚠️ পূর্বে একই নম্বর ব্যবহারকারী আইডি: `{other_ids_str}`\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
-                "আপনি চাইলে নিচের বাটনে ক্লিক করে একশনে নিতে পারেন:"
+                "আপনি চাইলে নিচের বাটনে ক্লিক করে সিদ্ধান্ত নিতে পারেন:"
             )
             
             markup = InlineKeyboardMarkup()
@@ -196,7 +203,7 @@ def send_force_join_msg(chat_id):
     
     bot.send_message(
         chat_id,
-        "⚠️ বটটি ব্যবহার করতে আপনাকে নিচের সকল চ্যানেলগুলোতে জয়েন করতে হবে:",
+        "⚠️ বটটি ব্যবহার করতে আপনাকে নিচের সকল চ্যানেলগুলোতে জয়েন করতে হবে:",
         reply_markup=markup
     )
 
@@ -228,7 +235,19 @@ def main_menu_keyboard():
     )
     return markup
 
-# --- AUTO PAYMENT PROOF LOOP (EVERY 2 MINUTES WITH IMAGE BANNER) ---
+def admin_dashboard_keyboard():
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        InlineKeyboardButton("📢 Broadcast Message", callback_data="adm_panel_broadcast"),
+        InlineKeyboardButton("📊 Bot Statistics", callback_data="adm_panel_stats"),
+        InlineKeyboardButton("👤 Manage User", callback_data="adm_panel_manage"),
+        InlineKeyboardButton("➕ Add Balance", callback_data="adm_panel_addbal"),
+        InlineKeyboardButton("✂️ Cut Balance", callback_data="adm_panel_cutbal"),
+        InlineKeyboardButton("❌ Close Panel", callback_data="adm_panel_close")
+    )
+    return markup
+
+# --- AUTO PAYMENT PROOF LOOP ---
 def auto_post_loop():
     while True:
         try:
@@ -246,109 +265,106 @@ def auto_post_loop():
                 f"🌐 {m}\n"
                 f"👛 {rand_num}"
             )
-            # ছবিসহ ক্যাপশনে অটো পোস্ট
             bot.send_photo(PROOF_CHANNEL, photo=PAYMENT_BANNER_URL, caption=msg)
         except Exception as e:
             print(f"Auto post loop error: {e}")
 
-# --- ADMIN COMMANDS ---
-@bot.message_handler(commands=['manage'])
-def manage_user_cmd(message):
-    if message.from_user.id not in ADMIN_IDS:
-        bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
-        return
-
-    try:
-        args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "⚠️ ফরম্যাট: /manage [USER_ID]")
-            return
-
-        target_id = int(args[1])
-        if users_col is None:
-            bot.reply_to(message, "❌ ডাটাবেজ কানেকশন নেই!")
-            return
-
-        user = users_col.find_one({"user_id": target_id})
-        if not user:
-            bot.reply_to(message, f"❌ {target_id} আইডি পাওয়া যায়নি।")
-            return
-
-        user_bal = user.get("balance", 0.0)
-        bdt_val = user_bal * USDT_TO_BDT
-        name = user.get("first_name", "Unknown")
-        ref_count = user.get("referrals_count", 0)
-        phone = user.get("verified_phone", "ভেরিফাই করা হয়নি")
-        is_banned = user.get("is_banned", False)
-
-        msg = (
-            f"👤 **ইউজার এডভান্সড প্যানেল**\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"📛 নাম: {name}\n"
-            f"🆔 ইউজার আইডি: `{target_id}`\n"
-            f"📱 ফোন: `{phone}`\n"
-            f"💰 ব্যালেন্স: ${user_bal:.4f} USDT (={bdt_val:.2f} টাকা)\n"
-            f"👥 মোট রেফার: {ref_count} জন\n"
-            f"🚫 ব্যান স্ট্যাটাস: {'🚫 Banned' if is_banned else '✅ Active'}\n"
-            f"━━━━━━━━━━━━━━━━━━━"
-        )
-
-        markup = InlineKeyboardMarkup()
-        if is_banned:
-            markup.add(InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{target_id}"))
-        else:
-            markup.add(InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{target_id}"))
-
-        bot.reply_to(message, msg, parse_mode="Markdown", reply_markup=markup)
-
-    except Exception as e:
-        bot.reply_to(message, f"❌ ভুল ইনপুট! এরর: {e}")
-
-@bot.message_handler(commands=['addbalance'])
-def add_balance_cmd(message):
-    if message.from_user.id not in ADMIN_IDS:
-        bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
-        return
-    try:
-        args = message.text.split()
-        if len(args) < 3:
-            bot.reply_to(message, "⚠️ ফরম্যাট: /addbalance [USER_ID] [AMOUNT]")
-            return
-        target_id = int(args[1])
-        amount = float(args[2])
-        
-        add_balance(target_id, amount)
-        bot.reply_to(message, f"✅ সফলভাবে ${amount:.4f} USDT যোগ করা হয়েছে।")
-
+# --- DAILY INACTIVITY PUSH NOTIFICATION LOOP ---
+def inactivity_push_loop():
+    while True:
         try:
-            user_msg = (
-                f"🎉 **আপনার অ্যাকাউন্টে ব্যালেন্স যোগ করা হয়েছে!**\n\n"
-                f"💰 **যোগ করা পরিমাণ:** ${amount:.4f} USDT\n"
-                f"নিয়মিত কাজ করে আরও ইনকাম করুন।"
-            )
-            bot.send_message(target_id, user_msg, parse_mode="Markdown")
+            time.sleep(3600)
+            if users_col is not None:
+                current_now = time.time()
+                day_in_seconds = 86400
+
+                query = {
+                    "is_banned": False,
+                    "last_active": {"$lte": current_now - day_in_seconds},
+                    "$or": [
+                        {"last_inactivity_push": {"$exists": False}},
+                        {"last_inactivity_push": {"$lte": current_now - day_in_seconds}}
+                    ]
+                }
+                
+                inactive_users = list(users_col.find(query))
+                for u in inactive_users:
+                    u_id = u.get("user_id")
+                    try:
+                        bot.send_message(u_id, "আজকের ৩০টি এড দেখে আপনার আয় নিশ্চিত করুন!")
+                        users_col.update_one(
+                            {"user_id": u_id},
+                            {"$set": {"last_inactivity_push": current_now}}
+                        )
+                        time.sleep(0.05)
+                    except Exception as push_err:
+                        print(f"Push error for user {u_id}: {push_err}")
+        except Exception as e:
+            print(f"Inactivity push loop error: {e}")
+
+# --- ADMIN PANEL COMMAND & CALLBACKS ---
+@bot.message_handler(commands=['admin'])
+def admin_panel_cmd(message):
+    if message.from_user.id not in ADMIN_IDS:
+        bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
+        return
+
+    admin_msg = (
+        "👑 **অ্যাডমিন কন্ট্রোল প্যানেল (Admin Panel)**\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "নিচের বাটনগুলো ব্যবহার করে বটের যাবতীয় কার্যক্রম ম্যানেজ করুন:"
+    )
+    bot.send_message(message.chat.id, admin_msg, reply_markup=admin_dashboard_keyboard(), parse_mode="Markdown")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_panel_"))
+def admin_panel_callbacks(call):
+    if call.from_user.id not in ADMIN_IDS:
+        bot.answer_callback_query(call.id, "❌ আপনি অ্যাডমিন নন!", show_alert=True)
+        return
+
+    action = call.data.replace("adm_panel_", "")
+    
+    if action == "close":
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
         except Exception:
             pass
 
-    except Exception as e:
-        bot.reply_to(message, f"❌ এরর: {e}")
+    elif action == "stats":
+        real_users = users_col.count_documents({}) if users_col is not None else 0
+        banned_users = users_col.count_documents({"is_banned": True}) if users_col is not None else 0
+        active_users = real_users - banned_users
+        
+        stats_text = (
+            f"📊 **বট সার্বিক পরিসংখ্যান (Stats)**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"👥 মোট ডাটাবেজ ইউজার: **{real_users}** জন\n"
+            f"✅ সক্রিয় ইউজার: **{active_users}** জন\n"
+            f"🚫 ব্যানড ইউজার: **{banned_users}** জন\n"
+            f"📈 ডিসপ্লেড ইউজার (ফেক সহ): **{FAKE_USER_OFFSET + real_users}** জন\n"
+            f"━━━━━━━━━━━━━━━━━━━"
+        )
+        bot.send_message(call.message.chat.id, stats_text, parse_mode="Markdown")
 
-@bot.message_handler(commands=['cutbalance'])
-def cut_balance_cmd(message):
-    if message.from_user.id not in ADMIN_IDS:
-        bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
-        return
-    try:
-        args = message.text.split()
-        if len(args) < 3:
-            bot.reply_to(message, "⚠️ ফরম্যাট: /cutbalance [USER_ID] [AMOUNT]")
-            return
-        target_id = int(args[1])
-        amount = float(args[2])
-        add_balance(target_id, -amount)
-        bot.reply_to(message, f"✂️ সফলভাবে ${amount:.4f} USDT কেটে নেওয়া হয়েছে।")
-    except Exception as e:
-        bot.reply_to(message, f"❌ এরর: {e}")
+    elif action == "broadcast":
+        admin_step[call.from_user.id] = {"action": "broadcast"}
+        bot.send_message(
+            call.message.chat.id,
+            "📢 **ব্রডকাস্ট মেসেজ পাঠাক:**\n\nআপনি সব ইউজারের কাছে যে মেসেজ বা নোটিশটি পাঠাতে চান তা এখানে লিখে বা ফরোয়ার্ড করে মেসেজ দিন:\n\n*(বাতিল করতে /cancel টাইপ করুন)*",
+            parse_mode="Markdown"
+        )
+
+    elif action == "manage":
+        admin_step[call.from_user.id] = {"action": "manage_user"}
+        bot.send_message(call.message.chat.id, "👤 অনুগ্রহ করে যে ইউজারের বিবরণ দেখতে চান তার **User ID** লিখে পাঠান:")
+
+    elif action == "addbal":
+        admin_step[call.from_user.id] = {"action": "addbal_step1"}
+        bot.send_message(call.message.chat.id, "➕ যে ইউজারের অ্যাকাউন্টে ব্যালেন্স যোগ করবেন তার **User ID** দিন:")
+
+    elif action == "cutbal":
+        admin_step[call.from_user.id] = {"action": "cutbal_step1"}
+        bot.send_message(call.message.chat.id, "✂️ যে ইউজারের অ্যাকাউন্ট থেকে ব্যালেন্স কাটবেন তার **User ID** দিন:")
 
 # --- USER COMMAND HANDLERS ---
 @bot.message_handler(commands=['start'])
@@ -386,13 +402,45 @@ def start_cmd(message):
             reply_markup=main_menu_keyboard()
         )
 
-# --- CONTACT HANDLER ---
+# --- CONTACT HANDLER (WITH UNIQUE PHONE NUMBER CHECK) ---
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
     user_id = message.from_user.id
     if message.contact is not None:
-        phone_number = message.contact.phone_number
-        update_user_field(user_id, {"verified_phone": phone_number})
+        phone_number = str(message.contact.phone_number).strip()
+        
+        # ১. আগে থেকেই কেউ এই ফোন নম্বরটি অন্য টেলিগ্রাম একাউন্টে ভেরিফাই করেছে কিনা চেক
+        if users_col is not None:
+            existing_user = users_col.find_one({
+                "verified_phone": phone_number, 
+                "user_id": {"$ne": user_id}
+            })
+            
+            if existing_user:
+                other_id = existing_user.get("user_id")
+                bot.send_message(
+                    message.chat.id, 
+                    "❌ **একটি ফোন নম্বর দিয়ে একের অধিক অ্যাকাউন্ট ভেরিফাই করা সম্ভব নয়!**\n\nএই নম্বরটি ইতোমধ্যে অন্য একটি অ্যাকাউন্টে নিবন্ধিত রয়েছে।"
+                )
+                
+                # অ্যাডমিনকে সতর্কতা নোটিফিকেশন পাঠানো
+                alert_msg = (
+                    "🚨 **ডুপ্লিকেট ফোন নম্বর ভেরিফিকেশন চেষ্টা!**\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    f"👤 ইউজার আইডি: `{user_id}`\n"
+                    f"📱 চেষ্টা করা ফোন: `{phone_number}`\n"
+                    f"⚠️ মূল নিবন্ধিত আইডি: `{other_id}`\n"
+                    "━━━━━━━━━━━━━━━━━━━"
+                )
+                for admin_id in ADMIN_IDS:
+                    try:
+                        bot.send_message(admin_id, alert_msg, parse_mode="Markdown")
+                    except Exception:
+                        pass
+                return
+
+        # নম্বর ইউনিক হলে ডাটাবেজে আপডেট
+        update_user_field(user_id, {"verified_phone": phone_number, "last_active": time.time()})
         
         bot.send_message(
             message.chat.id,
@@ -403,13 +451,133 @@ def handle_contact(message):
         if not check_user_channels(user_id):
             send_force_join_msg(message.chat.id)
 
-# --- TEXT MESSAGE HANDLER ---
+# --- TEXT & BROADCAST HANDLER ---
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
     user_id = message.from_user.id
     text = message.text.strip() if message.text else ""
     first_name = message.from_user.first_name
 
+    # Cancel command check for admin actions
+    if text == "/cancel" and user_id in ADMIN_IDS:
+        if user_id in admin_step:
+            del admin_step[user_id]
+        bot.send_message(message.chat.id, "❌ অ্যাডমিন অপারেশন বাতিল করা হয়েছে।")
+        return
+
+    # --- ADMIN INPUT STEPS PROCESSING ---
+    if user_id in ADMIN_IDS and user_id in admin_step:
+        state = admin_step[user_id].get("action")
+
+        if state == "broadcast":
+            del admin_step[user_id]
+            if users_col is None:
+                bot.send_message(message.chat.id, "❌ ডাটাবেজ কানেকশন নেই!")
+                return
+            
+            all_users = list(users_col.find({"is_banned": False}))
+            total = len(all_users)
+            success, failed = 0, 0
+            
+            bot.send_message(message.chat.id, f"🚀 ব্রডকাস্টিং শুরু হচ্ছে... মোট ইউজার: {total}")
+
+            for u in all_users:
+                u_id = u.get("user_id")
+                try:
+                    bot.copy_message(chat_id=u_id, from_chat_id=message.chat.id, message_id=message.message_id)
+                    success += 1
+                    time.sleep(0.04)
+                except Exception:
+                    failed += 1
+
+            bot.send_message(
+                message.chat.id,
+                f"✅ **ব্রডকাস্ট সম্পন্ন হয়েছে!**\n\n"
+                f"📊 মোট প্রাপক: {total}\n"
+                f"✅ সফলভাবে পাঠানো হয়েছে: {success}\n"
+                f"❌ ব্যর্থ (ব্লক বা ডিলেট): {failed}",
+                parse_mode="Markdown"
+            )
+            return
+
+        elif state == "manage_user":
+            del admin_step[user_id]
+            if not text.isdigit():
+                bot.send_message(message.chat.id, "❌ অকার্যকর ইউজার আইডি!")
+                return
+            target_id = int(text)
+            target_user = users_col.find_one({"user_id": target_id}) if users_col is not None else None
+            if not target_user:
+                bot.send_message(message.chat.id, "❌ ইউজার খুঁজে পাওয়া যায়নি!")
+                return
+            
+            user_bal = target_user.get("balance", 0.0)
+            bdt_val = user_bal * USDT_TO_BDT
+            name = target_user.get("first_name", "Unknown")
+            ref_count = target_user.get("referrals_count", 0)
+            phone = target_user.get("verified_phone", "ভেরিফাই করা হয়নি")
+            is_banned = target_user.get("is_banned", False)
+
+            msg = (
+                f"👤 **ইউজার প্যানেল**\n━━━━━━━━━━━━━━━━━━━\n"
+                f"📛 নাম: {name}\n🆔 আইডি: `{target_id}`\n📱 ফোন: `{phone}`\n"
+                f"💰 ব্যালেন্স: ${user_bal:.4f} USDT (={bdt_val:.2f} টাকা)\n"
+                f"👥 মোট রেফার: {ref_count} জন\n"
+                f"🚫 স্ট্যাটাস: {'🚫 Banned' if is_banned else '✅ Active'}\n━━━━━━━━━━━━━━━━━━━"
+            )
+
+            markup = InlineKeyboardMarkup()
+            if is_banned:
+                markup.add(InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{target_id}"))
+            else:
+                markup.add(InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{target_id}"))
+
+            bot.send_message(message.chat.id, msg, parse_mode="Markdown", reply_markup=markup)
+            return
+
+        elif state == "addbal_step1":
+            if not text.isdigit():
+                bot.send_message(message.chat.id, "❌ সঠিক ইউজার আইডি দিন!")
+                return
+            admin_step[user_id] = {"action": "addbal_step2", "target_id": int(text)}
+            bot.send_message(message.chat.id, f"💰 আইডি `{text}`-এর জন্য কত USDT যোগ করতে চান তা লিখুন (যেমন: 0.50):")
+            return
+
+        elif state == "addbal_step2":
+            target_id = admin_step[user_id].get("target_id")
+            del admin_step[user_id]
+            try:
+                amt = float(text)
+                add_balance(target_id, amt)
+                bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}`-কে ${amt:.4f} USDT প্রদান করা হয়েছে।", parse_mode="Markdown")
+                try:
+                    bot.send_message(target_id, f"🎉 আপনার অ্যাকাউন্টে ${amt:.4f} USDT যোগ করা হয়েছে!")
+                except Exception:
+                    pass
+            except ValueError:
+                bot.send_message(message.chat.id, "❌ টাকার পরিমাণ সঠিক সংখ্যায় লিখুন!")
+            return
+
+        elif state == "cutbal_step1":
+            if not text.isdigit():
+                bot.send_message(message.chat.id, "❌ সঠিক ইউজার আইডি দিন!")
+                return
+            admin_step[user_id] = {"action": "cutbal_step2", "target_id": int(text)}
+            bot.send_message(message.chat.id, f"✂️ আইডি `{text}`-এর থেকে কত USDT কাটতে চান লিখুন (যেমন: 0.50):")
+            return
+
+        elif state == "cutbal_step2":
+            target_id = admin_step[user_id].get("target_id")
+            del admin_step[user_id]
+            try:
+                amt = float(text)
+                add_balance(target_id, -amt)
+                bot.send_message(message.chat.id, f"✂️ ইউজার `{target_id}`-এর ব্যালেন্স থেকে ${amt:.4f} USDT কেটে নেওয়া হয়েছে।", parse_mode="Markdown")
+            except ValueError:
+                bot.send_message(message.chat.id, "❌ টাকার পরিমাণ সঠিক সংখ্যায় লিখুন!")
+            return
+
+    # --- GENERAL USER PROCESSING ---
     balance, user = get_user(user_id, first_name)
     if user.get("is_banned", False):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
@@ -482,10 +650,9 @@ def handle_all_messages(message):
 
         bdt_amount = withdraw_amount * USDT_TO_BDT
 
-        # 🔍 ডুপ্লিকেট নম্বর ফিল্টার (অন্য ইউজারের ডুপ্লিকেট নম্বর চেক)
+        # একই নম্বরে অন্য অ্যাকাউন্ট থেকে উইথড্র দেওয়া হলে অ্যাডমিন অ্যালার্ট পাঠানো
         check_duplicate_withdraw_number(user_id, first_name, text, method, withdraw_amount, bdt_amount)
 
-        # ইতিহাস আপডেট ও ব্যালেন্স মাইনাস
         add_payment_history(user_id, method, withdraw_amount, bdt_amount, text)
         add_balance(user_id, -withdraw_amount)
 
@@ -517,7 +684,6 @@ def handle_all_messages(message):
         )
 
         try:
-            # আসল ইউজারের উইথড্র পোস্টও ছবিসহ চ্যানেলে যাবে
             bot.send_photo(PROOF_CHANNEL, photo=PAYMENT_BANNER_URL, caption=proof_msg)
         except Exception as e:
             print(f"Error posting withdraw request: {e}")
@@ -777,7 +943,7 @@ def callback_inline(call):
             f"📌 মিনিমাম উইথড্র: ${MIN_WITHDRAW:.2f} USDT (={min_bdt:.2f} BDT)\n"
             f"💳 আপনার মোট ব্যালেন্স: ${balance:.4f} USDT\n"
             f"━━━━━━━━━━━━━━━━━━━\n\n"
-            f"👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে মেসেজ দিন (যেমন: 1, 1.5, 2):"
+            f"👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে মেসেজ দিন (যেমন: 1, 1.5, 2):"
         )
         bot.send_message(call.message.chat.id, msg, parse_mode="Markdown")
 
@@ -799,21 +965,15 @@ def keep_alive():
 if __name__ == "__main__":
     keep_alive()
 
+    # অটো পেমেন্ট প্রুফ থ্রেড
     t_auto = threading.Thread(target=auto_post_loop)
     t_auto.daemon = True
     t_auto.start()
 
-    try:
-        bot.remove_webhook()
-        time.sleep(2)
-    except Exception as e:
-        print(f"Webhook Removal Error: {e}")
+    # ২৪ ঘণ্টা ইনঅ্যাক্টিভ পুশ নোটিফিকেশন থ্রেড
+    t_inactivity = threading.Thread(target=inactivity_push_loop)
+    t_inactivity.daemon = True
+    t_inactivity.start()
 
-    print("Bot starting polling mechanism with skip_pending=True...")
-
-    while True:
-        try:
-            bot.polling(none_stop=True, interval=1, timeout=60, skip_pending=True)
-        except Exception as e:
-            print(f"Polling loop error: {e}")
-            time.sleep(5)
+    # বট পোলিং চালু
+    bot.infinity_polling(skip_pending=True)
