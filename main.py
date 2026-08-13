@@ -21,12 +21,15 @@ BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
 
+# 🖼️ পেমেন্ট প্রুফ চ্যানেলের ব্যানার ইমেজ লিংক (100% কাজ করবে এমন সরাসরি Unsplash লিংক)
+PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
+
 MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার
 USDT_TO_BDT = 110.0   # ১ ডলার = ১১০ টাকা
 REFERRAL_BONUS = 0.005
 FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট
 
-# --- TIMEZONE FUNCTION (Bangladesh Time GMT+6 without pytz) ---
+# --- TIMEZONE FUNCTION (Bangladesh Time GMT+6) ---
 def get_bd_time_str():
     bd_tz = timezone(timedelta(hours=6))
     bd_now = datetime.now(bd_tz)
@@ -131,7 +134,7 @@ def add_payment_history(user_id, method, amount_usdt, amount_bdt, number):
                 "amount_usdt": amount_usdt,
                 "amount_bdt": amount_bdt,
                 "number": str(number).strip(),
-                "date": get_bd_time_str() # BD Time Added
+                "date": get_bd_time_str()
             }
             users_col.update_one({"user_id": user_id}, {"$push": {"history": record}})
         except Exception as e:
@@ -225,7 +228,7 @@ def main_menu_keyboard():
     )
     return markup
 
-# --- AUTO PAYMENT PROOF LOOP (EVERY 2 MINUTES) ---
+# --- AUTO PAYMENT PROOF LOOP (EVERY 2 MINUTES WITH IMAGE BANNER) ---
 def auto_post_loop():
     while True:
         try:
@@ -243,7 +246,8 @@ def auto_post_loop():
                 f"🌐 {m}\n"
                 f"👛 {rand_num}"
             )
-            bot.send_message(PROOF_CHANNEL, msg)
+            # ছবিসহ ক্যাপশনে অটো পোস্ট
+            bot.send_photo(PROOF_CHANNEL, photo=PAYMENT_BANNER_URL, caption=msg)
         except Exception as e:
             print(f"Auto post loop error: {e}")
 
@@ -463,7 +467,7 @@ def handle_all_messages(message):
             )
             return
         except ValueError:
-            bot.reply_to(message, "❌ অনুগ্রহ করে সঠিক সংখ্যায় (যেমন: 1, 2.5, 5) উইথড্র পরিমাণ লিখুন।")
+            bot.reply_to(message, "❌ অনুগ্রহ করে সঠিক সংখ্যায় (যেমন: 1, 1.5, 2) উইথড্র পরিমাণ লিখুন।")
             return
 
     # STEP 2: Withdraw Number Input & Confirmation
@@ -513,7 +517,8 @@ def handle_all_messages(message):
         )
 
         try:
-            bot.send_message(PROOF_CHANNEL, proof_msg)
+            # আসল ইউজারের উইথড্র পোস্টও ছবিসহ চ্যানেলে যাবে
+            bot.send_photo(PROOF_CHANNEL, photo=PAYMENT_BANNER_URL, caption=proof_msg)
         except Exception as e:
             print(f"Error posting withdraw request: {e}")
 
