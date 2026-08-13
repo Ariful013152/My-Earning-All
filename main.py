@@ -362,7 +362,6 @@ def watch_ad_handler(message):
         bot.reply_to(message, "❌ আজকের ৩০টি এড দেখা সম্পন্ন হয়েছে! ক্যাপচা পূরণ করে লিমিট রিসেট করুন।")
         return
 
-    # র্যান্ডম এড লিংক সিলেক্ট করা (Monetag বা Adsterra থেকে যেকোনো একটি)
     all_links = MONETAG_LINKS + ADSTERRA_LINKS
     ad_link = random.choice(all_links)
 
@@ -809,7 +808,7 @@ def handle_all_messages(message):
     if not user.get("verified_phone"):
         bot.send_message(
             message.chat.id,
-            "📱 **ফোন নম্বর ভেরিফিকেশন প্রয়োজন!**\n\nবটটি ব্যবহার শুরু করতে নিচের '📱 Share Contact' বাটনে ক্লিক করে আপনার টেলিগ্রাম নম্বর ভেরিফাই করুন።",
+            "📱 **ফোন নম্বর ভেরিফিকেশন প্রয়োজন!**\n\nবটটি ব্যবহার শুরু করতে নিচের '📱 Share Contact' বাটনে ক্লিক করে আপনার টেলিগ্রাম নম্বর ভেরিফাই করুন।",
             reply_markup=contact_keyboard(),
             parse_mode="Markdown"
         )
@@ -918,4 +917,9 @@ if __name__ == "__main__":
     t3.start()
 
     print("Bot is starting...")
-    bot.infinity_polling(skip_pending=True)
+    while True:
+        try:
+            bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            print(f"Polling error: {e}")
+            time.sleep(5)
