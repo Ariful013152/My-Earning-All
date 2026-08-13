@@ -14,7 +14,7 @@ from telebot.types import (
 )
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "8615856288:AAHsdARNnr1J4IEK_RodW0_xiLqnftct1C8"
+BOT_TOKEN = "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k"
 MONGO_URI = os.environ.get("MONGO_URI", "")
 
 BOT_USERNAME = "myearningall01_bot"
