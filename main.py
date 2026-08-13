@@ -66,7 +66,7 @@ ADSTERRA_LINKS = [
 
 # --- DATABASE SETUP ---
 users_col = None
-memory_users = {}  # Backup in-memory DB if MongoDB is unavailable
+memory_users = {}
 
 if MONGO_URI:
     try:
@@ -80,7 +80,6 @@ if MONGO_URI:
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=20)
 app = Flask(__name__)
 
-# --- WEB SERVER FOR RENDER ---
 @app.route('/')
 def home():
     return "Bot is running!"
@@ -107,6 +106,7 @@ def get_user(user_id, first_name="User", referred_by=None):
                 "last_reset": current_now,
                 "last_task_time": 0,
                 "can_claim": False,
+                "captcha_locked": False,
                 "referred_by": referred_by,
                 "referrals_count": 0,
                 "ref_reward_given": False,
@@ -131,6 +131,7 @@ def get_user(user_id, first_name="User", referred_by=None):
                 "last_reset": current_now,
                 "last_task_time": 0,
                 "can_claim": False,
+                "captcha_locked": False,
                 "referred_by": referred_by,
                 "referrals_count": 0,
                 "ref_reward_given": False,
@@ -302,7 +303,7 @@ def admin_dashboard_keyboard():
     )
     return markup
 
-# --- AUTO PAYMENT PROOF LOOP ---
+# --- LOOPS ---
 def auto_post_loop():
     while True:
         try:
@@ -324,7 +325,6 @@ def auto_post_loop():
         except Exception as e:
             print(f"Auto post loop error: {e}")
 
-# --- INACTIVITY PUSH NOTIFICATION LOOP ---
 def inactivity_push_loop():
     while True:
         try:
@@ -347,13 +347,12 @@ def inactivity_push_loop():
         except Exception as e:
             print(f"Inactivity push loop error: {e}")
 
-# --- ADMIN PANEL COMMAND & CALLBACKS ---
+# --- ADMIN PANEL ---
 @bot.message_handler(commands=['admin'])
 def admin_panel_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
         bot.reply_to(message, "❌ আপনি অ্যাডমিন নন!")
         return
-
     admin_msg = (
         "👑 **অ্যাডমিন কন্ট্রোল প্যানেল (Admin Panel)**\n"
         "━━━━━━━━━━━━━━━━━━━\n"
@@ -368,17 +367,14 @@ def admin_panel_callbacks(call):
         return
 
     action = call.data.replace("adm_panel_", "")
-    
     if action == "close":
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
-        except Exception:
+        except:
             pass
-
     elif action == "stats":
         all_u = get_all_active_users()
         real_users = len(all_u)
-        
         stats_text = (
             f"📊 **বট সার্বিক পরিসংখ্যান (Stats)**\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
@@ -387,23 +383,19 @@ def admin_panel_callbacks(call):
             f"━━━━━━━━━━━━━━━━━━━"
         )
         bot.send_message(call.message.chat.id, stats_text, parse_mode="Markdown")
-
     elif action == "broadcast":
         admin_step[call.from_user.id] = {"action": "broadcast"}
         bot.send_message(
             call.message.chat.id,
-            "📢 **ব্রডকাস্ট মেসেজ পাঠাক:**\n\nআপনি সব ইউজারের কাছে যে মেসেজ বা নোটিশটি পাঠাতে চান তা এখানে লিখে বা ফরোয়ার্ড করে মেসেজ দিন:\n\n*(বাতিল করতে /cancel টাইপ করুন)*",
+            "📢 **ব্রডকাস্ট মেসেজ পাঠান:**\n\nআপনি সব ইউজারের কাছে যে মেসেজ বা নোটিশটি পাঠাতে চান তা এখানে লিখে বা ফরোয়ার্ড করে পাঠান:\n\n*(বাতিল করতে /cancel টাইপ করুন)*",
             parse_mode="Markdown"
         )
-
     elif action == "manage":
         admin_step[call.from_user.id] = {"action": "manage_user"}
         bot.send_message(call.message.chat.id, "👤 অনুগ্রহ করে যে ইউজারের বিবরণ দেখতে চান তার **User ID** লিখে পাঠান:")
-
     elif action == "addbal":
         admin_step[call.from_user.id] = {"action": "addbal_step1"}
         bot.send_message(call.message.chat.id, "➕ যে ইউজারের অ্যাকাউন্টে ব্যালেন্স যোগ করবেন তার **User ID** দিন:")
-
     elif action == "cutbal":
         admin_step[call.from_user.id] = {"action": "cutbal_step1"}
         bot.send_message(call.message.chat.id, "✂️ যে ইউজারের অ্যাকাউন্ট থেকে ব্যালেন্স কাটবেন তার **User ID** দিন:")
@@ -413,7 +405,6 @@ def admin_ban_unban_callback(call):
     if call.from_user.id not in ADMIN_IDS:
         bot.answer_callback_query(call.id, "❌ আপনি অ্যাডমিন নন!", show_alert=True)
         return
-    
     parts = call.data.split("_")
     action = parts[0] + "_" + parts[1]
     target_id = int(parts[2])
@@ -443,11 +434,16 @@ def check_join_callback(call):
     else:
         bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
 
+# --- CLAIM REWARD & CAPTCHA FLOW ---
 @bot.callback_query_handler(func=lambda call: call.data == "claim_reward")
 def claim_reward_callback(call):
     user_id = call.from_user.id
-    balance, user = get_user(user_id, call.from_user.first_name)
+    _, user = get_user(user_id, call.from_user.first_name)
     
+    if user.get("captcha_locked", False):
+        bot.answer_callback_query(call.id, "❌ আপনার অ্যাকাউন্টটি ক্যাপচা দ্বারা লক করা আছে! অনুগ্রহ করে ক্যাপচা পূরণ করুন।", show_alert=True)
+        return
+
     if not user.get("can_claim", False):
         bot.answer_callback_query(call.id, "❌ আপনি ইতিমধ্যে এই রিওয়ার্ড ক্লাইম করেছেন অথবা নতুন টাস্ক শুরু করুন!", show_alert=True)
         return
@@ -462,18 +458,35 @@ def claim_reward_callback(call):
     add_balance(user_id, reward)
     
     current_count = user.get("daily_count", 0) + 1
-    update_user_field(user_id, {"can_claim": False, "daily_count": current_count})
     
     try:
         bot.delete_message(call.message.chat.id, call.message.message_id)
     except:
         pass
         
-    bot.send_message(
-        call.message.chat.id,
-        f"🎉 অভিনন্দন! আপনি সফলভাবে ${reward:.3f} USDT উপার্জন করেছেন।\n📈 আজকের দেখা মোট এড: {current_count}/30",
-        reply_markup=main_menu_keyboard()
-    )
+    if current_count >= 30:
+        num1 = random.randint(10, 50)
+        num2 = random.randint(1, 20)
+        ans = num1 + num2
+        user_captcha_step[user_id] = ans
+        
+        update_user_field(user_id, {"can_claim": False, "daily_count": current_count, "captcha_locked": True})
+        
+        bot.send_message(
+            call.message.chat.id,
+            f"🎉 অভিনন্দন! আপনি আজকের ৩০টি এড দেখা সম্পূর্ণ করেছেন!\n\n"
+            f"🔐 পরবর্তী কাজের জন্য আপনাকে একটি ম্যাথ ক্যাপচা পূরণ করতে হবে:\n"
+            f"👉 কত হবে উত্তর: **{num1} + {num2} = ?**\n\n"
+            f"সঠিক উত্তরটি চ্যাটে লিখে পাঠান:",
+            parse_mode="Markdown"
+        )
+    else:
+        update_user_field(user_id, {"can_claim": False, "daily_count": current_count})
+        bot.send_message(
+            call.message.chat.id,
+            f"🎉 অভিনন্দন! আপনি সফলভাবে ${reward:.3f} USDT উপার্জন করেছেন।\n📈 আজকের দেখা মোট এড: {current_count}/30",
+            reply_markup=main_menu_keyboard()
+        )
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("w_method_"))
 def withdraw_method_callback(call):
@@ -496,7 +509,6 @@ def withdraw_method_callback(call):
         parse_mode="Markdown"
     )
 
-# --- USER COMMAND HANDLERS ---
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
     user_id = message.from_user.id
@@ -532,7 +544,6 @@ def start_cmd(message):
             reply_markup=main_menu_keyboard()
         )
 
-# --- CONTACT HANDLER ---
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
     user_id = message.from_user.id
@@ -544,26 +555,16 @@ def handle_contact(message):
                 "verified_phone": phone_number, 
                 "user_id": {"$ne": user_id}
             })
-            
             if existing_user:
-                bot.send_message(
-                    message.chat.id, 
-                    "❌ **এই ফোন নম্বরটি দিয়ে ইতোমধ্যে একটি অ্যাকাউন্ট ভেরিফাই করা রয়েছে!**"
-                )
+                bot.send_message(message.chat.id, "❌ **এই ফোন নম্বরটি দিয়ে ইতোমধ্যে একটি অ্যাকাউন্ট ভেরিফাই করা রয়েছে!**")
                 return
 
         update_user_field(user_id, {"verified_phone": phone_number, "last_active": time.time()})
-        
-        bot.send_message(
-            message.chat.id,
-            "✅ আপনার ফোন নম্বর সফলভাবে ভেরিফাই হয়েছে!",
-            reply_markup=main_menu_keyboard()
-        )
+        bot.send_message(message.chat.id, "✅ আপনার ফোন নম্বর সফলভাবে ভেরিফাই হয়েছে!", reply_markup=main_menu_keyboard())
 
         if not check_user_channels(user_id):
             send_force_join_msg(message.chat.id)
 
-# --- TEXT & BROADCAST HANDLER ---
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
     user_id = message.from_user.id
@@ -576,19 +577,16 @@ def handle_all_messages(message):
         bot.send_message(message.chat.id, "❌ অ্যাডমিন অপারেশন বাতিল করা হয়েছে।")
         return
 
-    # --- ADMIN INPUT STEPS PROCESSING ---
+    # Admin Step Handlers
     if user_id in ADMIN_IDS and user_id in admin_step:
         state = admin_step[user_id].get("action")
-
         if state == "broadcast":
             del admin_step[user_id]
-            
             all_users = get_all_active_users()
             total = len(all_users)
             success, failed = 0, 0
             
             bot.send_message(message.chat.id, f"🚀 ব্রডকাস্টিং শুরু হচ্ছে... মোট ইউজার: {total}")
-
             for u in all_users:
                 u_id = u.get("user_id")
                 try:
@@ -597,16 +595,7 @@ def handle_all_messages(message):
                     time.sleep(0.04)
                 except Exception as e:
                     failed += 1
-                    print(f"Broadcast failed for {u_id}: {e}")
-
-            bot.send_message(
-                message.chat.id,
-                f"✅ **ব্রডকাস্ট সম্পন্ন হয়েছে!**\n\n"
-                f"📊 মোট প্রাপক: {total}\n"
-                f"✅ সফলভাবে পাঠানো হয়েছে: {success}\n"
-                f"❌ ব্যর্থ (ব্লক বা ডিলেট): {failed}",
-                parse_mode="Markdown"
-            )
+            bot.send_message(message.chat.id, f"✅ **ব্রডকাস্ট সম্পন্ন হয়েছে!**\n📊 মোট প্রাপক: {total}\n✅ সফল: {success}\n❌ ব্যর্থ: {failed}", parse_mode="Markdown")
             return
 
         elif state == "manage_user":
@@ -616,7 +605,6 @@ def handle_all_messages(message):
                 return
             target_id = int(text)
             _, target_user = get_user(target_id)
-            
             user_bal = target_user.get("balance", 0.0)
             bdt_val = user_bal * USDT_TO_BDT
             name = target_user.get("first_name", "Unknown")
@@ -631,13 +619,11 @@ def handle_all_messages(message):
                 f"👥 মোট রেফার: {ref_count} জন\n"
                 f"🚫 স্ট্যাটাস: {'🚫 Banned' if is_banned else '✅ Active'}\n━━━━━━━━━━━━━━━━━━━"
             )
-
             markup = InlineKeyboardMarkup()
             if is_banned:
                 markup.add(InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{target_id}"))
             else:
                 markup.add(InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{target_id}"))
-
             bot.send_message(message.chat.id, msg, parse_mode="Markdown", reply_markup=markup)
             return
 
@@ -646,7 +632,7 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, "❌ সঠিক ইউজার আইডি দিন!")
                 return
             admin_step[user_id] = {"action": "addbal_step2", "target_id": int(text)}
-            bot.send_message(message.chat.id, f"💰 আইডি `{text}`-এর জন্য কত USDT যোগ করতে চান তা লিখুন (যেমন: 0.50):")
+            bot.send_message(message.chat.id, f"💰 আইডি `{text}`-এর জন্য কত USDT যোগ করতে চান তা লিখুন:")
             return
 
         elif state == "addbal_step2":
@@ -658,10 +644,10 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}`-কে ${amt:.4f} USDT প্রদান করা হয়েছে।", parse_mode="Markdown")
                 try:
                     bot.send_message(target_id, f"🎉 আপনার অ্যাকাউন্টে ${amt:.4f} USDT যোগ করা হয়েছে!")
-                except Exception:
+                except:
                     pass
             except ValueError:
-                bot.send_message(message.chat.id, "❌ টাকার পরিমাণ সঠিক সংখ্যায় লিখুন!")
+                bot.send_message(message.chat.id, "❌ সঠিক সংখ্যা লিখুন!")
             return
 
         elif state == "cutbal_step1":
@@ -680,10 +666,9 @@ def handle_all_messages(message):
                 add_balance(target_id, -amt)
                 bot.send_message(message.chat.id, f"✂️ ইউজার `{target_id}`-এর ব্যালেন্স থেকে ${amt:.4f} USDT কেটে নেওয়া হয়েছে।", parse_mode="Markdown")
             except ValueError:
-                bot.send_message(message.chat.id, "❌ টাকার পরিমাণ সঠিক সংখ্যায় লিখুন!")
+                bot.send_message(message.chat.id, "❌ সঠিক সংখ্যা লিখুন!")
             return
 
-    # --- GENERAL USER PROCESSING ---
     balance, user = get_user(user_id, first_name)
     if user.get("is_banned", False):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
@@ -698,20 +683,28 @@ def handle_all_messages(message):
         )
         return
 
-    if user_id in user_captcha_step:
-        correct_ans = user_captcha_step[user_id]
-        if text.isdigit() and int(text) == correct_ans:
-            del user_captcha_step[user_id]
-            bot.send_message(
-                message.chat.id,
-                "🎉 ম্যাথ ক্যাপচা সঠিক হয়েছে! অ্যাকাউন্টটি আনলক হয়েছে।",
-                reply_markup=main_menu_keyboard()
-            )
+    # --- CAPTCHA CHECK ---
+    if user.get("captcha_locked", False):
+        if user_id in user_captcha_step:
+            correct_ans = user_captcha_step[user_id]
+            if text.isdigit() and int(text) == correct_ans:
+                del user_captcha_step[user_id]
+                update_user_field(user_id, {"captcha_locked": False, "daily_count": 0, "last_reset": time.time()})
+                bot.send_message(
+                    message.chat.id,
+                    "🎉 ক্যাপচা সফলভাবে পূরণ হয়েছে! আপনার কাজের লিমিট রিসেট করা হয়েছে। এখন আবার কাজ করতে পারেন:",
+                    reply_markup=main_menu_keyboard()
+                )
+            else:
+                bot.send_message(message.chat.id, "❌ ভুল উত্তর! সঠিক যোগফলটি আবার লিখে পাঠান:")
         else:
-            bot.send_message(message.chat.id, "❌ ভুল উত্তর! আবার চেষ্টা করুন।")
+            num1 = random.randint(10, 50)
+            num2 = random.randint(1, 20)
+            user_captcha_step[user_id] = num1 + num2
+            bot.send_message(message.chat.id, f"🔐 অনুগ্রহ করে ক্যাপচা পূরণ করুন: **{num1} + {num2} = ?**", parse_mode="Markdown")
         return
 
-    # STEP 1: Withdraw Amount Selection
+    # Withdraw Step 1: Amount
     if user_id in user_withdraw_step and user_withdraw_step[user_id].get('step') == 'amount':
         try:
             req_amount = float(text)
@@ -728,13 +721,11 @@ def handle_all_messages(message):
                 'method': method,
                 'amount': req_amount
             }
-
             bdt_calc = req_amount * USDT_TO_BDT
             bot.send_message(
                 message.chat.id,
                 f"📝 **{method} নম্বর ইনপুট দিন**\n━━━━━━━━━━━━━━━━━━━\n"
-                f"💵 আপনি উইথড্র করছেন: **${req_amount:.4f} USDT**\n"
-                f"💰 টাকার পরিমাণ: **{bdt_calc:.2f} BDT**\n\n"
+                f"💵 উইথড্র: **${req_amount:.4f} USDT** (={bdt_calc:.2f} BDT)\n\n"
                 f"👉 আপনার ১১ ডিজিটের {method} নম্বরটি লিখে পাঠান:",
                 parse_mode="Markdown"
             )
@@ -743,7 +734,7 @@ def handle_all_messages(message):
             bot.reply_to(message, "❌ সঠিক সংখ্যায় উইথড্র পরিমাণ লিখুন।")
             return
 
-    # STEP 2: Withdraw Number Input & Confirmation
+    # Withdraw Step 2: Number
     if user_id in user_withdraw_step and user_withdraw_step[user_id].get('step') == 'number':
         method = user_withdraw_step[user_id]['method']
         withdraw_amount = user_withdraw_step[user_id]['amount']
@@ -754,7 +745,6 @@ def handle_all_messages(message):
             return
 
         bdt_amount = withdraw_amount * USDT_TO_BDT
-
         check_duplicate_withdraw_number(user_id, first_name, text, method, withdraw_amount, bdt_amount)
 
         add_payment_history(user_id, method, withdraw_amount, bdt_amount, text)
@@ -772,11 +762,9 @@ def handle_all_messages(message):
         admin_alert_msg = (
             "🚨 **নতুন রিয়েল উইথড্র রিকোয়েস্ট!**\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 নাম: {first_name}\n"
-            f"🆔 আইডি: `{user_id}`\n"
+            f"👤 নাম: {first_name}\n🆔 আইডি: `{user_id}`\n"
             f"💰 পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} BDT)\n"
-            f"💳 মেথড: {method}\n"
-            f"📱 নম্বর: `{text}`\n"
+            f"💳 মেথড: {method}\n📱 নম্বর: `{text}`\n"
             "━━━━━━━━━━━━━━━━━━━"
         )
 
@@ -795,15 +783,15 @@ def handle_all_messages(message):
         for admin_id in ADMIN_IDS:
             try:
                 bot.send_message(admin_id, admin_alert_msg, parse_mode="Markdown")
-            except Exception as e:
-                print(f"Failed to send admin notification: {e}")
+            except:
+                pass
         return
 
     if not check_user_channels(user_id):
         send_force_join_msg(message.chat.id)
         return
 
-    # Menu Options Handling
+    # --- WATCH AD HANDLER ---
     if text == "📺 Watch Ad":
         current_time = time.time()
         last_reset = user.get("last_reset", current_time)
@@ -811,19 +799,30 @@ def handle_all_messages(message):
 
         if current_time - last_reset >= 86400:
             daily_count = 0
-            last_reset = current_time
-            update_user_field(user_id, {"daily_count": 0, "last_reset": current_time})
+            update_user_field(user_id, {"daily_count": 0, "last_reset": current_time, "captcha_locked": False})
 
-        if daily_count >= 30:
-            bot.send_message(message.chat.id, "❌ আপনি আজকের ৩০টি এড দেখার লিমিট পূর্ণ করেছেন!")
+        if user.get("captcha_locked", False):
+            bot.send_message(message.chat.id, "❌ আপনার অ্যাকাউন্টটি ক্যাপচা দ্বারা লক করা আছে! অনুগ্রহ করে ক্যাপচা পূরণ করুন।")
             return
 
-        # 랜덤 এড লিংক সিলেক্ট করা
-        ad_type = random.choice(["monetag", "adsterra"])
-        if ad_type == "monetag":
-            ad_link = random.choice(MONETAG_LINKS)
-        else:
-            ad_link = random.choice(ADSTERRA_LINKS)
+        if daily_count >= 30:
+            num1 = random.randint(10, 50)
+            num2 = random.randint(1, 20)
+            user_captcha_step[user_id] = num1 + num2
+            update_user_field(user_id, {"captcha_locked": True})
+            
+            bot.send_message(
+                message.chat.id,
+                f"❌ আপনি আজকের ৩০টি এড দেখার লিমিট পূর্ণ করেছেন!\n\n"
+                f"🔐 পরবর্তী কাজের জন্য আপনাকে একটি ম্যাথ ক্যাপচা পূরণ করতে হবে:\n"
+                f"👉 কত হবে উত্তর: **{num1} + {num2} = ?**\n\n"
+                f"সঠিক উত্তরটি চ্যাটে লিখে পাঠান:",
+                parse_mode="Markdown"
+            )
+            return
+
+        all_links = MONETAG_LINKS + ADSTERRA_LINKS
+        ad_link = random.choice(all_links)
 
         update_user_field(user_id, {"last_task_time": time.time(), "can_claim": True})
 
@@ -833,7 +832,7 @@ def handle_all_messages(message):
 
         bot.send_message(
             message.chat.id,
-            "🔗 নিচের লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং ১৫ সেকেন্ড পর ফিরে এসে 'Claim Reward' বাটনে ক্লিক করুন:",
+            f"🔗 নিচের লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং ১৫ সেকেন্ড পর ফিরে এসে 'Claim Reward' বাটনে ক্লিক করুন:\n\n📈 আজকের দেখা মোট এড: {daily_count}/30",
             reply_markup=markup
         )
 
@@ -846,8 +845,7 @@ def handle_all_messages(message):
         acc_msg = (
             f"🖥 **আপনার অ্যাকাউন্ট তথ্য**\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 নাম: 🧑‍💼 {first_name}\n"
-            f"🆔 আইডি: `{user_id}`\n"
+            f"👤 নাম: 🧑‍💼 {first_name}\n🆔 আইডি: `{user_id}`\n"
             f"📱 ফোন নম্বর: `{phone}`\n"
             f"💰 ব্যালেন্স: ${user_bal:.4f} USDT (={bdt_val:.2f} টাকা)\n"
             f"👥 মোট রেফার: {ref_count} জন\n"
@@ -897,16 +895,29 @@ def handle_all_messages(message):
             "━━━━━━━━━━━━━━━━━━━\n"
             "১. কোনো প্রকার ফেক বা মাল্টি-অ্যাকাউন্ট ব্যবহার করা যাবে না। ধরা পড়লে অ্যাকাউন্ট স্থায়ীভাবে ব্যান হবে।\n"
             "২. প্রতিদিন নিয়ম মেনে ৩০টি এড দেখতে হবে।\n"
-            "३. সঠিকভাবে পেমেন্ট নম্বর প্রদান করতে হবে। ভুল নম্বরে পেমেন্ট গেলে কর্তৃপক্ষ দায়ী নয়।\n"
+            "৩. সঠিকভাবে পেমেন্ট নম্বর প্রদান করতে হবে। ভুল নম্বরে পেমেন্ট গেলে কর্তৃপক্ষ দায়ী নয়।\n"
             "━━━━━━━━━━━━━━━━━━━"
         )
         bot.send_message(message.chat.id, rules_text, parse_mode="Markdown")
 
     elif text == "🔰 Whatsapp":
-        bot.send_message(message.chat.id, "🔰 আমাদের অফিশিয়াল হোয়াটসঅ্যাপ গ্রুপে যুক্ত হতে নিচের লিংকে ক্লিক করুন:\nhttps://whatsapp.com/channel/0029Vaexample")
+        whatsapp_link = "https://wa.me/qr/TLGSBEYHL74LD1"
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("💬 Connect with Admin", url=whatsapp_link))
+        bot.send_message(
+            message.chat.id, 
+            "✅ Whatsapp এডমিন লিংক: 👇\nhttps://wa.me/qr/TLGSBEYHL74LD1", 
+            reply_markup=markup
+        )
 
     elif text == "📩 Support":
-        bot.send_message(message.chat.id, "📩 কোনো সমস্যা বা সহযোগিতার জন্য সরাসরি অ্যাডমিনের সাথে যোগাযোগ করুন:\n👤 Admin: @{ADMIN_IDS[0]}")
+        support_text = (
+            "🌐 **ALL IN ONE** 🌐\n\n"
+            "🖇️ আমাদের সাপোর্ট গ্রুপ লিংক: https://t.me/allinoneg1\n\n"
+            "✅ টেলিগ্রাম এডমিন লিংক: @akadmin02\n\n"
+            "✅ Whatsapp এডমিন লিংক: 👇\nhttps://wa.me/qr/TLGSBEYHL74LD1"
+        )
+        bot.send_message(message.chat.id, support_text, parse_mode="Markdown", disable_web_page_preview=True)
 
     elif text == "📊 Status":
         all_u = get_all_active_users()
@@ -916,12 +927,11 @@ def handle_all_messages(message):
             f"📊 **বটের বর্তমান স্ট্যাটাস**\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"🌐 সার্ভার: ✅ অনলাইন (Online)\n"
-            f"👥 মোট মোট মেম্বার: {total_disp} জন\n"
+            f"👥 মোট মেম্বার: {total_disp} জন\n"
             f"━━━━━━━━━━━━━━━━━━━"
         )
         bot.send_message(message.chat.id, status_text, parse_mode="Markdown")
 
-# --- THREADS & MAIN RUN ---
 if __name__ == "__main__":
     t_flask = threading.Thread(target=run_flask)
     t_flask.daemon = True
