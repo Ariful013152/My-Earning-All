@@ -198,7 +198,7 @@ def add_payment_history(user_id, method, amount_usdt, amount_bdt, number):
 def get_all_active_users():
     if users_col is not None:
         try:
-            return list(users_col.find({"is_banned": False}))
+            return list(users_col.find({"is_banned": {"$ne": True}}))
         except Exception as e:
             print(f"Error fetching users: {e}")
     return [u for u in memory_users.values() if not u.get("is_banned", False)]
@@ -595,8 +595,9 @@ def handle_all_messages(message):
                     bot.copy_message(chat_id=u_id, from_chat_id=message.chat.id, message_id=message.message_id)
                     success += 1
                     time.sleep(0.04)
-                except Exception:
+                except Exception as e:
                     failed += 1
+                    print(f"Broadcast failed for {u_id}: {e}")
 
             bot.send_message(
                 message.chat.id,
@@ -814,38 +815,42 @@ def handle_all_messages(message):
             update_user_field(user_id, {"daily_count": 0, "last_reset": current_time})
 
         if daily_count >= 30:
-            bot.reply_to(message, "❌ আপনি আজকের ৩০টি এড দেখার লিমি트 পূরণ করেছেন! আগামিকাল আবার চেষ্টা করুন।")
+            bot.send_message(message.chat.id, "❌ আপনি আজকের ৩০টি এড দেখার লিমিট পূর্ণ করেছেন!")
             return
 
-        ad_link = random.choice(MONETAG_LINKS if random.random() > 0.5 else ADSTERRA_LINKS)
-        update_user_field(user_id, {"last_task_time": current_time, "can_claim": True})
+        # 랜덤 এড লিংক সিলেক্ট করা
+        ad_type = random.choice(["monetag", "adsterra"])
+        if ad_type == "monetag":
+            ad_link = random.choice(MONETAG_LINKS)
+        else:
+            ad_link = random.choice(ADSTERRA_LINKS)
+
+        update_user_field(user_id, {"last_task_time": time.time(), "can_claim": True})
 
         markup = InlineKeyboardMarkup()
         markup.add(InlineKeyboardButton("🌐 Visit Ad Link", url=ad_link))
-        markup.add(InlineKeyboardButton("🎁 Claim Reward", callback_data="claim_reward"))
+        markup.add(InlineKeyboardButton("✅ Claim Reward", callback_data="claim_reward"))
 
         bot.send_message(
             message.chat.id,
-            f"📺 **বিজ্ঞাপন দেখুন এবং ইনকাম করুন!**\n\n"
-            f"👉 প্রথমে নিচের **'Visit Ad Link'** বাটনে ক্লিক করে লিংকে ভিজিট করুন এবং ১৫ সেকেন্ড অপেক্ষা করুন।\n"
-            f"👉 এরপর **'Claim Reward'** বাটনে ক্লিক করে আপনার রিওয়ার্ড ক্লাইম করুন!\n\n"
-            f"📈 আজকের দেখা এড: {daily_count}/30",
-            reply_markup=markup,
-            parse_mode="Markdown"
+            "🔗 নিচের লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং ১৫ সেকেন্ড পর ফিরে এসে 'Claim Reward' বাটনে ক্লিক করুন:",
+            reply_markup=markup
         )
 
     elif text == "🖥 Account":
-        bdt_bal = balance * USDT_TO_BDT
+        user_bal = user.get("balance", 0.0)
+        bdt_val = user_bal * USDT_TO_BDT
+        phone = user.get("verified_phone", "ভেরিফাই করা হয়নি")
         ref_count = user.get("referrals_count", 0)
-        phone = user.get("verified_phone", "ভেরিফাই করা হয়নি")
+
         acc_msg = (
             f"🖥 **আপনার অ্যাকাউন্ট তথ্য**\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 নাম: {first_name}\n"
+            f"👤 নাম: 🧑‍💼 {first_name}\n"
             f"🆔 আইডি: `{user_id}`\n"
             f"📱 ফোন নম্বর: `{phone}`\n"
-            f"💰 ব্যালেন্স: **${balance:.4f} USDT** (={bdt_bal:.2f} টাকা)\n"
-            f"👥 মোট রেফার: **{ref_count}** জন\n"
+            f"💰 ব্যালেন্স: ${user_bal:.4f} USDT (={bdt_val:.2f} টাকা)\n"
+            f"👥 মোট রেফার: {ref_count} জন\n"
             f"━━━━━━━━━━━━━━━━━━━"
         )
         bot.send_message(message.chat.id, acc_msg, parse_mode="Markdown")
@@ -853,84 +858,87 @@ def handle_all_messages(message):
     elif text == "📜 Payment History":
         history = user.get("history", [])
         if not history:
-            bot.send_message(message.chat.id, "📜 আপনার কোনো পেমেন্ট হিস্ট্রি নেই!")
+            bot.send_message(message.chat.id, "📜 আপনার কোনো পেমেন্ট হিস্ট্রি নেই।")
             return
-        
-        hist_msg = "📜 **আপনার শেষ ৫টি উইথড্র হিস্ট্রি:**\n━━━━━━━━━━━━━━━━━━━\n"
+
+        hist_text = "📜 **আপনার শেষ ৫টি উইথড্র হিস্ট্রি:**\n━━━━━━━━━━━━━━━━━━━\n"
         for h in history[-5:]:
-            hist_msg += f"🌐 মেথড: {h.get('method')}\n💵 পরিমাণ: ${h.get('amount_usdt'):.3f} (={h.get('amount_bdt'):.2f} BDT)\n📱 নম্বর: `{h.get('number')}`\n📅 তারিখ: {h.get('date')}\n-------------------\n"
-        bot.send_message(message.chat.id, hist_msg, parse_mode="Markdown")
+            hist_text += f"📅 {h.get('date')}\n💳 {h.get('method')} - ${h.get('amount_usdt'):.3f} USDT ({h.get('amount_bdt'):.2f} BDT)\n📱 নম্বর: `{h.get('number')}`\n-------------------\n"
+        bot.send_message(message.chat.id, hist_text, parse_mode="Markdown")
 
     elif text == "✨ Referral":
         ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+        ref_count = user.get("referrals_count", 0)
         ref_msg = (
-            f"✨ **রেফার করে ইনকাম করুন!**\n"
+            f"✨ **রেফারেল প্রোগ্রাম**\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"প্রতিটি সফল রেফারে আপনি পাবেন **${REFERRAL_BONUS:.3f} USDT** বোনাস!\n\n"
-            f"🔗 আপনার রেফারেল লিংক:\n`{ref_link}`\n\n"
-            f"👉 এই লিংকটি আপনার বন্ধুদের সাথে শেয়ার করুন।"
+            f"আপনার রেফারেল লিংক:\n`{ref_link}`\n\n"
+            f"👥 মোট রেফারেল: **{ref_count}** জন\n"
+            f"🎁 প্রতি রেফারে বোনাস: **${REFERRAL_BONUS:.3f} USDT**\n"
+            f"━━━━━━━━━━━━━━━━━━━"
         )
         bot.send_message(message.chat.id, ref_msg, parse_mode="Markdown")
 
     elif text == "💸 Withdraw":
         if balance < MIN_WITHDRAW:
-            bot.send_message(message.chat.id, f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই!\nসর্বনিম্ন উইথড্র পরিমাণ **${MIN_WITHDRAW:.2f} USDT**। আপনার বর্তমান ব্যালেন্স: **${balance:.4f} USDT**", parse_mode="Markdown")
+            bot.send_message(message.chat.id, f"❌ সর্বনিম্ন উইথড্র পরিমাণ ${MIN_WITHDRAW:.2f} USDT। আপনার বর্তমান ব্যালেন্স ${balance:.4f} USDT।")
             return
-        
+
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
             InlineKeyboardButton("bKash", callback_data="w_method_bKash"),
             InlineKeyboardButton("Nagad", callback_data="w_method_Nagad")
         )
-        bot.send_message(message.chat.id, f"💸 **উইথড্র মেথড সিলেক্ট করুন**\n\nবর্তমান ব্যালেন্স: **${balance:.4f} USDT**", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, "💳 পেমেন্ট নেওয়ার জন্য আপনার মাধ্যমটি সিলেক্ট করুন:", reply_markup=markup)
 
     elif text == "🛑 Rule's":
         rules_text = (
-            "🛑 **বটের নিয়মাবলী ও শর্তসমূহ:**\n"
+            "🛑 **বটের নিয়মাবলী:**\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "১. একটি টেলিগ্রাম অ্যাকাউন্ট এবং একটি ফোন নম্বর দিয়ে একবারই অ্যাকাউন্ট খুলতে পারবেন। একাধিক অ্যাকাউন্ট খুললে বা ফেক রেফার করলে অ্যাকাউন্ট স্থায়ীভাবে ব্যান করা হবে।\n"
-            "২. প্রতিদিন নির্দিষ্ট সংখ্যক এড দেখতে হবে এবং নিয়ম মেনে কাজ করতে হবে।\n"
-            "৩. উইথড্র করার সময় সঠিক বিকাশ বা নগদ নম্বর প্রদান করতে হবে। ভুল নম্বরে পেমেন্ট গেলে কর্তৃপক্ষ দায়ী নয়।\n"
+            "১. কোনো প্রকার ফেক বা মাল্টি-অ্যাকাউন্ট ব্যবহার করা যাবে না। ধরা পড়লে অ্যাকাউন্ট স্থায়ীভাবে ব্যান হবে।\n"
+            "২. প্রতিদিন নিয়ম মেনে ৩০টি এড দেখতে হবে।\n"
+            "३. সঠিকভাবে পেমেন্ট নম্বর প্রদান করতে হবে। ভুল নম্বরে পেমেন্ট গেলে কর্তৃপক্ষ দায়ী নয়।\n"
             "━━━━━━━━━━━━━━━━━━━"
         )
         bot.send_message(message.chat.id, rules_text, parse_mode="Markdown")
 
     elif text == "🔰 Whatsapp":
-        bot.send_message(message.chat.id, "🔰 আমাদের অফিশিয়াল হোয়াটসঅ্যাপ গ্রুপে যুক্ত হতে নিচের লিংকে ক্লিক করুন:\n\n👉 [WhatsApp Group Link](https://whatsapp.com)", parse_mode="Markdown")
+        bot.send_message(message.chat.id, "🔰 আমাদের অফিশিয়াল হোয়াটসঅ্যাপ গ্রুপে যুক্ত হতে নিচের লিংকে ক্লিক করুন:\nhttps://whatsapp.com/channel/0029Vaexample")
 
     elif text == "📩 Support":
-        bot.send_message(message.chat.id, "📩 কোনো সমস্যা বা সহযোগিতার প্রয়োজন হলে আমাদের সাপোর্ট এডমিনের সাথে যোগাযোগ করুন:\n\n👉 Admin Support: @AdminSupportUsername")
+        bot.send_message(message.chat.id, "📩 কোনো সমস্যা বা সহযোগিতার জন্য সরাসরি অ্যাডমিনের সাথে যোগাযোগ করুন:\n👤 Admin: @{ADMIN_IDS[0]}")
 
     elif text == "📊 Status":
         all_u = get_all_active_users()
         real_users = len(all_u)
         total_disp = FAKE_USER_OFFSET + real_users
-        status_msg = (
-            f"📊 **বট স্ট্যাটাস ও তথ্য**\n"
+        status_text = (
+            f"📊 **বটের বর্তমান স্ট্যাটাস**\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"👥 মোট ব্যবহারকারী: **{total_disp}** জন\n"
-            f"🟢 সার্ভার স্ট্যাটাস: **Online (Active)**\n"
-            f"⚡ পেমেন্ট গেตওয়ে: **Instant Automated**\n"
+            f"🌐 সার্ভার: ✅ অনলাইন (Online)\n"
+            f"👥 মোট মোট মেম্বার: {total_disp} জন\n"
             f"━━━━━━━━━━━━━━━━━━━"
         )
-        bot.send_message(message.chat.id, status_msg, parse_mode="Markdown")
+        bot.send_message(message.chat.id, status_text, parse_mode="Markdown")
 
-# --- MAIN RUNNER (409 Conflict Fix & Startup) ---
+# --- THREADS & MAIN RUN ---
 if __name__ == "__main__":
-    # ১. Flask ওয়েব সার্ভার ব্যাকগ্রাউন্ড থ্রেডে চালু
-    threading.Thread(target=run_flask, daemon=True).start()
-    
-    # ২. অটো পোস্ট এবং নোটিফিকেশন লুপ থ্রেডে চালু
-    threading.Thread(target=auto_post_loop, daemon=True).start()
-    threading.Thread(target=inactivity_push_loop, daemon=True).start()
-    
-    # ৩. টেলিগ্রামের আগের সব সেশন বা ওয়েবহুক জোরপূর্বক মুছে ফেলা যাতে 409 Conflict না আসে
-    try:
-        bot.remove_webhook()
-        time.sleep(1)
-    except Exception as e:
-        print(f"Webhook remove error: {e}")
-    
-    print("Bot is starting polling...")
-    # ৪. ইনফিনিটি পোলিং চালু
-    bot.infinity_polling(none_stop=True, interval=1, timeout=30)
+    t_flask = threading.Thread(target=run_flask)
+    t_flask.daemon = True
+    t_flask.start()
+
+    t_auto = threading.Thread(target=auto_post_loop)
+    t_auto.daemon = True
+    t_auto.start()
+
+    t_push = threading.Thread(target=inactivity_push_loop)
+    t_push.daemon = True
+    t_push.start()
+
+    print("Bot is polling...")
+    while True:
+        try:
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            print(f"Polling error: {e}")
+            time.sleep(5)
