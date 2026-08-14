@@ -77,7 +77,6 @@ if MONGO_URI:
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
 
-# থ্রেড সংখ্যা বাড়িয়ে রেসপন্স ফাস্ট করা হয়েছে
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=50)
 app = Flask(__name__)
 
@@ -392,7 +391,7 @@ def admin_panel_cmd(message):
     admin_msg = (
         "👑 **অ্যাডমিন কন্ট্রোল প্যানেল (Admin Panel)**\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "নিچیর বাটনগুলো ব্যবহার করে বটের যাবতীয় কার্যক্রম ম্যানেজ করুন:"
+        "নিচের বাটনগুলো ব্যবহার করে বটের যাবতীয় কার্যক্রম ম্যানেজ করুন:"
     )
     bot.send_message(message.chat.id, admin_msg, reply_markup=admin_dashboard_keyboard(), parse_mode="Markdown")
 
@@ -752,9 +751,7 @@ def handle_all_messages(message):
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
             InlineKeyboardButton("bKash", callback_data="w_method_bKash"),
-            InlineKeyboardButton("Nagad", callback_data="w_method_Nagad"),
-            InlineKeyboardButton("Rocket", callback_data="w_method_Rocket"),
-            InlineKeyboardButton("Binance", callback_data="w_method_Binance")
+            InlineKeyboardButton("Nagad", callback_data="w_method_Nagad")
         )
         bot.send_message(
             message.chat.id,
