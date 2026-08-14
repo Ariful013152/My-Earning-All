@@ -406,6 +406,10 @@ def watch_ad_handler(message):
     user_id = message.from_user.id
     _, user = get_user(user_id, message.from_user.first_name)
     
+    if user.get("is_banned", False):
+        bot.reply_to(message, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
+        return
+
     if user.get("captcha_locked", False):
         bot.reply_to(message, "❌ আপনার অ্যাকাউন্টটি ক্যাপচা দ্বারা লক করা আছে! সঠিক উত্তর দিয়ে আনলক করুন।")
         return
@@ -509,6 +513,11 @@ def admin_ban_unban_callback(call):
 @bot.callback_query_handler(func=lambda call: call.data == "check_join")
 def check_join_callback(call):
     user_id = call.from_user.id
+    _, user_data = get_user(user_id, call.from_user.first_name)
+    if user_data.get("is_banned", False):
+        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
+        return
+
     if check_user_channels(user_id):
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -528,6 +537,10 @@ def claim_reward_callback(call):
     user_id = call.from_user.id
     _, user = get_user(user_id, call.from_user.first_name)
     
+    if user.get("is_banned", False):
+        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
+        return
+
     if user.get("captcha_locked", False):
         bot.answer_callback_query(call.id, "❌ আপনার অ্যাকাউন্টটি ক্যাপচা দ্বারা লক করা আছে! অনুগ্রহ করে ক্যাপচা পূরণ করুন।", show_alert=True)
         return
@@ -579,6 +592,11 @@ def claim_reward_callback(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("w_method_"))
 def withdraw_method_callback(call):
     user_id = call.from_user.id
+    _, user_data = get_user(user_id, call.from_user.first_name)
+    if user_data.get("is_banned", False):
+        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
+        return
+
     method = call.data.replace("w_method_", "")
     balance, _ = get_user(user_id)
     
@@ -604,6 +622,10 @@ def check_device_ip_callback(call):
     first_name = call.from_user.first_name
     _, user = get_user(user_id, first_name)
     
+    if user.get("is_banned", False):
+        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
+        return
+
     user_ip = user.get("temp_ip")
     if not user_ip:
         bot.answer_callback_query(call.id, "❌ আপনি এখনো ব্রাউজারে গিয়ে লিংকটি ওপেন করেননি!", show_alert=True)
@@ -712,6 +734,11 @@ def start_cmd(message):
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
     user_id = message.from_user.id
+    _, user_data = get_user(user_id, message.from_user.first_name)
+    if user_data.get("is_banned", False):
+        bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
+        return
+
     if message.contact is not None:
         phone_number = str(message.contact.phone_number).strip()
         
@@ -754,6 +781,13 @@ def handle_all_messages(message):
     user_id = message.from_user.id
     text = message.text.strip() if message.text else ""
     first_name = message.from_user.first_name
+
+    # --- এখানে ব্যান চেক যোগ করা হয়েছে (ব্যান ইউজার কোনো কমান্ড বা টেক্সট দিতে পারবে না) ---
+    _, user_data = get_user(user_id, first_name)
+    if user_data.get("is_banned", False):
+        bot.reply_to(message, "🚫 আপনার অ্যাকাউন্টটি ব্লক/ব্যান করা হয়েছে। আপনি এই বট ব্যবহার করতে পারবেন না।")
+        return
+    # ----------------------------------------------------------------------------------
 
     if text == "/cancel" and user_id in ADMIN_IDS:
         if user_id in admin_step:
@@ -803,11 +837,15 @@ def handle_all_messages(message):
                 f"👥 মোট রেফার: {ref_count} জন\n"
                 f"🚫 স্ট্যাটাস: {'🚫 Banned' if is_banned else '✅ Active'}\n━━━━━━━━━━━━━━━━━━━"
             )
+            
+            # --- অ্যাডমিন প্যানেল থেকে যেকোনো সময় Ban এবং Unban উভয় বাটন একসাথে পাওয়ার ব্যবস্থা ---
             markup = InlineKeyboardMarkup()
-            if is_banned:
-                markup.add(InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{target_id}"))
-            else:
-                markup.add(InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{target_id}"))
+            markup.row(
+                InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{target_id}"),
+                InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{target_id}")
+            )
+            # ---------------------------------------------------------------------------------
+
             bot.send_message(message.chat.id, msg, parse_mode="Markdown", reply_markup=markup)
             return
 
@@ -905,7 +943,6 @@ def handle_all_messages(message):
             
             check_duplicate_withdraw_number(user_id, first_name, number, method, amount_usdt, amount_bdt)
             
-            # --- রিয়েল ইউজার উইথড্র করার পর পেমেন্ট চ্যানেলে পোস্ট এবং অ্যাডমিনদের নোটিফিকেশন পাঠানোর কোড ---
             channel_msg = (
                 "My Earning All Payment\n"
                 "✅ Withdrawal Paid\n\n"
@@ -937,7 +974,6 @@ def handle_all_messages(message):
                     bot.send_message(admin_id, admin_alert, parse_mode="Markdown")
                 except Exception as e:
                     print(f"Admin notification error: {e}")
-            # -----------------------------------------------------------------------------------------
 
             bot.send_message(
                 message.chat.id,
