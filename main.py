@@ -70,14 +70,15 @@ memory_users = {}
 
 if MONGO_URI:
     try:
-        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000, maxPoolSize=100)
+        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000, maxPoolSize=100)
         db = client["telegram_bot"]
         users_col = db["users"]
         print("MongoDB Connected Successfully.")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
 
-bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=20)
+# থ্রেড সংখ্যা বাড়িয়ে রেসপন্স ফাস্ট করা হয়েছে
+bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=50)
 app = Flask(__name__)
 
 @app.route('/')
@@ -376,7 +377,7 @@ def watch_ad_handler(message):
         message.chat.id,
         f"📺 **বিজ্ঞাপন দেখুন এবং আয় করুন!**\n\n"
         f"👉 নিচের ভিজিট লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং অন্তত **১৫ সেকেন্ড** অপেক্ষা করুন।\n"
-        f"⏳ এরপর 'Claim Reward' বাটনে ক্লিক করে আপনার রিওয়ার্ড সংগ্রহ করুন।\n\n"
+        f"⏳ এরপর 'Claim Reward' বাটনে ক্লিক করে আপনার রিওয়ার্ড সংগ্রহ করুন。\n\n"
         f"📈 আজকের দেখা এড: {current_count}/30",
         reply_markup=markup,
         parse_mode="Markdown"
@@ -391,7 +392,7 @@ def admin_panel_cmd(message):
     admin_msg = (
         "👑 **অ্যাডমিন কন্ট্রোল প্যানেল (Admin Panel)**\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "নিচের বাটনগুলো ব্যবহার করে বটের যাবতীয় কার্যক্রম ম্যানেজ করুন:"
+        "নিچیর বাটনগুলো ব্যবহার করে বটের যাবতীয় কার্যক্রম ম্যানেজ করুন:"
     )
     bot.send_message(message.chat.id, admin_msg, reply_markup=admin_dashboard_keyboard(), parse_mode="Markdown")
 
@@ -489,7 +490,7 @@ def claim_reward_callback(call):
         bot.answer_callback_query(call.id, f"⏳ আরও {remaining} সেকেন্ড অপেক্ষা করুন!", show_alert=True)
         return
 
-    reward = 0.001  # প্রতি এড-এ ০.০০১ ডলার
+    reward = 0.001
     add_balance(user_id, reward)
     
     current_count = user.get("daily_count", 0) + 1
@@ -787,11 +788,20 @@ def handle_all_messages(message):
         return
 
     elif text == "🔰 Whatsapp":
-        bot.send_message(message.chat.id, "🔰 আমাদের অফিশিয়াল হোয়াটসঅ্যাপ গ্রুপে যুক্ত হতে নিচের লিংকে ক্লিক করুন:\nhttps://whatsapp.com/channel/005...")
+        bot.send_message(
+            message.chat.id,
+            "✅ Whatsapp এডমিন লিংক:\n👉 https://wa.me/qr/TLGSBEYHL74LD1"
+        )
         return
 
     elif text == "📩 Support":
-        bot.send_message(message.chat.id, "📩 কোনো সমস্যায় পড়লে আমাদের সাপোর্ট এডমিনের সাথে যোগাযোগ করুন: @SupportAdmin")
+        support_text = (
+            "🌐 ALL IN ONE 🌐\n\n"
+            "🖇️ আমাদের সাপোর্ট গ্রুপ লিংক: https://t.me/allinoneg1\n\n"
+            "✅ টেলিগ্রাম এডমিন লিংক: @akadmin02\n\n"
+            "✅ Whatsapp এডমিন লিংক: 👇\nhttps://wa.me/qr/TLGSBEYHL74LD1"
+        )
+        bot.send_message(message.chat.id, support_text)
         return
 
     elif text == "📊 Status":
@@ -919,7 +929,7 @@ if __name__ == "__main__":
     print("Bot is starting...")
     while True:
         try:
-            bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
+            bot.infinity_polling(skip_pending=True, timeout=20, long_polling_timeout=20)
         except Exception as e:
             print(f"Polling error: {e}")
-            time.sleep(5)
+            time.sleep(3)
