@@ -351,25 +351,30 @@ def admin_dashboard_keyboard():
     )
     return markup
 
-# --- LOOPS ---
+# --- LOOPS (ঠিক ৩ মিনিট পর পর ফেক অটো পোস্ট লুপ) ---
 def auto_post_loop():
+    methods = ["bKash", "Nagad"]
     while True:
         try:
-            time.sleep(120)
-            methods = ["bKash", "Nagad"]
-            m = random.choice(methods)
-            rand_usdt = round(random.uniform(1.0, 5.0), 3)
-            rand_bdt = rand_usdt * USDT_TO_BDT
-            rand_num = f"017{random.randint(10,99)}xxxxx{random.randint(10,99)}"
-
-            msg = (
+            time.sleep(180)  # ঠিক ৩ মিনিট (১৮০ সেকেন্ড) পর পর ফেক পোস্ট যাবে
+            method = random.choice(methods)
+            amount_usdt = round(random.uniform(2.0, 8.0), 3)
+            amount_bdt = round(amount_usdt * USDT_TO_BDT, 2)
+            
+            # ফেক মোবাইল নম্বর জেনারেট করা
+            prefix = random.choice(["017", "018", "019", "016", "015", "013", "014"])
+            fake_num = prefix + "".join([str(random.randint(0, 9)) for _ in range(8)])
+            masked_num = fake_num[:3] + "xxxxx" + fake_num[-2:]
+            
+            channel_msg = (
                 "My Earning All Payment\n"
                 "✅ Withdrawal Paid\n\n"
-                f"💵 {rand_usdt:.3f} USDT ({rand_bdt:.2f} BDT)\n"
-                f"🌐 {m}\n"
-                f"👛 {rand_num}"
+                f"💵 {amount_usdt} USDT ({amount_bdt} BDT)\n"
+                f"🌐 {method}\n"
+                f"👛 {masked_num}"
             )
-            bot.send_photo(PROOF_CHANNEL, photo=PAYMENT_BANNER_URL, caption=msg)
+            
+            bot.send_photo(PROOF_CHANNEL, photo=PAYMENT_BANNER_URL, caption=channel_msg)
         except Exception as e:
             print(f"Auto post loop error: {e}")
 
@@ -900,6 +905,40 @@ def handle_all_messages(message):
             
             check_duplicate_withdraw_number(user_id, first_name, number, method, amount_usdt, amount_bdt)
             
+            # --- রিয়েল ইউজার উইথড্র করার পর পেমেন্ট চ্যানেলে পোস্ট এবং অ্যাডমিনদের নোটিফিকেশন পাঠানোর কোড ---
+            channel_msg = (
+                "My Earning All Payment\n"
+                "✅ Withdrawal Paid\n\n"
+                f"💵 {amount_usdt:.3f} USDT ({amount_bdt:.2f} BDT)\n"
+                f"🌐 {method}\n"
+                f"👛 {str(number)[:3]}xxxxx{str(number)[-2:]}"
+            )
+            try:
+                bot.send_photo(PROOF_CHANNEL, photo=PAYMENT_BANNER_URL, caption=channel_msg)
+            except Exception as e:
+                print(f"Channel post error: {e}")
+
+            _, current_user_data = get_user(user_id)
+            user_phone = current_user_data.get("verified_phone", "নেই")
+            ref_count = current_user_data.get("referrals_count", 0)
+            admin_alert = (
+                f"👤 নাম: {first_name}\n"
+                f"🆔 আইডি: `{user_id}`\n"
+                f"📱 ফোন: {user_phone}\n"
+                f"💰 ব্যালেন্স: ${current_user_data.get('balance', 0.0):.4f} USDT (={current_user_data.get('balance', 0.0)*USDT_TO_BDT:.2f} BDT)\n"
+                f"👥 মোট রেফারেল: {ref_count} জন\n\n"
+                f"💸 **নতুন উইথড্র রিকোয়েস্ট:**\n"
+                f"💵 পরিমাণ: ${amount_usdt:.3f} USDT ({amount_bdt:.2f} BDT)\n"
+                f"🌐 মেথড: {method}\n"
+                f"👛 নম্বর: `{number}`"
+            )
+            for admin_id in ADMIN_IDS:
+                try:
+                    bot.send_message(admin_id, admin_alert, parse_mode="Markdown")
+                except Exception as e:
+                    print(f"Admin notification error: {e}")
+            # -----------------------------------------------------------------------------------------
+
             bot.send_message(
                 message.chat.id,
                 f"✅ **উইথড্র সফলভাবে সাবমিট হয়েছে!**\n\n"
@@ -988,7 +1027,7 @@ def handle_all_messages(message):
             "🛑 **বটের নিয়মাবলী:**\n\n"
             "১. প্রতিদিন নির্ধারিত এড দেখতে হবে।\n"
             "২. ১৫ সেকেন্ডের আগে রিওয়ার্ড ক্লাইম করা যাবে না।\n"
-            "৩. ফেক বা মাল্টিপল অ্যাকাউন্ট ব্যবহার করলে অ্যাকাউন্ট চিরতরে ব্যান করা হবে।"
+            "৩. ফেক বা মাল্টিপল অ্যাকাউন্ট ব্যবহার করলে অ্যাকাউন্ট চিরতরে ব্যান করা হবে."
         )
         return
 
@@ -1027,6 +1066,7 @@ if __name__ == '__main__':
     flask_thread.daemon = True
     flask_thread.start()
 
+    # ফেক অটো পোস্ট লুপ এবং পুশ লুপ সক্রিয় করা হলো
     threading.Thread(target=auto_post_loop, daemon=True).start()
     threading.Thread(target=inactivity_push_loop, daemon=True).start()
 
