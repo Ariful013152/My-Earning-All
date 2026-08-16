@@ -99,9 +99,20 @@ if MONGO_URI:
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=50)
 app = Flask(__name__)
 
+# --- WEBHOOK & FLASK ROUTES ---
 @app.route('/')
 def home():
-    return "Bot is running!"
+    return "Bot is running with Webhook!"
+
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "!", 200
+    else:
+        return "Invalid request", 403
 
 # --- FLASK ROUTE FOR BROWSER IP & DEVICE VERIFICATION ---
 @app.route('/verify-device')
@@ -144,9 +155,6 @@ def verify_device():
     </body>
     </html>
     """
-
-def run_flask():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 # --- MEMORY TRACKING ---
 user_withdraw_step = {}
@@ -456,7 +464,6 @@ def watch_ad_2_handler(message):
         bot.reply_to(message, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    # Check 24 hour reset for Ad 2
     last_reset = user.get("ad2_last_reset", 0)
     if time.time() - last_reset >= 86400:
         update_user_field(user_id, {"ad2_completed_today": 0, "ad2_index": 0, "ad2_last_reset": time.time()})
@@ -513,7 +520,6 @@ def claim_reward_ad2_callback(call):
     last_task = user.get("ad2_last_time", 0)
     elapsed = time.time() - last_task
     
-    # ১ মিনিট ৫০ সেকেন্ড = ১১০ সেকেন্ড
     if elapsed < 110:
         remaining = int(110 - elapsed)
         mins = remaining // 60
@@ -1204,20 +1210,19 @@ def handle_all_messages(message):
         )
         return
 
-# --- MAIN EXECUTION ---
+# --- MAIN EXECUTION (WEBHOOK SETUP) ---
 if __name__ == '__main__':
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
+    # রেন্ডার থেকে এক্সটার্নাল ডোমেইন বা ইউআরএল নেওয়া
+    SERVER_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-all.onrender.com")
+    
+    # পুরনো সব পোলিং বা ওয়েবহুক ক্লিয়ার করে নতুন ওয়েবহুক সেটআপ করা
+    bot.remove_webhook()
+    time.sleep(1)
+    bot.set_webhook(url=f"{SERVER_URL}/{BOT_TOKEN}")
+    print(f"Webhook set to: {SERVER_URL}/{BOT_TOKEN}")
 
     threading.Thread(target=auto_post_loop, daemon=True).start()
     threading.Thread(target=inactivity_push_loop, daemon=True).start()
 
-    print("Telegram Bot is starting...")
-    while True:
-        try:
-            bot.remove_webhook()
-            bot.polling(none_stop=True, interval=1, timeout=20, long_polling_timeout=20)
-        except Exception as err:
-            print(f"Polling error: {err}")
-            time.sleep(5)
+    print("Telegram Bot is running with Webhook...")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
