@@ -496,7 +496,7 @@ def watch_ad_2_handler(message):
         f"📌 **নির্দেশনা:**\n"
         f"১. উপরে **'Visit Link & Watch YouTube'** এ ক্লিক করে ব্রাউজারে যান এবং কাজ শেষ করুন।\n"
         f"২. কাজ শেষ করে যখন টেলিগ্রামে ফিরবেন, তখন নিচের **'✅ ব্রাউজার থেকে ফিরে এসেছি'** বাটনে ক্লিক করুন।\n"
-        f"৩. এরপর স্ক্রিনশট এখানে পাঠিয়ে দিন।\n\n"
+        f"৩. এরপর **একটি সিঙ্গেল স্ক্রিনশট** এখানে পাঠিয়ে দিন।\n\n"
         f"📈 আজকের সম্পন্ন লিংক: {ad2_count}/15",
         reply_markup=markup,
         parse_mode="Markdown"
@@ -509,7 +509,7 @@ def ad2_ready_callback(call):
     bot.answer_callback_query(call.id, "এখন আপনার স্ক্রিনশটটি এই চ্যাটে পাঠান!", show_alert=True)
     bot.send_message(
         call.message.chat.id,
-        "📸 **ধন্যবাদ!** এখন আপনার কাজের স্ক্রিনশটটি এই চ্যাটে পাঠিয়ে দিন।"
+        "📸 **ধন্যবাদ!** এখন আপনার কাজের **একটি সিঙ্গেল স্ক্রিনশট** এই চ্যাটে পাঠিয়ে দিন।"
     )
 
 @bot.message_handler(commands=['admin'])
@@ -807,6 +807,11 @@ def handle_photos_or_screenshots(message):
     if user.get("is_banned", False):
         return
 
+    # ইউজার যদি একসাথে একাধিক ছবি বা অ্যালবাম পাঠায়, তবে তা ব্লক করে সিঙ্গেল ছবি পাঠাতে বলা হবে
+    if message.media_group_id is not None:
+        bot.reply_to(message, "❌ একসাথে একাধিক ছবি পাঠানো যাবে না। দয়া করে **একটি সিঙ্গেল স্ক্রিনশট** পাঠান।")
+        return
+
     markup = InlineKeyboardMarkup()
     markup.row(
         InlineKeyboardButton("✅ Approve", callback_data=f"ad2_app_{user_id}"),
@@ -822,23 +827,15 @@ def handle_photos_or_screenshots(message):
     )
 
     try:
-        time.sleep(1.0)
-        bot.copy_message(chat_id=SCREENSHOT_REVIEW_CHANNEL, from_chat_id=message.chat.id, message_id=message.message_id)
-        bot.send_message(SCREENSHOT_REVIEW_CHANNEL, caption_text, parse_mode="Markdown", reply_markup=markup)
-        
-        bot.reply_to(message, "✅ আপনার স্ক্রিনশট সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে! অ্যাডমিন চেক করে ব্যালেন্স যুক্ত করে দেবেন।")
-        if user_id in user_ad2_state:
-            del user_ad2_state[user_id]
+        if message.photo:
+            file_id = message.photo[-1].file_id
+            bot.send_photo(SCREENSHOT_REVIEW_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
+            bot.reply_to(message, "✅ আপনার স্ক্রিনশট সফলভাবে পাঠানো হয়েছে! অ্যাডমিন চেক করে ব্যালেন্স যুক্ত করে দেবেন।")
+            if user_id in user_ad2_state:
+                del user_ad2_state[user_id]
     except Exception as e:
-        print(f"Screenshot copy error: {e}")
-        try:
-            if message.photo:
-                file_id = message.photo[-1].file_id
-                bot.send_photo(SCREENSHOT_REVIEW_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
-                bot.reply_to(message, "✅ আপনার স্ক্রিনশট সফলভাবে পাঠানো হয়েছে!")
-        except Exception as inner_e:
-            print(f"Inner photo send error: {inner_e}")
-            bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। দয়া করে **একটি করে সিঙ্গেল ছবি** পাঠান।")
+        print(f"Photo send error: {e}")
+        bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। দয়া করে **একটি সিঙ্গেল ছবি** পাঠান।")
 
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
