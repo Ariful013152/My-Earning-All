@@ -1216,7 +1216,8 @@ if __name__ == '__main__':
     print("Telegram Bot is starting...")
     while True:
         try:
-            bot.polling(none_stop=True, interval=0, timeout=20)
+            bot.remove_webhook()
+            bot.polling(none_stop=True, interval=1, timeout=20, long_polling_timeout=20)
         except Exception as err:
             print(f"Polling error: {err}")
             time.sleep(5)
