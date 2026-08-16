@@ -160,7 +160,7 @@ def verify_device():
 user_withdraw_step = {}
 user_captcha_step = {}
 admin_step = {}
-user_ad2_state = {}  # ইউজারের Watch Ad 2 প্রসেস ট্র্যাক করার জন্য
+user_ad2_state = {}
 
 def get_user(user_id, first_name="User", referred_by=None):
     current_now = time.time()
@@ -363,9 +363,7 @@ def main_menu_keyboard():
         KeyboardButton("📜 Payment History"),
         KeyboardButton("✨ Referral"),
         KeyboardButton("💸 Withdraw"),
-        KeyboardButton("🛑 Rule's"),
-        KeyboardButton("📩 Support"),
-        KeyboardButton("📊 Status")
+        KeyboardButton("📩 Support")
     )
     return markup
 
@@ -810,7 +808,6 @@ def handle_photos_or_screenshots(message):
     if user.get("is_banned", False):
         return
 
-    # চেক করা হচ্ছে ইউজার একসাথে দুটি ছবি (Album/Media Group) পাঠিয়েছে কিনা
     if not message.media_group_id:
         bot.reply_to(
             message,
@@ -833,7 +830,6 @@ def handle_photos_or_screenshots(message):
     )
 
     try:
-        # মিডিয়া গ্রুপ বা অ্যালবাম সঠিকভাবে ফরোয়ার্ড করার জন্য টেলিগ্রামের forward_message ব্যবহার করা হয়েছে
         bot.forward_message(chat_id=SCREENSHOT_REVIEW_CHANNEL, from_chat_id=message.chat.id, message_id=message.message_id)
         bot.send_message(SCREENSHOT_REVIEW_CHANNEL, caption_text, parse_mode="Markdown", reply_markup=markup)
         
@@ -1070,10 +1066,6 @@ def handle_all_messages(message):
         bot.send_message(message.chat.id, hist_text, parse_mode="Markdown")
         return
 
-    elif text == "🛑 Rule's":
-        bot.send_message(message.chat.id, "🛑 নিয়মাাবলী মেনে কাজ করুন। ফেক একাউন্ট করলে ব্যান করা হবে।")
-        return
-
     elif text == "📩 Support":
         bot.send_message(
             message.chat.id,
@@ -1081,16 +1073,6 @@ def handle_all_messages(message):
             "🖇️ আমাদের সাপোর্ট গ্রুপ লিংক: https://t.me/allinoneg1\n\n"
             "✅ টেলিগ্রাম এডমিন লিংক: @akadmin02\n\n"
             "✅ Whatsapp এডমিন লিংক: 👇\nhttps://wa.me/qr/TLGSBEYHL74LD1"
-        )
-        return
-
-    elif text == "📊 Status":
-        all_u = get_all_active_users()
-        real_users = len(all_u)
-        bot.send_message(
-            message.chat.id,
-            f"📊 **স্ট্যাটাস**\n━━━━━━━━━━━━━━━━━━━\n👥 মোট সক্রিয় ইউজার: **{FAKE_USER_OFFSET + real_users}** জন",
-            parse_mode="Markdown"
         )
         return
 
