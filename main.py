@@ -106,7 +106,6 @@ app = Flask(__name__)
 def home():
     return "Bot is running with Webhook!"
 
-# --- WEBHOOK ROUTE ---
 @app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -158,10 +157,10 @@ def verify_device():
     </html>
     """
 
-# --- MEMORY TRACKING ---
 user_withdraw_step = {}
 user_captcha_step = {}
 admin_step = {}
+user_ad2_state = {}  # ইউজারের Watch Ad 2 প্রসেস ট্র্যাক করার জন্য
 
 def get_user(user_id, first_name="User", referred_by=None):
     current_now = time.time()
@@ -350,7 +349,6 @@ def is_valid_bd_number(number_str):
             return True
     return False
 
-# --- KEYBOARDS ---
 def contact_keyboard():
     markup = ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     markup.add(KeyboardButton("📱 Share Contact", request_contact=True))
@@ -430,7 +428,6 @@ def inactivity_push_loop():
         except Exception as e:
             print(f"Inactivity push loop error: {e}")
 
-# --- WATCH AD HANDLER ---
 @bot.message_handler(func=lambda message: message.text == "📺 Watch Ad")
 def watch_ad_handler(message):
     user_id = message.from_user.id
@@ -469,7 +466,6 @@ def watch_ad_handler(message):
         parse_mode="Markdown"
     )
 
-# --- WATCH AD 2 HANDLER ---
 @bot.message_handler(func=lambda message: message.text == "📺 Watch Ad 2")
 def watch_ad_2_handler(message):
     user_id = message.from_user.id
@@ -490,26 +486,35 @@ def watch_ad_2_handler(message):
         bot.reply_to(message, "❌ আজকের ১৫টি লিংক ক্লিকের লিমিট শেষ! দয়া করে ২৪ ঘণ্টা পর আবার চেষ্টা করুন।")
         return
 
+    ad_link = random.choice(WATCH_AD_2_LINKS)
+
     markup = InlineKeyboardMarkup(row_width=1)
-    for idx, link in enumerate(WATCH_AD_2_LINKS, 1):
-        markup.add(InlineKeyboardButton(f"🔗 Visit Link {idx} (0.001 USDT)", url=link))
-    
+    markup.add(InlineKeyboardButton("🔗 Visit Link & Watch YouTube", url=ad_link))
+    markup.add(InlineKeyboardButton("✅ ব্রাউজার থেকে ফিরে এসেছি (স্ক্রিনশট পাঠান)", callback_data="ad2_ready_to_send"))
     markup.add(InlineKeyboardButton("🎥 কিভাবে কাজ করবেন (ভিডিও গাইড)", url=VIDEO_TUTORIAL_URL))
 
     bot.send_message(
         message.chat.id,
         f"📺 **Watch Ad 2 (Task Section)**\n\n"
         f"📌 **নির্দেশনা:**\n"
-        f"১. যেকোনো লিংকে ক্লিক করে ব্রাউজারে যাবেন এবং প্রথম স্ক্রিনশট নিবেন।\n"
-        f"২. কাজ শেষে ইউটিউবে যাওয়ার পর আরেকটি স্ক্রিনশট নিবেন।\n"
-        f"৩. টেলিগ্রামে ব্যাক এসে **উভয় স্ক্রিনশট একসাথে (Album হিসেবে)** এই চ্যাটে পাঠিয়ে দিন।\n"
-        f"💰 প্রতি লিংকের রিওয়ার্ড: ${REWARD_PER_LINK} USDT (০.১১ টাকা)\n"
+        f"১. উপরে **'Visit Link & Watch YouTube'** এ ক্লিক করে ব্রাউজারে যান এবং কাজ শেষ করুন।\n"
+        f"২. কাজ শেষ করে যখন টেলিগ্রামে ফিরবেন, তখন নিচের **'✅ ব্রাউজার থেকে ফিরে এসেছি'** বাটনে ক্লিক করুন।\n"
+        f"৩. এরপর দুটি স্ক্রিনশট একসাথে (Album হিসেবে) এখানে পাঠিয়ে দিন।\n\n"
         f"📈 আজকের সম্পন্ন লিংক: {ad2_count}/15",
         reply_markup=markup,
         parse_mode="Markdown"
     )
 
-# --- ADMIN PANEL ---
+@bot.callback_query_handler(func=lambda call: call.data == "ad2_ready_to_send")
+def ad2_ready_callback(call):
+    user_id = call.from_user.id
+    user_ad2_state[user_id] = True
+    bot.answer_callback_query(call.id, "এখন আপনার স্ক্রিনশট দুটি একসাথে (Album হিসেবে) পাঠান!", show_alert=True)
+    bot.send_message(
+        call.message.chat.id,
+        "📸 **ধন্যবাদ!** এখন ব্রাউজার এবং ইউটিউব কাজের **দুটি স্ক্রিনশট একসাথে (Album বা গ্রুপ করে) এই চ্যাটে পাঠিয়ে দিন।**"
+    )
+
 @bot.message_handler(commands=['admin'])
 def admin_panel_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -828,8 +833,13 @@ def handle_photos_or_screenshots(message):
     )
 
     try:
-        bot.copy_message(chat_id=SCREENSHOT_REVIEW_CHANNEL, from_chat_id=message.chat.id, message_id=message.message_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
+        # মিডিয়া গ্রুপ বা অ্যালবাম সঠিকভাবে ফরোয়ার্ড করার জন্য টেলিগ্রামের forward_message ব্যবহার করা হয়েছে
+        bot.forward_message(chat_id=SCREENSHOT_REVIEW_CHANNEL, from_chat_id=message.chat.id, message_id=message.message_id)
+        bot.send_message(SCREENSHOT_REVIEW_CHANNEL, caption_text, parse_mode="Markdown", reply_markup=markup)
+        
         bot.reply_to(message, "✅ আপনার স্ক্রিনশটগুলো সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে! শীঘ্রই রিভিউ করে পেমেন্ট দেওয়া হবে।")
+        if user_id in user_ad2_state:
+            del user_ad2_state[user_id]
     except Exception as e:
         print(f"Screenshot forward error: {e}")
         bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।")
