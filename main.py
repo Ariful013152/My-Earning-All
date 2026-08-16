@@ -517,7 +517,7 @@ def claim_reward_ad2_callback(call):
     if elapsed < 110:
         remaining = int(110 - elapsed)
         mins = remaining // 60
-secs = remaining % 60
+        secs = remaining % 60
         bot.answer_callback_query(
             call.id, 
             f"❌ ১ মিনিট ৫০ সেকেন্ডের আগে ক্লেম করা যাবে না! আরও {mins} মিনিট {secs} সেকেন্ড অপেক্ষা করুন।", 
@@ -1039,7 +1039,7 @@ def handle_all_messages(message):
         elif step_data['step'] == 'number':
             number = text
             if not is_valid_bd_number(number):
-                bot.reply_to(message, "❌ ভুল নম্বর! সঠিক ১১ ডিজিটের বাংলাদেশি বিকাশ/নগদ নম্বর দিন (যেমন: 017xxxxxxxx):")
+                bot.reply_to(message, "❌ ভুল নম্বর! সঠিক ১১ ডিজিটের বিকাশ/নগদ নম্বর দিন (যেমন: 017xxxxxxxx):")
                 return
                 
             method = step_data['method']
