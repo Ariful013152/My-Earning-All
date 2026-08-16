@@ -22,7 +22,7 @@ REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
 
 # স্ক্রিনশট সাবমিট হওয়ার নির্দিষ্ট চ্যানেল (আপনার দেওয়া লিংক অনুযায়ী)
-SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"[cite: 2]
+SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"
 
 PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
 
