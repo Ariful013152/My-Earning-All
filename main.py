@@ -21,7 +21,7 @@ BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
 
-# স্ক্রিনশট সাবমিট হওয়ার নির্দিষ্ট চ্যানেল (আপনার দেওয়া লিংক অনুযায়ী)
+# স্ক্রিনশট সাবমিট হওয়ার নির্দিষ্ট চ্যানেল
 SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"
 
 PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
@@ -452,7 +452,7 @@ def watch_ad_handler(message):
         parse_mode="Markdown"
     )
 
-# --- WATCH AD 2 HANDLER (UPDATED FOR SCREENSHOT SUBMISSION) ---
+# --- WATCH AD 2 HANDLER ---
 @bot.message_handler(func=lambda message: message.text == "📺 Watch Ad 2")
 def watch_ad_2_handler(message):
     user_id = message.from_user.id
@@ -469,7 +469,7 @@ def watch_ad_2_handler(message):
 
     completed_today = user.get("ad2_completed_today", 0)
     if completed_today >= 15:
-        bot.reply_to(message, "❌ আপনার আজকের ১৫টি লিংকের কাজ সম্পন্ন হয়েছে! লিমিট রিসেট হবে ২৪ ঘণ্টা পর।")
+        bot.reply_to(message, "❌ আপনার আজকের ১৫টি লিংকের কাজ সম্পন্ন হয়েছে! লিমিট রিসেট হবে ২৪ ঘণ্টা পর።")
         return
 
     current_index = user.get("ad2_index", 0)
@@ -477,24 +477,28 @@ def watch_ad_2_handler(message):
         current_index = 0
 
     ad_link = WATCH_AD_2_LINKS[current_index]
-    bdt_val = 0.001 * USDT_TO_BDT
 
     user_waiting_screenshot.add(user_id)
 
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
-        InlineKeyboardButton("🌐 Visit Link & Watch YouTube", url=ad_link),
+        InlineKeyboardButton("🔗 Visit Link", url=ad_link),
         InlineKeyboardButton("📹 কিভাবে কাজ করবেন (ভিডিও)", url="https://t.me/allinoneg1/843")
+    )
+
+    text_msg = (
+        "📺 Watch Ad 2 - টাস্ক পেজ\n\n"
+        "👉 নিচের Visit Link 🔗 \n"
+        "      এ ক্লিক করে ShrinkMe পার হয়ে \n"
+        "📸 ইউটিউব এ নিয়ে যাবে তার পর একটি স্ক্রিনশট নিয়ে সরাসরি এই বটে চ্যাটে পাঠিয়ে দিন!\n"
+        "⚠️ স্ক্রিনশট পাঠানোর সাথে সাথে সেটি অ্যাডমিনের কাছে চলে যাবে এবং অ্যাপ্রুভ হলে ব্যালেন্সে টাকা যোগ হবে።\n\n"
+        f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.11 টাকা)\n"
+        f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
     )
 
     bot.send_message(
         message.chat.id,
-        f"📺 **Watch Ad 2 - টাস্ক পেজ**\n\n"
-        f"👉 নিচের **Visit Link & Watch YouTube** এ ক্লিক করে ShrinkMe পার হয়ে সরাসরি ইউটিউব ভিডিওটি সম্পূর্ণ দেখুন।\n"
-        f"📸 ইউটিউব ভিডিও দেখার পর তার একটি **স্ক্রিনশট** সরাসরি এই বটে চ্যাটে পাঠিয়ে দিন!\n"
-        f"⚠️ স্ক্রিনশট পাঠানোর সাথে সাথে সেটি অ্যাডমিনের কাছে চলে যাবে এবং অ্যাপ্রুভ হলে ব্যালেন্সে টাকা যোগ হবে।\n\n"
-        f"💵 প্রতি কাজের রিওয়ার্ড: `0.001 USDT` (={bdt_val:.2f} টাকা)\n"
-        f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
+        text_msg,
         reply_markup=markup,
         parse_mode="Markdown"
     )
@@ -603,7 +607,7 @@ def screenshot_approval_callback(call):
         try:
             bot.send_message(
                 target_user_id,
-                "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন।",
+                "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.",
                 reply_markup=main_menu_keyboard()
             )
         except:
@@ -937,7 +941,7 @@ def handle_contact(message):
                 message.chat.id,
                 "🛡️ বটটি ব্যবহার করার জন্য আপনাকে সিকিউরিটি ভেরিফিকেশন সম্পন্ন করতে হবে:\n\n"
                 "👉 **ধাপ ১:** 'ব্রাউজারে গিয়ে চেক করুন' বাটনে ক্লিক করে ব্রাউজারে যান।\n"
-                "👉 **ধাপ ২:** ব্রাউজার থেকে টেলিগ্রামে ফিরে এসে 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন।",
+                "👉 **ধাপ ২:** ব্রাউজার থেকে টেলিগ্রামে ফিরে এসে 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন.",
                 reply_markup=markup,
                 parse_mode="Markdown"
             )
@@ -1224,7 +1228,8 @@ def handle_all_messages(message):
             message.chat.id,
             "🌐 ALL IN ONE 🌐\n\n"
             "🖇️ আমাদের সাপোর্ট গ্রুপ লিংক: https://t.me/allinoneg1\n\n"
-            "✅ টেলিগ্রাম এডমিন লিংক: @akadmin02"
+            "✅ টেলিগ্রাম এডমিন লিংক: @akadmin02\n\n"
+            "✅ Whatsapp এডমিন লিংক: 👇 https://wa.me/qr/TLGSBEYHL74LD1"
         )
         return
 
