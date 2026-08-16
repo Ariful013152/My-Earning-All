@@ -823,7 +823,8 @@ def handle_photos_or_screenshots(message):
     )
 
     try:
-        # forward_message এর পরিবর্তে copy_message ব্যবহার করা হয়েছে যাতে অ্যালবাম বা সিঙ্গেল ছবিতে কোনো এরর না আসে
+        # টেলিগ্রাম অ্যালবামের কনফ্লিক্ট এড়াতে সামান্য বিরতি দিয়ে মেসেজ হ্যান্ডেল করা হবে
+        time.sleep(0.5)
         bot.copy_message(chat_id=SCREENSHOT_REVIEW_CHANNEL, from_chat_id=message.chat.id, message_id=message.message_id)
         bot.send_message(SCREENSHOT_REVIEW_CHANNEL, caption_text, parse_mode="Markdown", reply_markup=markup)
         
