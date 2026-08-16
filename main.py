@@ -497,7 +497,7 @@ def watch_ad_2_handler(message):
         f"📌 **নির্দেশনা:**\n"
         f"১. উপরে **'Visit Link & Watch YouTube'** এ ক্লিক করে ব্রাউজারে যান এবং কাজ শেষ করুন।\n"
         f"২. কাজ শেষ করে যখন টেলিগ্রামে ফিরবেন, তখন নিচের **'✅ ব্রাউজার থেকে ফিরে এসেছি'** বাটনে ক্লিক করুন।\n"
-        f"৩. এরপর দুটি স্ক্রিনশট একসাথে (Album হিসেবে) এখানে পাঠিয়ে দিন।\n\n"
+        f"৩. এরপর স্ক্রিনশট এখানে পাঠিয়ে দিন।\n\n"
         f"📈 আজকের সম্পন্ন লিংক: {ad2_count}/15",
         reply_markup=markup,
         parse_mode="Markdown"
@@ -507,10 +507,10 @@ def watch_ad_2_handler(message):
 def ad2_ready_callback(call):
     user_id = call.from_user.id
     user_ad2_state[user_id] = True
-    bot.answer_callback_query(call.id, "এখন আপনার স্ক্রিনশট দুটি একসাথে (Album হিসেবে) পাঠান!", show_alert=True)
+    bot.answer_callback_query(call.id, "এখন আপনার স্ক্রিনশটটি এই চ্যাটে পাঠান!", show_alert=True)
     bot.send_message(
         call.message.chat.id,
-        "📸 **ধন্যবাদ!** এখন ব্রাউজার এবং ইউটিউব কাজের **দুটি স্ক্রিনশট একসাথে (Album বা গ্রুপ করে) এই চ্যাটে পাঠিয়ে দিন।**"
+        "📸 **ধন্যবাদ!** এখন আপনার কাজের স্ক্রিনশটটি এই চ্যাটে পাঠিয়ে দিন।"
     )
 
 @bot.message_handler(commands=['admin'])
@@ -808,13 +808,6 @@ def handle_photos_or_screenshots(message):
     if user.get("is_banned", False):
         return
 
-    if not message.media_group_id:
-        bot.reply_to(
-            message,
-            "❌ অনুগ্রহ করে ব্রাউজার এবং ইউটিউব কাজের **দুটি স্ক্রিনশট একসাথে (Album হিসেবে)** সিলেক্ট করে পাঠান। একটি ছবি পাঠালে তা গ্রহণ করা হবে না।"
-        )
-        return
-
     markup = InlineKeyboardMarkup()
     markup.row(
         InlineKeyboardButton("✅ Approve", callback_data=f"ad2_app_{user_id}"),
@@ -833,7 +826,7 @@ def handle_photos_or_screenshots(message):
         bot.forward_message(chat_id=SCREENSHOT_REVIEW_CHANNEL, from_chat_id=message.chat.id, message_id=message.message_id)
         bot.send_message(SCREENSHOT_REVIEW_CHANNEL, caption_text, parse_mode="Markdown", reply_markup=markup)
         
-        bot.reply_to(message, "✅ আপনার স্ক্রিনশটগুলো সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে! শীঘ্রই রিভিউ করে পেমেন্ট দেওয়া হবে।")
+        bot.reply_to(message, "✅ আপনার স্ক্রিনশট সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে! শীঘ্রই পেমেন্ট পেয়ে যাবেন।")
         if user_id in user_ad2_state:
             del user_ad2_state[user_id]
     except Exception as e:
