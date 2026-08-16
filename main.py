@@ -64,6 +64,25 @@ ADSTERRA_LINKS = [
     'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
 ]
 
+# --- WATCH AD 2 15 SHRINKME LINKS ---
+WATCH_AD_2_LINKS = [
+    'https://shrinkme.click/g2qGUb',
+    'https://shrinkme.click/8Uar',
+    'https://shrinkme.click/ptEvVdG',
+    'https://shrinkme.click/ndirPw',
+    'https://shrinkme.click/LwsLmzvi',
+    'https://shrinkme.click/p4MaWq3R',
+    'https://shrinkme.click/0jOAuZOk',
+    'https://shrinkme.click/EIZYof',
+    'https://shrinkme.click/ALuVs5',
+    'https://shrinkme.click/9SB8',
+    'https://shrinkme.click/UYMQ',
+    'https://shrinkme.click/ven3VA7p',
+    'https://shrinkme.click/xTRge',
+    'https://shrinkme.click/MjwBLrK',
+    'https://shrinkme.click/U9Tetn2'
+]
+
 # --- DATABASE SETUP ---
 users_col = None
 memory_users = {}
@@ -138,29 +157,37 @@ admin_step = {}
 def get_user(user_id, first_name="User", referred_by=None):
     current_now = time.time()
     
+    default_user_data = {
+        "user_id": user_id, 
+        "first_name": str(first_name)[:30],
+        "balance": 0.0, 
+        "daily_count": 0,
+        "last_reset": current_now,
+        "last_task_time": 0,
+        "can_claim": False,
+        "captcha_locked": False,
+        "referred_by": referred_by,
+        "referrals_count": 0,
+        "ref_reward_given": False,
+        "is_banned": False,
+        "verified_phone": None,
+        "device_verified": False,
+        "last_ip": None,
+        "temp_ip": None,
+        "history": [],
+        "last_active": current_now,
+        "last_inactivity_push": 0,
+        # Watch Ad 2 fields
+        "ad2_index": 0,
+        "ad2_last_time": 0,
+        "ad2_can_claim": False,
+        "ad2_completed_today": 0,
+        "ad2_last_reset": current_now
+    }
+
     if users_col is None:
         if user_id not in memory_users:
-            memory_users[user_id] = {
-                "user_id": user_id, 
-                "first_name": str(first_name)[:30],
-                "balance": 0.0, 
-                "daily_count": 0,
-                "last_reset": current_now,
-                "last_task_time": 0,
-                "can_claim": False,
-                "captcha_locked": False,
-                "referred_by": referred_by,
-                "referrals_count": 0,
-                "ref_reward_given": False,
-                "is_banned": False,
-                "verified_phone": None,
-                "device_verified": False,
-                "last_ip": None,
-                "temp_ip": None,
-                "history": [],
-                "last_active": current_now,
-                "last_inactivity_push": 0
-            }
+            memory_users[user_id] = default_user_data
         else:
             memory_users[user_id]["last_active"] = current_now
         return memory_users[user_id].get("balance", 0.0), memory_users[user_id]
@@ -168,27 +195,7 @@ def get_user(user_id, first_name="User", referred_by=None):
     try:
         user = users_col.find_one({"user_id": user_id})
         if not user:
-            user = {
-                "user_id": user_id, 
-                "first_name": str(first_name)[:30],
-                "balance": 0.0, 
-                "daily_count": 0,
-                "last_reset": current_now,
-                "last_task_time": 0,
-                "can_claim": False,
-                "captcha_locked": False,
-                "referred_by": referred_by,
-                "referrals_count": 0,
-                "ref_reward_given": False,
-                "is_banned": False,
-                "verified_phone": None,
-                "device_verified": False,
-                "last_ip": None,
-                "temp_ip": None,
-                "history": [],
-                "last_active": current_now,
-                "last_inactivity_push": 0
-            }
+            user = default_user_data
             users_col.insert_one(user)
             
             if referred_by:
@@ -206,7 +213,7 @@ def get_user(user_id, first_name="User", referred_by=None):
         return user.get("balance", 0.0), user
     except Exception as e:
         print(f"DB Error: {e}")
-        return 0.0, {"user_id": user_id, "first_name": first_name, "balance": 0.0, "is_banned": False, "verified_phone": None, "device_verified": False}
+        return 0.0, default_user_data
 
 def update_user_field(user_id, field_dict):
     if users_col is not None:
@@ -328,6 +335,7 @@ def main_menu_keyboard():
     markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.add(
         KeyboardButton("📺 Watch Ad"),
+        KeyboardButton("📺 Watch Ad 2"),
         KeyboardButton("🖥 Account"),
         KeyboardButton("📜 Payment History"),
         KeyboardButton("✨ Referral"),
@@ -351,17 +359,16 @@ def admin_dashboard_keyboard():
     )
     return markup
 
-# --- LOOPS (ঠিক ৩ মিনিট পর পর ফেক অটো পোস্ট লুপ) ---
+# --- LOOPS ---
 def auto_post_loop():
     methods = ["bKash", "Nagad"]
     while True:
         try:
-            time.sleep(180)  # ঠিক ৩ মিনিট (১৮০ সেকেন্ড) পর পর ফেক পোস্ট যাবে
+            time.sleep(180)
             method = random.choice(methods)
             amount_usdt = round(random.uniform(2.0, 8.0), 3)
             amount_bdt = round(amount_usdt * USDT_TO_BDT, 2)
             
-            # ফেক মোবাইল নম্বর জেনারেট করা
             prefix = random.choice(["017", "018", "019", "016", "015", "013", "014"])
             fake_num = prefix + "".join([str(random.randint(0, 9)) for _ in range(8)])
             masked_num = fake_num[:3] + "xxxxx" + fake_num[-2:]
@@ -392,7 +399,7 @@ def inactivity_push_loop():
                 if (current_now - last_act >= day_in_seconds) and (current_now - last_push >= day_in_seconds):
                     u_id = u.get("user_id")
                     try:
-                        bot.send_message(u_id, "আজকের ৩০টি এড দেখে আপনার আয় নিশ্চিত করুন!")
+                        bot.send_message(u_id, "আজকের এডগুলো দেখে আপনার আয় নিশ্চিত করুন!")
                         update_user_field(u_id, {"last_inactivity_push": current_now})
                         time.sleep(0.05)
                     except Exception as push_err:
@@ -439,6 +446,115 @@ def watch_ad_handler(message):
         parse_mode="Markdown"
     )
 
+# --- WATCH AD 2 HANDLER ---
+@bot.message_handler(func=lambda message: message.text == "📺 Watch Ad 2")
+def watch_ad_2_handler(message):
+    user_id = message.from_user.id
+    _, user = get_user(user_id, message.from_user.first_name)
+    
+    if user.get("is_banned", False):
+        bot.reply_to(message, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
+        return
+
+    # Check 24 hour reset for Ad 2
+    last_reset = user.get("ad2_last_reset", 0)
+    if time.time() - last_reset >= 86400:
+        update_user_field(user_id, {"ad2_completed_today": 0, "ad2_index": 0, "ad2_last_reset": time.time()})
+        _, user = get_user(user_id)
+
+    completed_today = user.get("ad2_completed_today", 0)
+    if completed_today >= 15:
+        bot.reply_to(message, "❌ আপনার আজকের ১৫টি লিংকের কাজ সম্পন্ন হয়েছে! লিমিট রিসেট হবে ২৪ ঘণ্টা পর।")
+        return
+
+    current_index = user.get("ad2_index", 0)
+    if current_index >= len(WATCH_AD_2_LINKS):
+        current_index = 0
+
+    ad_link = WATCH_AD_2_LINKS[current_index]
+    current_time = time.time()
+    
+    update_user_field(user_id, {"ad2_last_time": current_time, "ad2_can_claim": True})
+
+    bdt_val = 0.001 * USDT_TO_BDT
+
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        InlineKeyboardButton("🌐 Visit Link", url=ad_link),
+        InlineKeyboardButton("📹 কিভাবে কাজ করবেন (ভিডিও)", url="https://t.me/allinoneg1/843"),
+        InlineKeyboardButton("🎁 Claim Reward", callback_data="claim_reward_ad2")
+    )
+
+    bot.send_message(
+        message.chat.id,
+        f"📺 **Watch Ad 2 - অফার পেজ**\n\n"
+        f"👉 নিচের **Visit Link** এ ক্লিক করে লিংকে ভিজিট করুন।\n"
+        f"⚠️ **সতর্কতা:** যে লিংক একবার ক্লিক করবেন, সেই লিংকে পুনরায় ক্লিক করে ব্রাউজারে রিডাইরেক্ট হওয়া থেকে বিরত থাকুন। একই লিংকে বারবার কাজ হবে না।\n"
+        f"⏳ আপনাকে অন্তত **১ মিনিট ৫০ সেকেন্ড (১১০ সেকেন্ড)** অপেক্ষা করতে হবে। এর আগে ক্লিক করলে রিওয়ার্ড পাবেন না!\n\n"
+        f"💵 প্রতি লিংকের রিওয়ার্ড: `0.001 USDT` (={`{bdt_val:.2f}`} টাকা)\n"
+        f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data == "claim_reward_ad2")
+def claim_reward_ad2_callback(call):
+    user_id = call.from_user.id
+    _, user = get_user(user_id, call.from_user.first_name)
+    
+    if user.get("is_banned", False):
+        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
+        return
+
+    if not user.get("ad2_can_claim", False):
+        bot.answer_callback_query(call.id, "❌ আপনি ইতিমধ্যে এই রিওয়ার্ড ক্লাইম করেছেন বা নতুন লিংক শুরু করুন!", show_alert=True)
+        return
+        
+    last_task = user.get("ad2_last_time", 0)
+    elapsed = time.time() - last_task
+    
+    # ১ মিনিট ৫০ সেকেন্ড = ১১০ সেকেন্ড
+    if elapsed < 110:
+        remaining = int(110 - elapsed)
+        mins = remaining // 60
+secs = remaining % 60
+        bot.answer_callback_query(
+            call.id, 
+            f"❌ ১ মিনিট ৫০ সেকেন্ডের আগে ক্লেম করা যাবে না! আরও {mins} মিনিট {secs} সেকেন্ড অপেক্ষা করুন।", 
+            show_alert=True
+        )
+        return
+
+    reward = 0.001
+    add_balance(user_id, reward)
+    
+    completed_today = user.get("ad2_completed_today", 0) + 1
+    next_index = user.get("ad2_index", 0) + 1
+    
+    update_user_field(user_id, {
+        "ad2_can_claim": False, 
+        "ad2_completed_today": completed_today,
+        "ad2_index": next_index
+    })
+    
+    try:
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    except:
+        pass
+        
+    if completed_today >= 15:
+        bot.send_message(
+            call.message.chat.id,
+            "🎉 অভিনন্দন! আপনি সফলভাবে Watch Ad 2 এর ১৫টি লিংকের কাজ সম্পন্ন করেছেন!\n\nআপনার সেশন লিমি트 শেষ হয়েছে। ২৪ ঘণ্টা পর আবার কাজ করতে পারবেন।",
+            reply_markup=main_menu_keyboard()
+        )
+    else:
+        bot.send_message(
+            call.message.chat.id,
+            f"🎉 অভিনন্দন! আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন।\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
+            reply_markup=main_menu_keyboard()
+        )
+
 # --- ADMIN PANEL ---
 @bot.message_handler(commands=['admin'])
 def admin_panel_cmd(message):
@@ -448,7 +564,7 @@ def admin_panel_cmd(message):
     admin_msg = (
         "👑 **অ্যাডমিন কন্ট্রোল প্যানেল (Admin Panel)**\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "নিچیর বাটনগুলো ব্যবহার করে বটের যাবতীয় কার্যক্রম ম্যানেজ করুন:"
+        "নিচের বাটনগুলো ব্যবহার করে বটের যাবতীয় কার্যক্রম ম্যানেজ করুন:"
     )
     bot.send_message(message.chat.id, admin_msg, reply_markup=admin_dashboard_keyboard(), parse_mode="Markdown")
 
@@ -782,12 +898,10 @@ def handle_all_messages(message):
     text = message.text.strip() if message.text else ""
     first_name = message.from_user.first_name
 
-    # --- এখানে ব্যান চেক যোগ করা হয়েছে (ব্যান ইউজার কোনো কমান্ড বা টেক্সট দিতে পারবে না) ---
     _, user_data = get_user(user_id, first_name)
     if user_data.get("is_banned", False):
         bot.reply_to(message, "🚫 আপনার অ্যাকাউন্টটি ব্লক/ব্যান করা হয়েছে। আপনি এই বট ব্যবহার করতে পারবেন না।")
         return
-    # ----------------------------------------------------------------------------------
 
     if text == "/cancel" and user_id in ADMIN_IDS:
         if user_id in admin_step:
@@ -795,7 +909,6 @@ def handle_all_messages(message):
         bot.send_message(message.chat.id, "❌ অ্যাডমিন অপারেশন বাতিল করা হয়েছে।")
         return
 
-    # Admin Step Handlers
     if user_id in ADMIN_IDS and user_id in admin_step:
         state = admin_step[user_id].get("action")
         if state == "broadcast":
@@ -838,13 +951,11 @@ def handle_all_messages(message):
                 f"🚫 স্ট্যাটাস: {'🚫 Banned' if is_banned else '✅ Active'}\n━━━━━━━━━━━━━━━━━━━"
             )
             
-            # --- অ্যাডমিন প্যানেল থেকে যেকোনো সময় Ban এবং Unban উভয় বাটন একসাথে পাওয়ার ব্যবস্থা ---
             markup = InlineKeyboardMarkup()
             markup.row(
                 InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{target_id}"),
                 InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{target_id}")
             )
-            # ---------------------------------------------------------------------------------
 
             bot.send_message(message.chat.id, msg, parse_mode="Markdown", reply_markup=markup)
             return
@@ -891,7 +1002,6 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, "❌ সঠিক সংখ্যা লিখুন!")
             return
 
-    # Captcha Handler
     if user_id in user_captcha_step:
         try:
             ans = int(text)
@@ -906,7 +1016,6 @@ def handle_all_messages(message):
             bot.reply_to(message, "❌ দয়া করে সঠিক সংখ্যা লিখে উত্তর দিন:")
         return
 
-    # Withdraw Step Handler
     if user_id in user_withdraw_step:
         step_data = user_withdraw_step[user_id]
         if step_data['step'] == 'amount':
@@ -987,7 +1096,6 @@ def handle_all_messages(message):
             )
             return
 
-    # Menus handler
     if text == "🖥 Account":
         balance, user = get_user(user_id, first_name)
         bdt_val = balance * USDT_TO_BDT
@@ -1062,7 +1170,7 @@ def handle_all_messages(message):
             message.chat.id,
             "🛑 **বটের নিয়মাবলী:**\n\n"
             "১. প্রতিদিন নির্ধারিত এড দেখতে হবে।\n"
-            "২. ১৫ সেকেন্ডের আগে রিওয়ার্ড ক্লাইম করা যাবে না।\n"
+            "২. নির্দিষ্ট সময়ের আগে রিওয়ার্ড ক্লাইম করা যাবে না।\n"
             "৩. ফেক বা মাল্টিপল অ্যাকাউন্ট ব্যবহার করলে অ্যাকাউন্ট চিরতরে ব্যান করা হবে."
         )
         return
@@ -1102,7 +1210,6 @@ if __name__ == '__main__':
     flask_thread.daemon = True
     flask_thread.start()
 
-    # ফেক অটো পোস্ট লুপ এবং পুশ লুপ সক্রিয় করা হলো
     threading.Thread(target=auto_post_loop, daemon=True).start()
     threading.Thread(target=inactivity_push_loop, daemon=True).start()
 
