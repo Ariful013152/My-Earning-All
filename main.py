@@ -20,7 +20,7 @@ MONGO_URI = os.environ.get("MONGO_URI", "")
 BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
-SCREENSHOT_REVIEW_CHANNEL = "-1002360214695" # আপনার allinoneg3 চ্যানেলের আইডি
+SCREENSHOT_REVIEW_CHANNEL = "-1002360214695" # allinoneg3 চ্যানেলের আইডি
 
 PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
 
@@ -119,7 +119,6 @@ def webhook():
 @app.route('/verify-device')
 def verify_device():
     user_id = request.args.get('user_id')
-    first_name = request.args.get('name', 'User')
     
     if not user_id:
         return "<h3>❌ Invalid Request!</h3>", 400
@@ -823,17 +822,23 @@ def handle_photos_or_screenshots(message):
     )
 
     try:
-        # টেলিগ্রাম অ্যালবামের কনফ্লিক্ট এড়াতে সামান্য বিরতি দিয়ে মেসেজ হ্যান্ডেল করা হবে
-        time.sleep(0.5)
+        time.sleep(1.0)
         bot.copy_message(chat_id=SCREENSHOT_REVIEW_CHANNEL, from_chat_id=message.chat.id, message_id=message.message_id)
         bot.send_message(SCREENSHOT_REVIEW_CHANNEL, caption_text, parse_mode="Markdown", reply_markup=markup)
         
-        bot.reply_to(message, "✅ আপনার স্ক্রিনশট সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে! শীঘ্রই পেমেন্ট পেয়ে যাবেন।")
+        bot.reply_to(message, "✅ আপনার স্ক্রিনশট সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে! অ্যাডমিন চেক করে ব্যালেন্স যুক্ত করে দেবেন।")
         if user_id in user_ad2_state:
             del user_ad2_state[user_id]
     except Exception as e:
         print(f"Screenshot copy error: {e}")
-        bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।")
+        try:
+            if message.photo:
+                file_id = message.photo[-1].file_id
+                bot.send_photo(SCREENSHOT_REVIEW_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
+                bot.reply_to(message, "✅ আপনার স্ক্রিনশট সফলভাবে পাঠানো হয়েছে!")
+        except Exception as inner_e:
+            print(f"Inner photo send error: {inner_e}")
+            bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। দয়া করে **একটি করে সিঙ্গেল ছবি** পাঠান।")
 
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
