@@ -86,6 +86,25 @@ WATCH_AD_2_LINKS = [
     'https://shrinkme.click/U9Tetn2'
 ]
 
+# --- WATCH AD 3 15 EXE.IO LINKS ---
+WATCH_AD_3_LINKS = [
+    'https://exe.io/0gptze35',
+    'https://exe.io/ry8Ka',
+    'https://exe.io/7nLiu',
+    'https://exe.io/57NKwlj',
+    'https://exe.io/2qeCFj',
+    'https://exe.io/Bo0QN',
+    'https://exe.io/QcaC1jjV',
+    'https://exe.io/uJ8x4v',
+    'https://exe.io/4CMD9lc',
+    'https://exe.io/7t5U3dg',
+    'https://exe.io/h3s7q',
+    'https://exe.io/vp05amHW',
+    'https://exe.io/4VgpGc',
+    'https://exe.io/FhwbU5QN',
+    'https://exe.io/gCczg6'
+]
+
 # --- DATABASE SETUP ---
 users_col = None
 memory_users = {}
@@ -164,6 +183,7 @@ user_withdraw_step = {}
 user_captcha_step = {}
 admin_step = {}
 user_waiting_screenshot = set()
+user_waiting_ad3_screenshot = set()
 
 # --- DATABASE HELPERS ---
 def get_user(user_id, first_name="User", referred_by=None):
@@ -191,7 +211,10 @@ def get_user(user_id, first_name="User", referred_by=None):
         "last_inactivity_push": 0,
         "ad2_index": 0,
         "ad2_completed_today": 0,
-        "ad2_last_reset": current_now
+        "ad2_last_reset": current_now,
+        "ad3_index": 0,
+        "ad3_completed_today": 0,
+        "ad3_last_reset": current_now
     }
 
     if users_col is None:
@@ -345,6 +368,7 @@ def main_menu_keyboard():
     markup.add(
         KeyboardButton("📺 Watch Ad"),
         KeyboardButton("📺 Watch Ad 2"),
+        KeyboardButton("📺 Watch Ad 3"),
         KeyboardButton("🖥 Account"),
         KeyboardButton("📜 Payment History"),
         KeyboardButton("✨ Referral"),
@@ -491,7 +515,7 @@ def watch_ad_2_handler(message):
         "👉 নিচের Visit Link 🔗 \n"
         "      এ ক্লিক করে ShrinkMe পার হয়ে \n"
         "📸 ইউটিউব এ নিয়ে যাবে তার পর একটি স্ক্রিনশট নিয়ে সরাসরি এই বটে চ্যাটে পাঠিয়ে দিন!\n"
-        "⚠️ স্ক্রিনশট পাঠানোর সাথে সাথে সেটি অ্যাডমিনের কাছে চলে যাবে এবং অ্যাপ্রুভ হলে ব্যালেন্সে টাকা যোগ হবে።\n\n"
+        "⚠️ স্ক্রিনশট পাঠানোর সাথে সাথে সেটি অ্যাডমিনের কাছে চলে যাবে এবং অ্যাপ্রুভ হলে ব্যালেন্সে টাকা যোগ হবে।\n\n"
         f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.11 টাকা)\n"
         f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
     )
@@ -503,115 +527,258 @@ def watch_ad_2_handler(message):
         parse_mode="Markdown"
     )
 
-# --- PHOTO/SCREENSHOT HANDLER FOR WATCH AD 2 ---
+# --- WATCH AD 3 HANDLER ---
+@bot.message_handler(func=lambda message: message.text == "📺 Watch Ad 3")
+def watch_ad_3_handler(message):
+    user_id = message.from_user.id
+    _, user = get_user(user_id, message.from_user.first_name)
+    
+    if user.get("is_banned", False):
+        bot.reply_to(message, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
+        return
+
+    last_reset = user.get("ad3_last_reset", 0)
+    if time.time() - last_reset >= 86400:
+        update_user_field(user_id, {"ad3_completed_today": 0, "ad3_index": 0, "ad3_last_reset": time.time()})
+        _, user = get_user(user_id)
+
+    completed_today = user.get("ad3_completed_today", 0)
+    if completed_today >= 15:
+        bot.reply_to(message, "❌ আপনার আজকের ১৫টি exe.io লিংকের কাজ সম্পন্ন হয়েছে! লিমিট রিসেট হবে ২৪ ঘণ্টা পর।")
+        return
+
+    current_index = user.get("ad3_index", 0)
+    if current_index >= len(WATCH_AD_3_LINKS):
+        current_index = 0
+
+    ad_link = WATCH_AD_3_LINKS[current_index]
+
+    user_waiting_ad3_screenshot.add(user_id)
+
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        InlineKeyboardButton("🔗 Visit Exe.io Link", url=ad_link),
+        InlineKeyboardButton("📹 কিভাবে কাজ করবেন (ভিডিও)", url="https://t.me/allinoneg1/843")
+    )
+
+    text_msg = (
+        "📺 Watch Ad 3 (Exe.io) - টাস্ক পেজ\n\n"
+        "👉 নিচের Visit Exe.io Link 🔗 \n"
+        "      এ ক্লিক করে Exe.io পার হয়ে \n"
+        "📸 নির্দিষ্ট পেজের একটি স্ক্রিনশট নিয়ে সরাসরি এই বটে চ্যাটে পাঠিয়ে দিন!\n"
+        "⚠️ স্ক্রিনশট পাঠানোর সাথে সাথে সেটি অ্যাডমিনের কাছে চলে যাবে এবং অ্যাপ্রুভ হলে ব্যালেন্সে টাকা যোগ হবে।\n\n"
+        f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.11 টাকা)\n"
+        f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
+    )
+
+    bot.send_message(
+        message.chat.id,
+        text_msg,
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
+
+# --- PHOTO/SCREENSHOT HANDLER FOR WATCH AD 2 & AD 3 ---
 @bot.message_handler(content_types=['photo'])
 def handle_user_screenshot(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name
     
-    if user_id not in user_waiting_screenshot:
+    if user_id in user_waiting_screenshot:
+        user_waiting_screenshot.remove(user_id)
+        _, user = get_user(user_id, first_name)
+        
+        file_id = message.photo[-1].file_id
+        completed_today = user.get("ad2_completed_today", 0) + 1
+        next_index = user.get("ad2_index", 0) + 1
+
+        markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton("✅ Yes (Approve)", callback_data=f"scr_yes_{user_id}_{completed_today}_{next_index}"),
+            InlineKeyboardButton("❌ No (Reject)", callback_data=f"scr_no_{user_id}")
+        )
+
+        caption_text = (
+            f"📥 **নতুন স্ক্রিনশট সাবমিশন (Watch Ad 2)**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 ইউজার: {first_name}\n"
+            f"🆔 ইউজার আইডি: `{user_id}`\n"
+            f"📈 আজকের সম্পন্ন কাজ: {completed_today}/15\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"অ্যাডমিন, কাজের সত্যতা যাচাই করে নিচের বাটনে ক্লিক করুন:"
+        )
+
+        try:
+            bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
+            bot.reply_to(
+                message,
+                "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে।",
+                reply_markup=main_menu_keyboard()
+            )
+        except Exception as e:
+            print(f"Error sending screenshot to channel: {e}")
+            bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
         return
 
-    user_waiting_screenshot.remove(user_id)
-    _, user = get_user(user_id, first_name)
-    
-    file_id = message.photo[-1].file_id
-    completed_today = user.get("ad2_completed_today", 0) + 1
-    next_index = user.get("ad2_index", 0) + 1
-
-    markup = InlineKeyboardMarkup()
-    markup.row(
-        InlineKeyboardButton("✅ Yes (Approve)", callback_data=f"scr_yes_{user_id}_{completed_today}_{next_index}"),
-        InlineKeyboardButton("❌ No (Reject)", callback_data=f"scr_no_{user_id}")
-    )
-
-    caption_text = (
-        f"📥 **নতুন স্ক্রিনশট সাবমিশন (Watch Ad 2)**\n"
-        f"━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 ইউজার: {first_name}\n"
-        f"🆔 ইউজার আইডি: `{user_id}`\n"
-        f"📈 আজকের সম্পন্ন কাজ: {completed_today}/15\n"
-        f"━━━━━━━━━━━━━━━━━━━\n"
-        f"অ্যাডমিন, কাজের সত্যতা যাচাই করে নিচের বাটনে ক্লিক করুন:"
-    )
-
-    try:
-        bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
+    if user_id in user_waiting_ad3_screenshot:
+        user_waiting_ad3_screenshot.remove(user_id)
+        _, user = get_user(user_id, first_name)
         
-        bot.reply_to(
-            message,
-            "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে।",
-            reply_markup=main_menu_keyboard()
+        file_id = message.photo[-1].file_id
+        completed_today = user.get("ad3_completed_today", 0) + 1
+        next_index = user.get("ad3_index", 0) + 1
+
+        markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton("✅ Yes (Approve)", callback_data=f"ad3_yes_{user_id}_{completed_today}_{next_index}"),
+            InlineKeyboardButton("❌ No (Reject)", callback_data=f"ad3_no_{user_id}")
         )
-    except Exception as e:
-        print(f"Error sending screenshot to channel: {e}")
-        bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
+
+        caption_text = (
+            f"📥 **নতুন স্ক্রিনশট সাবমিশন (Watch Ad 3 - Exe.io)**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 ইউজার: {first_name}\n"
+            f"🆔 ইউজার আইডি: `{user_id}`\n"
+            f"📈 আজকের সম্পন্ন কাজ: {completed_today}/15\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"অ্যাডমিন, কাজের সত্যতা যাচাই করে নিচের বাটনে ক্লিক করুন:"
+        )
+
+        try:
+            bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
+            bot.reply_to(
+                message,
+                "✅ আপনার Exe.io স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে।",
+                reply_markup=main_menu_keyboard()
+            )
+        except Exception as e:
+            print(f"Error sending ad3 screenshot to channel: {e}")
+            bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
+        return
 
 # --- SCREENSHOT APPROVAL CALLBACK (ADMIN ACTION) ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("scr_yes_") or call.data.startswith("scr_no_"))
+@bot.callback_query_handler(func=lambda call: call.data.startswith("scr_yes_") or call.data.startswith("scr_no_") or call.data.startswith("ad3_yes_") or call.data.startswith("ad3_no_"))
 def screenshot_approval_callback(call):
     if call.from_user.id not in ADMIN_IDS:
         bot.answer_callback_query(call.id, "❌ আপনি অ্যাডমিন নন!", show_alert=True)
         return
 
     data_parts = call.data.split("_")
+    prefix = data_parts[0]
     action = data_parts[1]
     target_user_id = int(data_parts[2])
 
-    if action == "yes":
-        completed_today = int(data_parts[3])
-        next_index = int(data_parts[4])
-        
-        reward = 0.001
-        add_balance(target_user_id, reward)
-        
-        update_user_field(target_user_id, {
-            "ad2_completed_today": completed_today,
-            "ad2_index": next_index
-        })
+    if prefix == "scr":
+        if action == "yes":
+            completed_today = int(data_parts[3])
+            next_index = int(data_parts[4])
+            
+            reward = 0.001
+            add_balance(target_user_id, reward)
+            
+            update_user_field(target_user_id, {
+                "ad2_completed_today": completed_today,
+                "ad2_index": next_index
+            })
 
-        try:
-            bot.edit_message_caption(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                caption=call.message.caption + "\n\n✅ **স্ট্যাটাস: অ্যাপ্রুভড (Approved & Paid)**",
-                parse_mode="Markdown"
-            )
-        except:
-            pass
+            try:
+                bot.edit_message_caption(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    caption=call.message.caption + "\n\n✅ **স্ট্যাটাস: অ্যাপ্রুভড (Approved & Paid)**",
+                    parse_mode="Markdown"
+                )
+            except:
+                pass
 
-        bot.answer_callback_query(call.id, "✅ সফলভাবে পেমেন্ট প্রদান করা হয়েছে!")
-        
-        try:
-            bot.send_message(
-                target_user_id,
-                f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
-                reply_markup=main_menu_keyboard()
-            )
-        except:
-            pass
+            bot.answer_callback_query(call.id, "✅ সফলভাবে পেমেন্ট প্রদান করা হয়েছে!")
+            
+            try:
+                bot.send_message(
+                    target_user_id,
+                    f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
+                    reply_markup=main_menu_keyboard()
+                )
+            except:
+                pass
 
-    elif action == "no":
-        try:
-            bot.edit_message_caption(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                caption=call.message.caption + "\n\n❌ **স্ট্যাটাস: রিজেক্টেড (Rejected)**",
-                parse_mode="Markdown"
-            )
-        except:
-            pass
+        elif action == "no":
+            try:
+                bot.edit_message_caption(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    caption=call.message.caption + "\n\n❌ **স্ট্যাটাস: রিজেক্টেড (Rejected)**",
+                    parse_mode="Markdown"
+                )
+            except:
+                pass
 
-        bot.answer_callback_query(call.id, "❌ স্ক্রিনশটটি বাতিল করা হয়েছে।")
-        
-        try:
-            bot.send_message(
-                target_user_id,
-                "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.",
-                reply_markup=main_menu_keyboard()
-            )
-        except:
-            pass
+            bot.answer_callback_query(call.id, "❌ স্ক্রিনশটটি বাতিল করা হয়েছে।")
+            
+            try:
+                bot.send_message(
+                    target_user_id,
+                    "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.",
+                    reply_markup=main_menu_keyboard()
+                )
+            except:
+                pass
+
+    elif prefix == "ad3":
+        if action == "yes":
+            completed_today = int(data_parts[3])
+            next_index = int(data_parts[4])
+            
+            reward = 0.001
+            add_balance(target_user_id, reward)
+            
+            update_user_field(target_user_id, {
+                "ad3_completed_today": completed_today,
+                "ad3_index": next_index
+            })
+
+            try:
+                bot.edit_message_caption(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    caption=call.message.caption + "\n\n✅ **স্ট্যাটাস: অ্যাপ্রুভড (Approved & Paid)**",
+                    parse_mode="Markdown"
+                )
+            except:
+                pass
+
+            bot.answer_callback_query(call.id, "✅ সফলভাবে পেমেন্ট প্রদান করা হয়েছে!")
+            
+            try:
+                bot.send_message(
+                    target_user_id,
+                    f"🎉 অভিনন্দন! আপনার Exe.io স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
+                    reply_markup=main_menu_keyboard()
+                )
+            except:
+                pass
+
+        elif action == "no":
+            try:
+                bot.edit_message_caption(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    caption=call.message.caption + "\n\n❌ **স্ট্যাটাস: রিজেক্টেড (Rejected)**",
+                    parse_mode="Markdown"
+                )
+            except:
+                pass
+
+            bot.answer_callback_query(call.id, "❌ স্ক্রিনশটটি বাতিল করা হয়েছে।")
+            
+            try:
+                bot.send_message(
+                    target_user_id,
+                    "❌ দুঃখিত, আপনার সাবমিট করা Exe.io স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.",
+                    reply_markup=main_menu_keyboard()
+                )
+            except:
+                pass
 
 # --- ADMIN PANEL ---
 @bot.message_handler(commands=['admin'])
