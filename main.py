@@ -823,14 +823,15 @@ def handle_photos_or_screenshots(message):
     )
 
     try:
-        bot.forward_message(chat_id=SCREENSHOT_REVIEW_CHANNEL, from_chat_id=message.chat.id, message_id=message.message_id)
+        # forward_message এর পরিবর্তে copy_message ব্যবহার করা হয়েছে যাতে অ্যালবাম বা সিঙ্গেল ছবিতে কোনো এরর না আসে
+        bot.copy_message(chat_id=SCREENSHOT_REVIEW_CHANNEL, from_chat_id=message.chat.id, message_id=message.message_id)
         bot.send_message(SCREENSHOT_REVIEW_CHANNEL, caption_text, parse_mode="Markdown", reply_markup=markup)
         
         bot.reply_to(message, "✅ আপনার স্ক্রিনশট সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে! শীঘ্রই পেমেন্ট পেয়ে যাবেন।")
         if user_id in user_ad2_state:
             del user_ad2_state[user_id]
     except Exception as e:
-        print(f"Screenshot forward error: {e}")
+        print(f"Screenshot copy error: {e}")
         bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।")
 
 @bot.message_handler(func=lambda message: True)
