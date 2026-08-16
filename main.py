@@ -303,13 +303,13 @@ def check_duplicate_withdraw_number(current_user_id, current_name, number, metho
             other_ids_str = ", ".join(other_user_ids)
             
             alert_msg = (
-                "🚨 সন্দেহভাজন মাল্টি-অ্যাকাউন্ট উইথড্র অ্যালার্ট!\n"
+                "🚨 **সন্দেহভাজন মাল্টি-অ্যাকাউন্ট উইথড্র অ্যালার্ট!**\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
                 f"👤 ইউজারের নাম: {current_name}\n"
-                f"🆔 বর্তমান ইউজার আইডি: {current_user_id}\n"
-                f"📱 দেওয়া নম্বর: {clean_num} ({method})\n"
+                f"🆔 বর্তমান ইউজার আইডি: `{current_user_id}`\n"
+                f"📱 দেওয়া নম্বর: `{clean_num}` ({method})\n"
                 f"💵 উইথড্র পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} BDT)\n"
-                f"⚠️ পূর্বে একই নম্বর ব্যবহারকারী আইডি: {other_ids_str}\n"
+                f"⚠️ পূর্বে একই নম্বর ব্যবহারকারী আইডি: `{other_ids_str}`\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
                 "আপনি চাইলে নিচের বাটনে ক্লিক করে সিদ্ধান্ত নিতে পারেন:"
             )
@@ -322,7 +322,7 @@ def check_duplicate_withdraw_number(current_user_id, current_name, number, metho
             
             for admin_id in ADMIN_IDS:
                 try:
-                    bot.send_message(admin_id, alert_msg, reply_markup=markup)
+                    bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
                 except Exception as e:
                     print(f"Failed to send alert to admin {admin_id}: {e}")
     except Exception as e:
@@ -524,7 +524,7 @@ def watch_ad_2_handler(message):
         parse_mode="Markdown"
     )
 
-# --- WATCH AD 3 HANDLER (Fixed to prevent clickable link for Exe.io and ShrinkMe.io) ---
+# --- WATCH AD 3 HANDLER ---
 @bot.message_handler(func=lambda message: message.text == "📺 Watch Ad 3")
 def watch_ad_3_handler(message):
     user_id = message.from_user.id
@@ -558,10 +558,9 @@ def watch_ad_3_handler(message):
         InlineKeyboardButton("📹 কিভাবে কাজ করবেন (ভিডিও)", url="https://t.me/allinoneg1/843")
     )
 
-    # এখানে কোনো parse_mode ব্যবহার করা হয়নি যাতে Exe.io এবং ShrinkMe.io ক্লিকেবল লিংক না হয়ে সাধারণ টেক্সট দেখায়[cite: 1]
     text_msg = (
-        "📺 Watch Ad 3 (Exe.io) - টাস্ক পেজ\n\n"
-        "🔗 লিংক ক্লিক করার পর কিছু ভেরিফাই কমপ্লিট করবেন আর বাটনে ক্লিক করলে অ্যাড আসলে ব্যাক বাটনে ব্যাক করে আবার ক্লিক করবেন তারপর ShrinkMe.io তে আপনাকে নিয়ে যাবে একটা স্ক্রিনশট নিবেন আপনার কাজ শেষ তারপর বটে ফিরে আসবেন স্ক্রিনশট টি পাঠিয়ে দিবেন ✅\n\n"
+        "📺 Watch Ad 3 - টাস্ক পেজ\n\n"
+        "🔗 লিংক ক্লিক করার পর কিছু ভেরিফাই কমপ্লিট করবেন আর বাটনে ক্লিক করলে অ্যাড আসলে ব্যাক বাটনে ব্যাক করে আবার ক্লিক করবেন তারপর ShrinkMe তে আপনাকে নিয়ে যাবে একটা স্ক্রিনশট নিবেন আপনার কাজ শেষ তারপর বটে ফিরে আসবেন স্ক্রিনশট টি পাঠিয়ে দিবেন ✅\n\n"
         f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.11 টাকা)\n"
         f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
     )
@@ -569,7 +568,8 @@ def watch_ad_3_handler(message):
     bot.send_message(
         message.chat.id,
         text_msg,
-        reply_markup=markup
+        reply_markup=markup,
+        parse_mode="Markdown"
     )
 
 # --- PHOTO/SCREENSHOT HANDLER FOR WATCH AD 2 & AD 3 ---
@@ -920,7 +920,7 @@ def claim_reward_callback(call):
         update_user_field(user_id, {"can_claim": False, "daily_count": current_count})
         bot.send_message(
             call.message.chat.id,
-            f"🎉 অভিনন্দন! আপনি সফলভাবে ${reward:.3f} USDT উপার্জন করেছেন।\n📈 আজকের দেখা মোট এড: {current_count}/30",
+            f"🎉 অভিনন্দন! আপনি সফলভাবে ${reward:.3f} USDT উপার্জন করেছেন。\n📈 আজকের দেখা মোট এড: {current_count}/30",
             reply_markup=main_menu_keyboard()
         )
 
