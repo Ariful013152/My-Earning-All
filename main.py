@@ -463,7 +463,7 @@ def watch_ad_handler(message):
         message.chat.id,
         f"📺 **বিজ্ঞাপন দেখুন এবং আয় করুন!**\n\n"
         f"👉 লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং অন্তত **১৫ সেকেন্ড** অপেক্ষা করুন。\n"
-        f"⏳ এরপর 'Claim Reward' বাটনে ক্লিক করুন।\n\n"
+        f"⏳ এরপর 'Claim Reward' বাটনে ক্লিক করুন。\n\n"
         f"📈 আজকের দেখা এড: {current_count}/30",
         reply_markup=markup,
         parse_mode="Markdown"
@@ -502,7 +502,7 @@ def watch_ad_2_handler(message):
         f"📌 **নির্দেশনা:**\n"
         f"১. যেকোনো লিংকে ক্লিক করে ব্রাউজারে যাবেন এবং প্রথম স্ক্রিনশট নিবেন।\n"
         f"২. কাজ শেষে ইউটিউবে যাওয়ার পর আরেকটি স্ক্রিনশট নিবেন।\n"
-        f"৩. টেলিগ্রামে ব্যাক এসে **উভয় স্ক্রিনশট একসাথে এই চ্যাটে পাঠিয়ে দিন**।\n"
+        f"৩. টেলিগ্রামে ব্যাক এসে **উভয় স্ক্রিনশট একসাথে (Album হিসেবে)** এই চ্যাটে পাঠিয়ে দিন।\n"
         f"💰 প্রতি লিংকের রিওয়ার্ড: ${REWARD_PER_LINK} USDT (০.১১ টাকা)\n"
         f"📈 আজকের সম্পন্ন লিংক: {ad2_count}/15",
         reply_markup=markup,
@@ -805,6 +805,14 @@ def handle_photos_or_screenshots(message):
     if user.get("is_banned", False):
         return
 
+    # চেক করা হচ্ছে ইউজার একসাথে দুটি ছবি (Album/Media Group) পাঠিয়েছে কিনা
+    if not message.media_group_id:
+        bot.reply_to(
+            message,
+            "❌ অনুগ্রহ করে ব্রাউজার এবং ইউটিউব কাজের **দুটি স্ক্রিনশট একসাথে (Album হিসেবে)** সিলেক্ট করে পাঠান। একটি ছবি পাঠালে তা গ্রহণ করা হবে না।"
+        )
+        return
+
     markup = InlineKeyboardMarkup()
     markup.row(
         InlineKeyboardButton("✅ Approve", callback_data=f"ad2_app_{user_id}"),
@@ -1077,7 +1085,6 @@ def handle_all_messages(message):
         return
 
 if __name__ == '__main__':
-    # Webhook সেটআপ করার কোড (রেন্ডার সার্ভার লাইভ হওয়ার পর অটো সেট হবে)
     server_domain = os.environ.get("RENDER_EXTERNAL_URL", "")
     if server_domain:
         webhook_url = f"{server_domain}/{BOT_TOKEN}"
