@@ -21,6 +21,9 @@ BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
 
+# স্ক্রিনশট সাবমিট হওয়ার নির্দিষ্ট চ্যানেল (আপনার দেওয়া লিংক অনুযায়ী)
+SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"[cite: 2]
+
 PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
 
 MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার
@@ -160,6 +163,7 @@ def verify_device():
 user_withdraw_step = {}
 user_captcha_step = {}
 admin_step = {}
+user_waiting_screenshot = set() # যেসব ইউজার স্ক্রিনশট পাঠাবে তাদের ট্র্যাক করতে
 
 # --- DATABASE HELPERS ---
 def get_user(user_id, first_name="User", referred_by=None):
@@ -185,10 +189,7 @@ def get_user(user_id, first_name="User", referred_by=None):
         "history": [],
         "last_active": current_now,
         "last_inactivity_push": 0,
-        # Watch Ad 2 fields
         "ad2_index": 0,
-        "ad2_last_time": 0,
-        "ad2_can_claim": False,
         "ad2_completed_today": 0,
         "ad2_last_reset": current_now
     }
@@ -349,7 +350,6 @@ def main_menu_keyboard():
         KeyboardButton("✨ Referral"),
         KeyboardButton("💸 Withdraw"),
         KeyboardButton("🛑 Rule's"),
-        KeyboardButton("🔰 Whatsapp"),
         KeyboardButton("📩 Support"),
         KeyboardButton("📊 Status")
     )
@@ -454,7 +454,7 @@ def watch_ad_handler(message):
         parse_mode="Markdown"
     )
 
-# --- WATCH AD 2 HANDLER ---
+# --- WATCH AD 2 HANDLER (UPDATED FOR SCREENSHOT SUBMISSION) ---
 @bot.message_handler(func=lambda message: message.text == "📺 Watch Ad 2")
 def watch_ad_2_handler(message):
     user_id = message.from_user.id
@@ -479,87 +479,140 @@ def watch_ad_2_handler(message):
         current_index = 0
 
     ad_link = WATCH_AD_2_LINKS[current_index]
-    current_time = time.time()
-    
-    update_user_field(user_id, {"ad2_last_time": current_time, "ad2_can_claim": True})
-
     bdt_val = 0.001 * USDT_TO_BDT
+
+    # ইউজারকে স্ক্রিনশট মোডে রাখা হলো যাতে সে ছবি পাঠালে বট বুঝতে পারে
+    user_waiting_screenshot.add(user_id)
 
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
-        InlineKeyboardButton("🌐 Visit Link", url=ad_link),
-        InlineKeyboardButton("📹 কিভাবে কাজ করবেন (ভিডিও)", url="https://t.me/allinoneg1/843"),
-        InlineKeyboardButton("🎁 Claim Reward", callback_data="claim_reward_ad2")
+        InlineKeyboardButton("🌐 Visit Link & Watch YouTube", url=ad_link),
+        InlineKeyboardButton("📹 কিভাবে কাজ করবেন (ভিডিও)", url="https://t.me/allinoneg1/843")
     )
 
     bot.send_message(
         message.chat.id,
-        f"📺 **Watch Ad 2 - অফার পেজ**\n\n"
-        f"👉 নিচের **Visit Link** এ ক্লিক করে লিংকে ভিজিট করুন।\n"
-        f"⚠️ **সতর্কতা:** যে লিংক একবার ক্লিক করবেন, সেই লিংকে পুনরায় ক্লিক করে ব্রাউজারে রিডাইরেক্ট হওয়া থেকে বিরত থাকুন। একই লিংকে বারবার কাজ হবে না।\n"
-        f"⏳ আপনাকে অন্তত **১ মিনিট ৫০ সেকেন্ড (১১০ সেকেন্ড)** অপেক্ষা করতে হবে। এর আগে ক্লিক করলে রিওয়ার্ড পাবেন না!\n\n"
-        f"💵 প্রতি লিংকের রিওয়ার্ড: `0.001 USDT` (={bdt_val:.2f} টাকা)\n"
+        f"📺 **Watch Ad 2 - টাস্ক পেজ**\n\n"
+        f"👉 নিচের **Visit Link & Watch YouTube** এ ক্লিক করে ShrinkMe পার হয়ে সরাসরি ইউটিউব ভিডিওটি সম্পূর্ণ দেখুন।\n"
+        f"📸 ইউটিউব ভিডিও দেখার পর তার একটি **স্ক্রিনশট** সরাসরি এই বটে চ্যাটে পাঠিয়ে দিন!\n"
+        f"⚠️ স্ক্রিনশট পাঠানোর সাথে সাথে সেটি অ্যাডমিনের কাছে চলে যাবে এবং অ্যাপ্রুভ হলে ব্যালেন্সে টাকা যোগ হবে।\n\n"
+        f"💵 প্রতি কাজের রিওয়ার্ড: `0.001 USDT` (={bdt_val:.2f} টাকা)\n"
         f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
         reply_markup=markup,
         parse_mode="Markdown"
     )
 
-@bot.callback_query_handler(func=lambda call: call.data == "claim_reward_ad2")
-def claim_reward_ad2_callback(call):
-    user_id = call.from_user.id
-    _, user = get_user(user_id, call.from_user.first_name)
+# --- PHOTO/SCREENSHOT HANDLER FOR WATCH AD 2 ---
+@bot.message_handler(content_types=['photo'])
+def handle_user_screenshot(message):
+    user_id = message.from_user.id
+    first_name = message.from_user.first_name
     
-    if user.get("is_banned", False):
-        bot.answer_callback_query(call.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!", show_alert=True)
-        return
+    if user_id not in user_waiting_screenshot:
+        return # ইউজার যদি টাস্ক মোডে না থেকে সাধারণ ছবি পাঠায় তবে ইগনোর করবে
 
-    if not user.get("ad2_can_claim", False):
-        bot.answer_callback_query(call.id, "❌ আপনি ইতিমধ্যে এই রিওয়ার্ড ক্লাইম করেছেন বা নতুন লিংক শুরু করুন!", show_alert=True)
-        return
-        
-    last_task = user.get("ad2_last_time", 0)
-    elapsed = time.time() - last_task
+    user_waiting_screenshot.remove(user_id)
+    _, user = get_user(user_id, first_name)
     
-    if elapsed < 110:
-        remaining = int(110 - elapsed)
-        mins = remaining // 60
-        secs = remaining % 60
-        bot.answer_callback_query(
-            call.id, 
-            f"❌ ১ মিনিট ৫০ সেকেন্ডের আগে ক্লেম করা যাবে না! আরও {mins} মিনিট {secs} সেকেন্ড অপেক্ষা করুন।", 
-            show_alert=True
-        )
-        return
-
-    reward = 0.001
-    add_balance(user_id, reward)
-    
+    file_id = message.photo[-1].file_id
     completed_today = user.get("ad2_completed_today", 0) + 1
     next_index = user.get("ad2_index", 0) + 1
-    
-    update_user_field(user_id, {
-        "ad2_can_claim": False, 
-        "ad2_completed_today": completed_today,
-        "ad2_index": next_index
-    })
-    
+
+    # অ্যাডমিন প্যানেল বা চ্যানেলের জন্য বাটন তৈরি (Yes / No)
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("✅ Yes (Approve)", callback_data=f"scr_yes_{user_id}_{completed_today}_{next_index}"),
+        InlineKeyboardButton("❌ No (Reject)", callback_data=f"scr_no_{user_id}")
+    )
+
+    caption_text = (
+        f"📥 **নতুন স্ক্রিনশট সাবমিশন (Watch Ad 2)**\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 ইউজার: {first_name}\n"
+        f"🆔 ইউজার আইডি: `{user_id}`\n"
+        f"📈 আজকের সম্পন্ন কাজ: {completed_today}/15\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"অ্যাডমিন, কাজের সত্যতা যাচাই করে নিচের বাটনে ক্লিক করুন:"
+    )
+
     try:
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-    except:
-        pass
+        # নির্দিষ্ট চ্যানেলে (SCREENSHOT_TARGET_CHANNEL) ছবি ও বাটন পাঠিয়ে দেওয়া
+        bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
         
-    if completed_today >= 15:
-        bot.send_message(
-            call.message.chat.id,
-            "🎉 অভিনন্দন! আপনি সফলভাবে Watch Ad 2 এর ১৫টি লিংকের কাজ সম্পন্ন করেছেন!\n\nআপনার সেশন লিমি트 শেষ হয়েছে। ২৪ ঘণ্টা পর আবার কাজ করতে পারবেন।",
+        bot.reply_to(
+            message,
+            "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে।",
             reply_markup=main_menu_keyboard()
         )
-    else:
-        bot.send_message(
-            call.message.chat.id,
-            f"🎉 অভিনন্দন! আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন।\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
-            reply_markup=main_menu_keyboard()
-        )
+    except Exception as e:
+        print(f"Error sending screenshot to channel: {e}")
+        bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
+
+# --- SCREENSHOT APPROVAL CALLBACK (ADMIN ACTION) ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("scr_yes_") or call.data.startswith("scr_no_"))
+def screenshot_approval_callback(call):
+    if call.from_user.id not in ADMIN_IDS:
+        bot.answer_callback_query(call.id, "❌ আপনি অ্যাডমিন নন!", show_alert=True)
+        return
+
+    data_parts = call.data.split("_")
+    action = data_parts[1]
+    target_user_id = int(data_parts[2])
+
+    if action == "yes":
+        completed_today = int(data_parts[3])
+        next_index = int(data_parts[4])
+        
+        reward = 0.001
+        add_balance(target_user_id, reward)
+        
+        update_user_field(target_user_id, {
+            "ad2_completed_today": completed_today,
+            "ad2_index": next_index
+        })
+
+        try:
+            bot.edit_message_caption(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                caption=call.message.caption + "\n\n✅ **স্ট্যাটাস: অ্যাপ্রুভড (Approved & Paid)**",
+                parse_mode="Markdown"
+            )
+        except:
+            pass
+
+        bot.answer_callback_query(call.id, "✅ সফলভাবে পেমেন্ট প্রদান করা হয়েছে!")
+        
+        try:
+            bot.send_message(
+                target_user_id,
+                f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
+                reply_markup=main_menu_keyboard()
+            )
+        except:
+            pass
+
+    elif action == "no":
+        try:
+            bot.edit_message_caption(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                caption=call.message.caption + "\n\n❌ **স্ট্যাটাস: রিজেক্টেড (Rejected)**",
+                parse_mode="Markdown"
+            )
+        except:
+            pass
+
+        bot.answer_callback_query(call.id, "❌ স্ক্রিনশটটি বাতিল করা হয়েছে।")
+        
+        try:
+            bot.send_message(
+                target_user_id,
+                "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন।",
+                reply_markup=main_menu_keyboard()
+            )
+        except:
+            pass
 
 # --- ADMIN PANEL ---
 @bot.message_handler(commands=['admin'])
@@ -1181,22 +1234,12 @@ def handle_all_messages(message):
         )
         return
 
-    elif text == "🔰 Whatsapp":
-        bot.send_message(
-            message.chat.id,
-            "✅ Whatsapp এডমিন লিংক:  👇\n"
-            "https://wa.me/qr/TLGSBEYHL74LD1\n"
-            "https://wa.me/qr/TLGSBEYHL74LD1"
-        )
-        return
-
     elif text == "📩 Support":
         bot.send_message(
             message.chat.id,
             "🌐 ALL IN ONE 🌐\n\n"
             "🖇️ আমাদের সাপোর্ট গ্রুপ লিংক: https://t.me/allinoneg1\n\n"
-            "✅ টেলিগ্রাম এডমিন লিংক: @akadmin02\n\n"
-            "✅ Whatsapp এডমিন লিংক: 👇 https://wa.me/qr/TLGSBEYHL74LD1"
+            "✅ টেলিগ্রাম এডমিন লিংক: @akadmin02"
         )
         return
 
@@ -1212,10 +1255,8 @@ def handle_all_messages(message):
 
 # --- MAIN EXECUTION (WEBHOOK SETUP) ---
 if __name__ == '__main__':
-    # রেন্ডার থেকে এক্সটার্নাল ডোমেইন বা ইউআরএল নেওয়া
     SERVER_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-all.onrender.com")
     
-    # পুরনো সব পোলিং বা ওয়েবহুক ক্লিয়ার করে নতুন ওয়েবহুক সেটআপ করা
     bot.remove_webhook()
     time.sleep(1)
     bot.set_webhook(url=f"{SERVER_URL}/{BOT_TOKEN}")
