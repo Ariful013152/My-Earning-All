@@ -568,8 +568,7 @@ def watch_ad_3_handler(message):
     bot.send_message(
         message.chat.id,
         text_msg,
-        reply_markup=markup,
-        parse_mode="Markdown"
+        reply_markup=markup
     )
 
 # --- PHOTO/SCREENSHOT HANDLER FOR WATCH AD 2 & AD 3 ---
