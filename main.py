@@ -120,13 +120,11 @@ if MONGO_URI:
         )
         db = client["telegram_bot"]
         users_col = db["users"]
-        # ইনডেক্সিং দ্রুত ডেটা কুয়েরি করার জন্য
         users_col.create_index("user_id", unique=True)
         print("MongoDB Connected Successfully with High Performance Pool.")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
 
-# ফাস্ট রেসপন্সের জন্য থ্রেড পুল বাড়িয়ে ১০০ করা হলো
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=100)
 app = Flask(__name__)
 
@@ -145,7 +143,6 @@ def webhook():
     else:
         return "Invalid request", 403
 
-# --- FLASK ROUTE FOR BROWSER IP & DEVICE VERIFICATION ---
 @app.route('/verify-device')
 def verify_device():
     user_id = request.args.get('user_id')
@@ -350,7 +347,6 @@ def check_user_channels(user_id):
 def send_step_by_step_verification(chat_id, user_id, first_name):
     _, user = get_user(user_id, first_name)
     
-    # ধাপ ১: ফোন নম্বর চেক
     if not user.get("verified_phone"):
         bot.send_message(
             chat_id,
@@ -360,7 +356,6 @@ def send_step_by_step_verification(chat_id, user_id, first_name):
         )
         return False
 
-    # ধাপ ২: ডিভাইস ও আইপি চেক
     if not user.get("device_verified", False):
         server_domain = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-all.onrender.com")
         browser_link = f"{server_domain}/verify-device?user_id={user_id}&name={first_name}"
@@ -379,7 +374,6 @@ def send_step_by_step_verification(chat_id, user_id, first_name):
         )
         return False
 
-    # ধাপ ৩: চ্যানেল জয়েন চেক
     if not check_user_channels(user_id):
         markup = InlineKeyboardMarkup(row_width=1)
         for channel in REQUIRED_CHANNELS:
@@ -533,7 +527,6 @@ def watch_ad_handler(message):
         parse_mode="Markdown"
     )
 
-# --- WATCH AD 2 HANDLER ---
 @bot.message_handler(func=lambda message: message.text == "📺 Watch Ad 2")
 def watch_ad_2_handler(message):
     user_id = message.from_user.id
@@ -566,7 +559,6 @@ def watch_ad_2_handler(message):
         current_index = 0
 
     ad_link = WATCH_AD_2_LINKS[current_index]
-
     user_waiting_screenshot.add(user_id)
 
     markup = InlineKeyboardMarkup(row_width=1)
@@ -582,14 +574,8 @@ def watch_ad_2_handler(message):
         f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
     )
 
-    bot.send_message(
-        message.chat.id,
-        text_msg,
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
+    bot.send_message(message.chat.id, text_msg, reply_markup=markup, parse_mode="Markdown")
 
-# --- WATCH AD 3 HANDLER ---
 @bot.message_handler(func=lambda message: message.text == "📺 Watch Ad 3")
 def watch_ad_3_handler(message):
     user_id = message.from_user.id
@@ -622,7 +608,6 @@ def watch_ad_3_handler(message):
         current_index = 0
 
     ad_link = WATCH_AD_3_LINKS[current_index]
-
     user_waiting_ad3_screenshot.add(user_id)
 
     markup = InlineKeyboardMarkup(row_width=1)
@@ -638,14 +623,8 @@ def watch_ad_3_handler(message):
         f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
     )
 
-    bot.send_message(
-        message.chat.id,
-        text_msg,
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
+    bot.send_message(message.chat.id, text_msg, reply_markup=markup, parse_mode="Markdown")
 
-# --- PHOTO/SCREENSHOT HANDLER FOR WATCH AD 2 & AD 3 ---
 @bot.message_handler(content_types=['photo'])
 def handle_user_screenshot(message):
     user_id = message.from_user.id
@@ -677,11 +656,7 @@ def handle_user_screenshot(message):
 
         try:
             bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
-            bot.reply_to(
-                message,
-                "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.",
-                reply_markup=main_menu_keyboard()
-            )
+            bot.reply_to(message, "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.", reply_markup=main_menu_keyboard())
         except Exception as e:
             print(f"Error sending screenshot to channel: {e}")
             bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
@@ -713,17 +688,12 @@ def handle_user_screenshot(message):
 
         try:
             bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
-            bot.reply_to(
-                message,
-                "✅ আপনার Exe.io স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.",
-                reply_markup=main_menu_keyboard()
-            )
+            bot.reply_to(message, "✅ আপনার Exe.io স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.", reply_markup=main_menu_keyboard())
         except Exception as e:
             print(f"Error sending ad3 screenshot to channel: {e}")
             bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
         return
 
-# --- SCREENSHOT APPROVAL CALLBACK (ADMIN ACTION) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("scr_yes_") or call.data.startswith("scr_no_") or call.data.startswith("ad3_yes_") or call.data.startswith("ad3_no_"))
 def screenshot_approval_callback(call):
     if call.from_user.id not in ADMIN_IDS:
@@ -759,13 +729,8 @@ def screenshot_approval_callback(call):
                 pass
 
             bot.answer_callback_query(call.id, "✅ সফলভাবে পেমেন্ট প্রদান করা হয়েছে!")
-            
             try:
-                bot.send_message(
-                    target_user_id,
-                    f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
-                    reply_markup=main_menu_keyboard()
-                )
+                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
             except:
                 pass
 
@@ -781,13 +746,8 @@ def screenshot_approval_callback(call):
                 pass
 
             bot.answer_callback_query(call.id, "❌ স্ক্রিনশটটি বাতিল করা হয়েছে।")
-            
             try:
-                bot.send_message(
-                    target_user_id,
-                    "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.",
-                    reply_markup=main_menu_keyboard()
-                )
+                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=main_menu_keyboard())
             except:
                 pass
 
@@ -815,13 +775,8 @@ def screenshot_approval_callback(call):
                 pass
 
             bot.answer_callback_query(call.id, "✅ সফলভাবে পেমেন্ট প্রদান করা হয়েছে!")
-            
             try:
-                bot.send_message(
-                    target_user_id,
-                    f"🎉 অভিনন্দন! আপনার Exe.io স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক",
-                    reply_markup=main_menu_keyboard()
-                )
+                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার Exe.io স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
             except:
                 pass
 
@@ -837,13 +792,8 @@ def screenshot_approval_callback(call):
                 pass
 
             bot.answer_callback_query(call.id, "❌ স্ক্রিনশটটি বাতিল করা হয়েছে।")
-            
             try:
-                bot.send_message(
-                    target_user_id,
-                    "❌ দুঃখিত, আপনার সাবমিট করা Exe.io স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.",
-                    reply_markup=main_menu_keyboard()
-                )
+                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা Exe.io স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=main_menu_keyboard())
             except:
                 pass
 
@@ -939,7 +889,6 @@ def check_join_callback(call):
     else:
         bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
 
-# --- CLAIM REWARD & CAPTCHA FLOW ---
 @bot.callback_query_handler(func=lambda call: call.data == "claim_reward")
 def claim_reward_callback(call):
     user_id = call.from_user.id
@@ -1023,7 +972,6 @@ def withdraw_method_callback(call):
         parse_mode="Markdown"
     )
 
-# --- BROWSER DEVICE VERIFICATION CALLBACK ---
 @bot.callback_query_handler(func=lambda call: call.data == "check_device_ip")
 def check_device_ip_callback(call):
     user_id = call.from_user.id
@@ -1050,7 +998,6 @@ def check_device_ip_callback(call):
 
     if existing_ip_user:
         other_id = existing_ip_user.get("user_id")
-        
         alert_msg = (
             "⚠️ **ডুপ্লিকেট ডিভাইস/আইপি ডিটেক্টেড!**\n"
             "━━━━━━━━━━━━━━━━━━━\n"
@@ -1204,7 +1151,7 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, "❌ সঠিক ইউজার আইডি দিন!")
                 return
             admin_step[user_id] = {"action": "addbal_step2", "target_id": int(text)}
-            bot.send_message(message.chat.id, f"💰 আইডি `{text}`-এর জন্য কত USDT যোগ করতে চান তা লিখুন:")
+            bot.send_message(message.chat.id, f"➕ যে ইউজারের অ্যাকাউন্টে ব্যালেন্স যোগ করবেন তার কত USDT যোগ করতে চান তা লিখুন:")
             return
 
         elif state == "addbal_step2":
@@ -1212,7 +1159,7 @@ def handle_all_messages(message):
             del admin_step[user_id]
             try:
                 amt = float(text)
-                add_balance(target_id, amt)
+                add_balance(target_id, amt)  # সঠিক করা হয়েছে (প্লাস করা হয়েছে)
                 bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}`-কে ${amt:.4f} USDT প্রদান করা হয়েছে।", parse_mode="Markdown")
                 try:
                     bot.send_message(target_id, f"🎉 আপনার অ্যাকাউন্টে ${amt:.4f} USDT যোগ করা হয়েছে!")
@@ -1227,7 +1174,7 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, "❌ সঠিক ইউজার আইডি দিন!")
                 return
             admin_step[user_id] = {"action": "cutbal_step2", "target_id": int(text)}
-            bot.send_message(message.chat.id, f"✂️ যে ইউজারের অ্যাকাউন্ট থেকে ব্যালেন্স কাটবেন তার **User ID** দিন:")
+            bot.send_message(message.chat.id, f"✂️ যে ইউজারের অ্যাকাউন্ট থেকে ব্যালেন্স কাটবেন, কত USDT কাটতে চান তা লিখুন:")
             return
 
         elif state == "cutbal_step2":
@@ -1235,8 +1182,18 @@ def handle_all_messages(message):
             del admin_step[user_id]
             try:
                 amt = float(text)
-                add_balance(target_id, -amt)
+                
+                # ব্যালেন্স কাটার আগে পর্যাপ্ত ব্যালেন্স আছে কিনা চেক করা এবং মাইনাস না হওয়া নিশ্চিত করা
+                current_bal, _ = get_user(target_id)
+                if amt > current_bal:
+                    amt = current_bal  # সর্বোচ্চ বর্তমান ব্যালেন্স পর্যন্ত কাটা যাবে যাতে মাইনাসে না যায়
+                
+                add_balance(target_id, -amt)  # সঠিক করা হয়েছে (মাইনাস করা হয়েছে)
                 bot.send_message(message.chat.id, f"✂️ ইউজার `{target_id}`-এর ব্যালেন্স থেকে ${amt:.4f} USDT কেটে নেওয়া হয়েছে।", parse_mode="Markdown")
+                try:
+                    bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে ${amt:.4f} USDT কেটে নিয়েছেন।")
+                except:
+                    pass
             except ValueError:
                 bot.send_message(message.chat.id, "❌ সঠিক সংখ্যা লিখুন!")
             return
