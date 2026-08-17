@@ -167,7 +167,7 @@ def verify_device():
         <div style="max-width:400px; margin:auto; background:white; padding:30px; border-radius:10px; box-shadow:0px 4px 10px rgba(0,0,0,0.1);">
             <h2 style="color:#0088cc;">🔒 ডিভাইস সিকিউরিটি চেক</h2>
             <p style="font-size:15px; color:#555; line-height:1.5;">
-                আপনার ডিভাইস এবং আইপি ভেরিফিকেশন প্রক্রিয়া প্রায় শেষ। নিচের বাটনে ক্লিক করে টেলিগ্রামে ফিরে যান এবং 'Verify Device Now' বাটনে ক্লিক করুন।
+                আপনার ডিভাইস এবং আইপি ভেরিফিকেশন প্রক্রিয়া সফল হয়েছে। নিচের বাটনে ক্লিক করে টেলিগ্রামে ফিরে যান এবং 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন।
             </p>
             <br>
             <a href="https://t.me/{BOT_USERNAME}" style="background:#0088cc; color:white; padding:12px 25px; text-decoration:none; border-radius:5px; font-weight:bold; display:inline-block;">
@@ -307,7 +307,7 @@ def check_duplicate_withdraw_number(current_user_id, current_name, number, metho
                 "━━━━━━━━━━━━━━━━━━━\n"
                 f"👤 ইউজারের নাম: {current_name}\n"
                 f"🆔 বর্তমান ইউজার আইডি: `{current_user_id}`\n"
-                f"📱 দেওয়া নম্বর: `{clean_num}` ({method})\n"
+                f"📱 দেওয়া নম্বর: `{clean_num}` ({method})\n"
                 f"💵 উইথড্র পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} BDT)\n"
                 f"⚠️ পূর্বে একই নম্বর ব্যবহারকারী আইডি: `{other_ids_str}`\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
@@ -338,17 +338,54 @@ def check_user_channels(user_id):
             return False
     return True
 
-def send_force_join_msg(chat_id):
-    markup = InlineKeyboardMarkup(row_width=1)
-    for channel in REQUIRED_CHANNELS:
-        markup.add(InlineKeyboardButton(f"🔗 Join {channel}", url=f"https://t.me/{channel.replace('@', '')}"))
-    markup.add(InlineKeyboardButton("✅ Checked / Verified", callback_data="check_join"))
+def send_step_by_step_verification(chat_id, user_id, first_name):
+    _, user = get_user(user_id, first_name)
     
-    bot.send_message(
-        chat_id,
-        "⚠️ বটটি ব্যবহার করতে আপনাকে নিচের সকল চ্যানেলগুলোতে জয়েন করতে হবে:",
-        reply_markup=markup
-    )
+    # ধাপ ১: ফোন নম্বর চেক
+    if not user.get("verified_phone"):
+        bot.send_message(
+            chat_id,
+            "📱 **ধাপ ১: ফোন নম্বর ভেরিফিকেশন প্রয়োজন!**\n\nবটটি ব্যবহার শুরু করতে নিচের '📱 Share Contact' বাটনে ক্লিক করে আপনার টেলিগ্রাম নম্বর ভেরিফাই করুন।",
+            reply_markup=contact_keyboard(),
+            parse_mode="Markdown"
+        )
+        return False
+
+    # ধাপ ২: ডিভাইস ও আইপি চেক
+    if not user.get("device_verified", False):
+        server_domain = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-all.onrender.com")
+        browser_link = f"{server_domain}/verify-device?user_id={user_id}&name={first_name}"
+
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("🌐 ১. ব্রাউজারে গিয়ে চেক করুন", url=browser_link))
+        markup.add(InlineKeyboardButton("✅ ২. ভেরিফাই কমপ্লিট করুন", callback_data="check_device_ip"))
+
+        bot.send_message(
+            chat_id,
+            "🛡️ **ধাপ ২: ডিভাইস ও আইপি সিকিউরিটি চেক!**\n\n"
+            "👉 **ধাপ ১:** 'ব্রাউজারে গিয়ে চেক করুন' বাটনে ক্লিক করে ব্রাউজারে যান।\n"
+            "👉 **ধাপ ২:** ব্রাউজার থেকে টেলিগ্রামে ফিরে এসে 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন.",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        return False
+
+    # ধাপ ৩: চ্যানেল জয়েন চেক
+    if not check_user_channels(user_id):
+        markup = InlineKeyboardMarkup(row_width=1)
+        for channel in REQUIRED_CHANNELS:
+            markup.add(InlineKeyboardButton(f"🔗 Join {channel}", url=f"https://t.me/{channel.replace('@', '')}"))
+        markup.add(InlineKeyboardButton("✅ Checked / Verified", callback_data="check_join"))
+        
+        bot.send_message(
+            chat_id,
+            "⚠️ **ধাপ ৩: চ্যানেল সাবস্ক্রিপশন চেক!**\n\nবটটি ব্যবহার করতে আপনাকে নিচের সকল চ্যানেলগুলোতে জয়েন করতে হবে:",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        return False
+
+    return True
 
 def is_valid_bd_number(number_str):
     number_str = str(number_str).strip()
@@ -447,13 +484,25 @@ def watch_ad_handler(message):
         bot.reply_to(message, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    if user.get("captcha_locked", False):
-        bot.reply_to(message, "❌ আপনার অ্যাকাউন্টটি ক্যাপচা দ্বারা লক করা আছে! সঠিক উত্তর দিয়ে আনলক করুন।")
+    if not send_step_by_step_verification(message.chat.id, user_id, message.from_user.first_name):
         return
+
+    # ২৪ ঘণ্টা পার হয়েছে কিনা চেক করা
+    last_reset = user.get("last_reset", 0)
+    if user.get("captcha_locked", False) or user.get("daily_count", 0) >= 30:
+        if time.time() - last_reset >= 86400:
+            update_user_field(user_id, {"daily_count": 0, "captcha_locked": False, "last_reset": time.time()})
+            _, user = get_user(user_id)
+        else:
+            remaining_time = int(86400 - (time.time() - last_reset))
+            hours = remaining_time // 3600
+            minutes = (remaining_time % 3600) // 60
+            bot.reply_to(message, f"❌ আপনার আজকের ৩০টি এড দেখা সম্পন্ন হয়েছে এবং ক্যাপচা লক রয়েছে! নতুন কাজ শুরু হবে আরও {hours} ঘণ্টা {minutes} মিনিট পর।")
+            return
 
     current_count = user.get("daily_count", 0)
     if current_count >= 30:
-        bot.reply_to(message, "❌ আজকের ৩০টি এড দেখা সম্পন্ন হয়েছে! ক্যাপচা পূরণ করে লিমিট রিসেট করুন।")
+        bot.reply_to(message, "❌ আজকের ৩০টি এড দেখা সম্পন্ন হয়েছে!")
         return
 
     all_links = MONETAG_LINKS + ADSTERRA_LINKS
@@ -486,15 +535,23 @@ def watch_ad_2_handler(message):
         bot.reply_to(message, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    last_reset = user.get("ad2_last_reset", 0)
-    if time.time() - last_reset >= 86400:
-        update_user_field(user_id, {"ad2_completed_today": 0, "ad2_index": 0, "ad2_last_reset": time.time()})
-        _, user = get_user(user_id)
-
-    completed_today = user.get("ad2_completed_today", 0)
-    if completed_today >= 15:
-        bot.reply_to(message, "❌ আপনার আজকের ১৫টি লিংকের কাজ সম্পন্ন হয়েছে! লিমিট রিসেট হবে ২৪ ঘণ্টা পর।")
+    if not send_step_by_step_verification(message.chat.id, user_id, message.from_user.first_name):
         return
+
+    last_reset = user.get("ad2_last_reset", 0)
+    completed_today = user.get("ad2_completed_today", 0)
+
+    if completed_today >= 15:
+        if time.time() - last_reset >= 86400:
+            update_user_field(user_id, {"ad2_completed_today": 0, "ad2_index": 0, "ad2_last_reset": time.time()})
+            _, user = get_user(user_id)
+            completed_today = 0
+        else:
+            remaining_time = int(86400 - (time.time() - last_reset))
+            hours = remaining_time // 3600
+            minutes = (remaining_time % 3600) // 60
+            bot.reply_to(message, f"❌ আপনার আজকের ১৫টি লিংকের কাজ সম্পন্ন হয়েছে! নতুন কাজ শুরু হবে আরও {hours} ঘণ্টা {minutes} মিনিট পর।")
+            return
 
     current_index = user.get("ad2_index", 0)
     if current_index >= len(WATCH_AD_2_LINKS):
@@ -534,15 +591,23 @@ def watch_ad_3_handler(message):
         bot.reply_to(message, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    last_reset = user.get("ad3_last_reset", 0)
-    if time.time() - last_reset >= 86400:
-        update_user_field(user_id, {"ad3_completed_today": 0, "ad3_index": 0, "ad3_last_reset": time.time()})
-        _, user = get_user(user_id)
-
-    completed_today = user.get("ad3_completed_today", 0)
-    if completed_today >= 15:
-        bot.reply_to(message, "❌ আপনার আজকের ১৫টি exe.io লিংকের কাজ সম্পন্ন হয়েছে! লিমিট রিসেট হবে ২৪ ঘণ্টা পর।")
+    if not send_step_by_step_verification(message.chat.id, user_id, message.from_user.first_name):
         return
+
+    last_reset = user.get("ad3_last_reset", 0)
+    completed_today = user.get("ad3_completed_today", 0)
+
+    if completed_today >= 15:
+        if time.time() - last_reset >= 86400:
+            update_user_field(user_id, {"ad3_completed_today": 0, "ad3_index": 0, "ad3_last_reset": time.time()})
+            _, user = get_user(user_id)
+            completed_today = 0
+        else:
+            remaining_time = int(86400 - (time.time() - last_reset))
+            hours = remaining_time // 3600
+            minutes = (remaining_time % 3600) // 60
+            bot.reply_to(message, f"❌ আপনার আজকের ১৫টি exe.io লিংকের কাজ সম্পন্ন হয়েছে! নতুন কাজ শুরু হবে আরও {hours} ঘণ্টা {minutes} মিনিট পর।")
+            return
 
     current_index = user.get("ad3_index", 0)
     if current_index >= len(WATCH_AD_3_LINKS):
@@ -606,7 +671,7 @@ def handle_user_screenshot(message):
             bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
             bot.reply_to(
                 message,
-                "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে।",
+                "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.",
                 reply_markup=main_menu_keyboard()
             )
         except Exception as e:
@@ -642,7 +707,7 @@ def handle_user_screenshot(message):
             bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
             bot.reply_to(
                 message,
-                "✅ আপনার Exe.io স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে।",
+                "✅ আপনার Exe.io স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.",
                 reply_markup=main_menu_keyboard()
             )
         except Exception as e:
@@ -860,7 +925,7 @@ def check_join_callback(call):
             pass
         bot.send_message(
             call.message.chat.id,
-            "✅ ধন্যবাদ! চ্যানেল ভেরিফিকেশন সফল হয়েছে। এখন আপনি নিচের মেনু থেকে কাজ করতে পারেন:",
+            "✅ ধন্যবাদ! সমস্ত ভেরিফিকেশন সফলভাবে সম্পন্ন হয়েছে। এখন আপনি নিচের মেনু থেকে কাজ করতে পারেন:",
             reply_markup=main_menu_keyboard()
         )
     else:
@@ -906,7 +971,7 @@ def claim_reward_callback(call):
         ans = num1 + num2
         user_captcha_step[user_id] = ans
         
-        update_user_field(user_id, {"can_claim": False, "daily_count": current_count, "captcha_locked": True})
+        update_user_field(user_id, {"can_claim": False, "daily_count": current_count, "captcha_locked": True, "last_reset": time.time()})
         
         bot.send_message(
             call.message.chat.id,
@@ -946,7 +1011,7 @@ def withdraw_method_callback(call):
         
     bot.send_message(
         call.message.chat.id,
-        f"💵 আপনি **{method}** এর মাধ্যমে উইথড্র করতে চান।\n\nবর্তমান ব্যালেন্স: **${balance:.4f} USDT**\n👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে পাঠান (যেমন: 1.0):",
+        f"💵 আপনি **{method}** এর মাধ্যমে উইথড্র করতে চান።\n\nবর্তমান ব্যালেন্স: **${balance:.4f} USDT**\n👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে পাঠান (যেমন: 1.0):",
         parse_mode="Markdown"
     )
 
@@ -1005,12 +1070,8 @@ def check_device_ip_callback(call):
     except:
         pass
         
-    bot.send_message(
-        call.message.chat.id,
-        "✅ **ডিভাইস ভেরিফিকেশন সফল হয়েছে!**\n\nএখন আপনি নিচের মেনু থেকে বট ব্যবহার করতে পারবেন:",
-        reply_markup=main_menu_keyboard(),
-        parse_mode="Markdown"
-    )
+    # পরবর্তী ধাপ অর্থাৎ চ্যানেল জয়েন চেক ফ্লো কল করা হলো
+    send_step_by_step_verification(call.message.chat.id, user_id, first_name)
 
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
@@ -1029,42 +1090,15 @@ def start_cmd(message):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    if not user.get("verified_phone"):
-        bot.send_message(
-            message.chat.id,
-            "📱 **ফোন নম্বর ভেরিফিকেশন প্রয়োজন!**\n\nবটটি ব্যবহার শুরু করতে নিচের '📱 Share Contact' বাটনে ক্লিক করে আপনার টেলিগ্রাম নম্বর ভেরিফাই করুন।",
-            reply_markup=contact_keyboard(),
-            parse_mode="Markdown"
-        )
+    # সিকিউরিটি ভেরিফিকেশন চেক (ধাপে ধাপে সম্পন্ন হবে)
+    if not send_step_by_step_verification(message.chat.id, user_id, first_name):
         return
 
-    if not user.get("device_verified", False):
-        server_domain = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-all.onrender.com")
-        browser_link = f"{server_domain}/verify-device?user_id={user_id}&name={first_name}"
-
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("🌐 ১. ব্রাউজারে গিয়ে চেক করুন", url=browser_link))
-        markup.add(InlineKeyboardButton("✅ ২. ভেরিফাই কমপ্লিট করুন", callback_data="check_device_ip"))
-
-        bot.send_message(
-            message.chat.id,
-            f"👋 স্বাগতম, 👤 {first_name}!\n\n"
-            "🛡️ বটটি ব্যবহার করার জন্য আপনাকে সিকিউরিটি ভেরিফিকেশন সম্পন্ন করতে হবে:\n\n"
-            "👉 **ধাপ ১:** 'ব্রাউজারে গিয়ে চেক করুন' বাটনে ক্লিক করে ব্রাউজারে যান।\n"
-            "👉 **ধাপ ২:** ব্রাউজার থেকে টেলিগ্রামে ফিরে এসে 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন.",
-            reply_markup=markup,
-            parse_mode="Markdown"
-        )
-        return
-
-    if not check_user_channels(user_id):
-        send_force_join_msg(message.chat.id)
-    else:
-        bot.send_message(
-            message.chat.id,
-            f"👋 স্বাগতম, 👤 {first_name}!\n\nআমাদের বটে কাজ করে আপনি সহজেই ইনকাম করতে পারবেন। নিচের বাটনগুলো ব্যবহার করে কাজ শুরু করুন:",
-            reply_markup=main_menu_keyboard()
-        )
+    bot.send_message(
+        message.chat.id,
+        f"👋 স্বাগতম, 👤 {first_name}!\n\nআমাদের বটে কাজ করে আপনি সহজেই ইনকাম করতে পারবেন। নিচের বাটনগুলো ব্যবহার করে কাজ শুরু করুন:",
+        reply_markup=main_menu_keyboard()
+    )
 
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
@@ -1087,29 +1121,10 @@ def handle_contact(message):
                 return
 
         update_user_field(user_id, {"verified_phone": phone_number, "last_active": time.time()})
-        bot.send_message(message.chat.id, "✅ আপনার ফোন নম্বর সফলভাবে ভেরিফাই হয়েছে!", reply_markup=main_menu_keyboard())
+        bot.send_message(message.chat.id, "✅ আপনার ফোন নম্বর সফলভাবে ভেরিফাই হয়েছে!")
 
-        _, user = get_user(user_id)
-        if not user.get("device_verified", False):
-            server_domain = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-all.onrender.com")
-            browser_link = f"{server_domain}/verify-device?user_id={user_id}&name={message.from_user.first_name}"
-
-            markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("🌐 ১. ব্রাউজারে গিয়ে চেক করুন", url=browser_link))
-            markup.add(InlineKeyboardButton("✅ ২. ভেরিফাই কমপ্লিট করুন", callback_data="check_device_ip"))
-
-            bot.send_message(
-                message.chat.id,
-                "🛡️ বটটি ব্যবহার করার জন্য আপনাকে সিকিউরিটি ভেরিফিকেশন সম্পন্ন করতে হবে:\n\n"
-                "👉 **ধাপ ১:** 'ব্রাউজারে গিয়ে চেক করুন' বাটনে ক্লিক করে ব্রাউজারে যান।\n"
-                "👉 **ধাপ ২:** ব্রাউজার থেকে টেলিগ্রামে ফিরে এসে 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন.",
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
-            return
-
-        if not check_user_channels(user_id):
-            send_force_join_msg(message.chat.id)
+        # পরবর্তী ধাপে পাঠানো (ব্রাউজার চেক)
+        send_step_by_step_verification(message.chat.id, user_id, message.from_user.first_name)
 
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
@@ -1227,8 +1242,8 @@ def handle_all_messages(message):
             correct_ans = user_captcha_step[user_id]
             if ans == correct_ans:
                 del user_captcha_step[user_id]
-                update_user_field(user_id, {"captcha_locked": False, "daily_count": 0})
-                bot.reply_to(message, "✅ ক্যাপচা সফলভাবে সমাধান হয়েছে! আপনার লিমিট রিসেট করা হয়েছে। এখন আবার কাজ করতে পারেন।", reply_markup=main_menu_keyboard())
+                update_user_field(user_id, {"captcha_locked": False})
+                bot.reply_to(message, "✅ ক্যাপচা সফলভাবে সমাধান হয়েছে! ২৪ ঘণ্টা পর আপনার কাজের লিমিট সম্পূর্ণ রিসেট হবে।", reply_markup=main_menu_keyboard())
             else:
                 bot.reply_to(message, "❌ ভুল উত্তর! আবার সঠিক উত্তরটি লিখে পাঠান:")
         except ValueError:
@@ -1314,6 +1329,10 @@ def handle_all_messages(message):
                 parse_mode="Markdown"
             )
             return
+
+    # ভেরিফিকেশন কমপ্লিট না থাকলে অন্য কোনো টেক্সট মেনু কমান্ড কাজ করবে না
+    if not send_step_by_step_verification(message.chat.id, user_id, first_name):
+        return
 
     if text == "🖥 Account":
         balance, user = get_user(user_id, first_name)
