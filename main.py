@@ -27,7 +27,7 @@ SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"
 PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
 
 MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার
-USDT_TO_BDT = 110.0   # ১ ডলার = ১১০ টাকা
+USDT_TO_BDT = 100.0   # ১ ডলার = ১০০ টাকা (আপডেট করা হয়েছে)
 REFERRAL_BONUS = 0.005
 FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট
 
@@ -518,7 +518,7 @@ def watch_ad_handler(message):
     bot.send_message(
         message.chat.id,
         f"📺 **বিজ্ঞাপন দেখুন এবং আয় করুন!**\n\n"
-        f"👉 নিচের ভিজিট লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং অন্তত **১৫ সেকেন্ড** অপেক্ষা করুন。\n"
+        f"👉 নিচের ভিজিট লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং অন্তত **২০ সেকেন্ড** অপেক্ষা করুন।\n"
         f"⏳ এরপর 'Claim Reward' বাটনে ক্লিক করে আপনার রিওয়ার্ড সংগ্রহ করুন。\n\n"
         f"📈 আজকের দেখা এড: {current_count}/30",
         reply_markup=markup,
@@ -570,7 +570,7 @@ def watch_ad_2_handler(message):
     text_msg = (
         "📺 Watch Ad 2 - টাস্ক পেজ\n\n"
         "🔗 লিংক ক্লিক করার পর একটি স্ক্রিনশট নিবেন ভেরিফাই কমপ্লিট করবেন আর বাটনে ক্লিক করলে অ্যাড আসলে ব্যাক বাটনে ব্যাক করে আবার ক্লিক করবেন তারপর ইউটিউবে আপনাকে নিয়ে যাবে একটা স্ক্রিনশট নিবেন আপনার কাজ শেষ তারপর বটে ফিরে আসবেন স্ক্রিনশট দুটি পাঠিয়ে দিবেন ✅\n\n"
-        f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.11 টাকা)\n"
+        f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.10 টাকা)\n"
         f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
     )
 
@@ -626,7 +626,7 @@ def watch_ad_3_handler(message):
     text_msg = (
         "📺 Watch Ad 3 - টাস্ক পেজ\n\n"
         "🔗 লিংক ক্লিক করার পর একটি স্ক্রিনশট নিবেন ভেরিফাই কমপ্লিট করবেন আর বাটনে ক্লিক করলে অ্যাড আসলে ব্যাক বাটনে ব্যাক করে আবার ক্লিক করবেন তারপর ShrinkMe তে আপনাকে নিয়ে যাবে একটা স্ক্রিনশট নিবেন আপনার কাজ শেষ তারপর বটে ফিরে আসবেন স্ক্রিনশট দুটি পাঠিয়ে দিবেন ✅\n\n"
-        f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.11 টাকা)\n"
+        f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.10 টাকা)\n"
         f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
     )
 
@@ -950,8 +950,8 @@ def claim_reward_callback(call):
         return
         
     last_task = user.get("last_task_time", 0)
-    if time.time() - last_task < 15:
-        remaining = int(15 - (time.time() - last_task))
+    if time.time() - last_task < 20:  # অপেক্ষার সময় ২০ সেকেন্ড করা হয়েছে
+        remaining = int(20 - (time.time() - last_task))
         bot.answer_callback_query(call.id, f"⏳ আরও {remaining} সেকেন্ড অপেক্ষা করুন!", show_alert=True)
         return
 
@@ -1011,7 +1011,7 @@ def withdraw_method_callback(call):
         
     bot.send_message(
         call.message.chat.id,
-        f"💵 আপনি **{method}** এর মাধ্যমে উইথড্র করতে চান።\n\nবর্তমান ব্যালেন্স: **${balance:.4f} USDT**\n👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে পাঠান (যেমন: 1.0):",
+        f"💵 আপনি **{method}** এর মাধ্যমে উইথড্র করতে চান।\n\nবর্তমান ব্যালেন্স: **${balance:.4f} USDT**\n👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে পাঠান (যেমন: 1.0):",
         parse_mode="Markdown"
     )
 
