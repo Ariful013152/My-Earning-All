@@ -27,7 +27,7 @@ SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"
 PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
 
 MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার
-USDT_TO_BDT = 100.0   # ১ ডলার = ১০০ টাকা (আপডেট করা হয়েছে)
+USDT_TO_BDT = 100.0   # ১ ডলার = ১০০ টাকা
 REFERRAL_BONUS = 0.005
 FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট
 
@@ -105,26 +105,35 @@ WATCH_AD_3_LINKS = [
     'https://exe.io/gCczg6'
 ]
 
-# --- DATABASE SETUP ---
+# --- DATABASE SETUP (High Performance Connection Pool) ---
 users_col = None
 memory_users = {}
 
 if MONGO_URI:
     try:
-        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000, maxPoolSize=100)
+        client = pymongo.MongoClient(
+            MONGO_URI, 
+            serverSelectionTimeoutMS=3000, 
+            maxPoolSize=200, 
+            minPoolSize=10,
+            maxIdleTimeMS=45000
+        )
         db = client["telegram_bot"]
         users_col = db["users"]
-        print("MongoDB Connected Successfully.")
+        # ইনডেক্সিং দ্রুত ডেটা কুয়েরি করার জন্য
+        users_col.create_index("user_id", unique=True)
+        print("MongoDB Connected Successfully with High Performance Pool.")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
 
-bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=50)
+# ফাস্ট রেসপন্সের জন্য থ্রেড পুল বাড়িয়ে ১০০ করা হলো
+bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=100)
 app = Flask(__name__)
 
 # --- WEBHOOK & FLASK ROUTES ---
 @app.route('/')
 def home():
-    return "Bot is running with Webhook!"
+    return "Bot is running with High Speed Webhook!"
 
 @app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
@@ -487,7 +496,6 @@ def watch_ad_handler(message):
     if not send_step_by_step_verification(message.chat.id, user_id, message.from_user.first_name):
         return
 
-    # ২৪ ঘণ্টা পার হয়েছে কিনা চেক করা
     last_reset = user.get("last_reset", 0)
     if user.get("captcha_locked", False) or user.get("daily_count", 0) >= 30:
         if time.time() - last_reset >= 86400:
@@ -950,7 +958,7 @@ def claim_reward_callback(call):
         return
         
     last_task = user.get("last_task_time", 0)
-    if time.time() - last_task < 20:  # অপেক্ষার সময় ২০ সেকেন্ড করা হয়েছে
+    if time.time() - last_task < 20:
         remaining = int(20 - (time.time() - last_task))
         bot.answer_callback_query(call.id, f"⏳ আরও {remaining} সেকেন্ড অপেক্ষা করুন!", show_alert=True)
         return
@@ -1070,7 +1078,6 @@ def check_device_ip_callback(call):
     except:
         pass
         
-    # পরবর্তী ধাপ অর্থাৎ চ্যানেল জয়েন চেক ফ্লো কল করা হলো
     send_step_by_step_verification(call.message.chat.id, user_id, first_name)
 
 @bot.message_handler(commands=['start'])
@@ -1090,7 +1097,6 @@ def start_cmd(message):
         bot.send_message(message.chat.id, "🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!")
         return
 
-    # সিকিউরিটি ভেরিফিকেশন চেক (ধাপে ধাপে সম্পন্ন হবে)
     if not send_step_by_step_verification(message.chat.id, user_id, first_name):
         return
 
@@ -1123,7 +1129,6 @@ def handle_contact(message):
         update_user_field(user_id, {"verified_phone": phone_number, "last_active": time.time()})
         bot.send_message(message.chat.id, "✅ আপনার ফোন নম্বর সফলভাবে ভেরিফাই হয়েছে!")
 
-        # পরবর্তী ধাপে পাঠানো (ব্রাউজার চেক)
         send_step_by_step_verification(message.chat.id, user_id, message.from_user.first_name)
 
 @bot.message_handler(func=lambda message: True)
@@ -1330,7 +1335,6 @@ def handle_all_messages(message):
             )
             return
 
-    # ভেরিফিকেশন কমপ্লিট না থাকলে অন্য কোনো টেক্সট মেনু কমান্ড কাজ করবে না
     if not send_step_by_step_verification(message.chat.id, user_id, first_name):
         return
 
