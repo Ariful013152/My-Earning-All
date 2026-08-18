@@ -26,10 +26,10 @@ SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"
 
 PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
 
-MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার[cite: 3]
-USDT_TO_BDT = 100.0   # ১ ডলার = ১০০ টাকা[cite: 3]
+MIN_WITHDRAW = 1.0
+USDT_TO_BDT = 100.0
 REFERRAL_BONUS = 0.005
-FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট[cite: 3]
+FAKE_USER_OFFSET = 506
 
 # --- DYNAMIC TASK REWARDS & LIMITS (Admin Controlled) ---
 TASK_CONFIG = {
