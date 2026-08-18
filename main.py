@@ -886,7 +886,7 @@ def admin_delete_link_callback(call):
         del WATCH_AD_3_LINKS[idx]
 
     bot.answer_callback_query(call.id, "✅ সফলভাবে লিংকটি ডিলিট করা হয়েছে!")
-    bot.edit_message_text("✅ লিংক সফলভাবে রিমুভ করা হয়েছে। আবার দেখতে অ্যাডমিন প্যানেলে যান।", call.message.chat.id, call.message.message_id, reply_markup=admin_dashboard_keyboard())
+    bot.edit_message_text("✅ লিংক সফলভাবে রিমুভ করা হয়েছে। আবার দেখতে অ্যাডমিন প্যানেলে যান。", call.message.chat.id, call.message.message_id, reply_markup=admin_dashboard_keyboard())
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_edit_task_"))
 def admin_edit_task_callback(call):
