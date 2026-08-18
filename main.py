@@ -26,10 +26,10 @@ SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"
 
 PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
 
-MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার
-USDT_TO_BDT = 100.0   # ১ ডলার = ১০০ টাকা
+MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার[cite: 3]
+USDT_TO_BDT = 100.0   # ১ ডলার = ১০০ টাকা[cite: 3]
 REFERRAL_BONUS = 0.005
-FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট
+FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট[cite: 3]
 
 # --- DYNAMIC TASK REWARDS & LIMITS (Admin Controlled) ---
 TASK_CONFIG = {
@@ -485,7 +485,7 @@ def watch_ad_handler(message):
             remaining_time = int(86400 - (time.time() - last_reset))
             hours = remaining_time // 3600
             minutes = (remaining_time % 3600) // 60
-            bot.reply_to(message, f"❌ আপনার আজকের {limitটি কাজ সম্পন্ন হয়েছে এবং ক্যাপচা লক রয়েছে! নতুন কাজ শুরু হবে আরও {hours} ঘণ্টা {minutes} মিনিট পর।")
+            bot.reply_to(message, f"❌ আপনার আজকের {limit}টি কাজ সম্পন্ন হয়েছে এবং ক্যাপচা লক রয়েছে! নতুন কাজ শুরু হবে আরও {hours} ঘণ্টা {minutes} মিনিট পর।")
             return
 
     current_count = user.get("daily_count", 0)
@@ -861,7 +861,7 @@ def admin_link_list_callback(call):
     elif cat == "ad3": links_arr = WATCH_AD_3_LINKS
 
     markup = InlineKeyboardMarkup(row_width=1)
-    for idx, link in enumerate(links_arr[:10]): # প্রথম ১০টি দেখানো ও ডিলিটের জন্য
+    for idx, link in enumerate(links_arr[:10]):
         markup.add(InlineKeyboardButton(f"❌ Delete: {link[:30]}...", callback_data=f"adm_dellink_{cat}_{idx}"))
     markup.add(InlineKeyboardButton("⬅️ Back", callback_data="adm_panel_links"))
 
@@ -972,7 +972,7 @@ def claim_reward_callback(call):
         ans = num1 + num2
         user_captcha_step[user_id] = ans
         update_user_field(user_id, {"can_claim": False, "daily_count": current_count, "captcha_locked": True, "last_reset": time.time()})
-        bot.send_message(call.message.chat.id, f"🎉 আজকের লিমি트 শেষ!\n🔐 ম্যাথ ক্যাপচা সমাধান করুন: **{num1} + {num2} = ?**", parse_mode="Markdown")
+        bot.send_message(call.message.chat.id, f"🎉 আজকের লিমিট শেষ!\n🔐 ম্যাথ ক্যাপচা সমাধান করুন: **{num1} + {num2} = ?**", parse_mode="Markdown")
     else:
         update_user_field(user_id, {"can_claim": False, "daily_count": current_count})
         bot.send_message(call.message.chat.id, f"🎉 সফলভাবে ${reward} USDT উপার্জন করেছেন!\n📈 কাজ: {current_count}/{limit}", reply_markup=main_menu_keyboard())
