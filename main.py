@@ -105,7 +105,7 @@ WATCH_AD_3_LINKS = [
     'https://exe.io/gCczg6'
 ]
 
-# --- DATABASE SETUP ---
+# --- DATABASE SETUP (High Performance Connection Pool) ---
 users_col = None
 memory_users = {}
 
@@ -121,7 +121,7 @@ if MONGO_URI:
         db = client["telegram_bot"]
         users_col = db["users"]
         users_col.create_index("user_id", unique=True)
-        print("MongoDB Connected Successfully.")
+        print("MongoDB Connected Successfully with High Performance Pool.")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
 
@@ -417,7 +417,6 @@ def main_menu_keyboard():
     )
     return markup
 
-# --- EXACT ADMIN PANEL KEYBOARD MATCHING THE SCREENSHOT ---
 def admin_dashboard_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -426,7 +425,6 @@ def admin_dashboard_keyboard():
         InlineKeyboardButton("👤 Manage User", callback_data="adm_panel_manage"),
         InlineKeyboardButton("➕ Add Balance", callback_data="adm_panel_addbal"),
         InlineKeyboardButton("✂️ Cut Balance", callback_data="adm_panel_cutbal"),
-        InlineKeyboardButton("📩 Send Msg to User", callback_data="adm_panel_sendmsg"),
         InlineKeyboardButton("❌ Close Panel", callback_data="adm_panel_close")
     )
     return markup
@@ -799,7 +797,7 @@ def screenshot_approval_callback(call):
             except:
                 pass
 
-# --- ADMIN PANEL COMMAND & CALLBACKS ---
+# --- ADMIN PANEL ---
 @bot.message_handler(commands=['admin'])
 def admin_panel_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -844,16 +842,13 @@ def admin_panel_callbacks(call):
         )
     elif action == "manage":
         admin_step[call.from_user.id] = {"action": "manage_user"}
-        bot.send_message(call.message.chat.id, "👤 যে ইউজারের বিবরণ দেখতে চান তার **User ID** লিখে পাঠান:")
+        bot.send_message(call.message.chat.id, "👤 অনুগ্রহ করে যে ইউজারের বিবরণ দেখতে চান তার **User ID** লিখে পাঠান:")
     elif action == "addbal":
         admin_step[call.from_user.id] = {"action": "addbal_step1"}
         bot.send_message(call.message.chat.id, "➕ যে ইউজারের অ্যাকাউন্টে ব্যালেন্স যোগ করবেন তার **User ID** দিন:")
     elif action == "cutbal":
         admin_step[call.from_user.id] = {"action": "cutbal_step1"}
         bot.send_message(call.message.chat.id, "✂️ যে ইউজারের অ্যাকাউন্ট থেকে ব্যালেন্স কাটবেন তার **User ID** দিন:")
-    elif action == "sendmsg":
-        admin_step[call.from_user.id] = {"action": "sendmsg_step1"}
-        bot.send_message(call.message.chat.id, "📩 যে ইউজারের কাছে প্রাইভেট মেসেজ পাঠাবেন তার **User ID** লিখে পাঠান:")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_ban_") or call.data.startswith("adm_unban_"))
 def admin_ban_unban_callback(call):
@@ -867,7 +862,7 @@ def admin_ban_unban_callback(call):
     if action == "adm_ban":
         update_user_field(target_id, {"is_banned": True})
         bot.answer_callback_query(call.id, f"User {target_id} banned successfully.")
-        bot.send_message(call.message.chat.id, f"🚫 ইউজার `{target_id}` কে সফলভাবে পার্মানেন্ট ব্যান করা হয়েছে।", parse_mode="Markdown")
+        bot.send_message(call.message.chat.id, f"🚫 ইউজার `{target_id}` কে সফলভাবে ব্যান করা হয়েছে।", parse_mode="Markdown")
     elif action == "adm_unban":
         update_user_field(target_id, {"is_banned": False})
         bot.answer_callback_query(call.id, f"User {target_id} unbanned successfully.")
@@ -1164,7 +1159,7 @@ def handle_all_messages(message):
             del admin_step[user_id]
             try:
                 amt = float(text)
-                add_balance(target_id, amt)
+                add_balance(target_id, amt)  # সঠিক করা হয়েছে (প্লাস করা হয়েছে)
                 bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}`-কে ${amt:.4f} USDT প্রদান করা হয়েছে।", parse_mode="Markdown")
                 try:
                     bot.send_message(target_id, f"🎉 আপনার অ্যাকাউন্টে ${amt:.4f} USDT যোগ করা হয়েছে!")
@@ -1187,11 +1182,13 @@ def handle_all_messages(message):
             del admin_step[user_id]
             try:
                 amt = float(text)
+                
+                # ব্যালেন্স কাটার আগে পর্যাপ্ত ব্যালেন্স আছে কিনা চেক করা এবং মাইনাস না হওয়া নিশ্চিত করা
                 current_bal, _ = get_user(target_id)
                 if amt > current_bal:
-                    amt = current_bal
+                    amt = current_bal  # সর্বোচ্চ বর্তমান ব্যালেন্স পর্যন্ত কাটা যাবে যাতে মাইনাসে না যায়
                 
-                add_balance(target_id, -amt)
+                add_balance(target_id, -amt)  # সঠিক করা হয়েছে (মাইনাস করা হয়েছে)
                 bot.send_message(message.chat.id, f"✂️ ইউজার `{target_id}`-এর ব্যালেন্স থেকে ${amt:.4f} USDT কেটে নেওয়া হয়েছে।", parse_mode="Markdown")
                 try:
                     bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে ${amt:.4f} USDT কেটে নিয়েছেন।")
@@ -1199,24 +1196,6 @@ def handle_all_messages(message):
                     pass
             except ValueError:
                 bot.send_message(message.chat.id, "❌ সঠিক সংখ্যা লিখুন!")
-            return
-
-        elif state == "sendmsg_step1":
-            if not text.isdigit():
-                bot.send_message(message.chat.id, "❌ সঠিক ইউজার আইডি দিন!")
-                return
-            admin_step[user_id] = {"action": "sendmsg_step2", "target_id": int(text)}
-            bot.send_message(message.chat.id, f"📩 ইউজার `{text}`-এর কাছে যে প্রাইভেট মেসেজটি পাঠাতে চান তা লিখে পাঠান:", parse_mode="Markdown")
-            return
-
-        elif state == "sendmsg_step2":
-            target_id = admin_step[user_id].get("target_id")
-            del admin_step[user_id]
-            try:
-                bot.send_message(target_id, f"📩 **অ্যাডমিনের বার্তা:**\n\n{text}", parse_mode="Markdown")
-                bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}`-এর কাছে সফলভাবে মেসেজ পাঠানো হয়েছে।", parse_mode="Markdown")
-            except Exception as e:
-                bot.send_message(message.chat.id, f"❌ মেসেজ পাঠানো যায়নি। ত্রুটি: {e}")
             return
 
     if user_id in user_captcha_step:
