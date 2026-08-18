@@ -159,7 +159,6 @@ def webhook():
 @app.route('/verify-device')
 def verify_device():
     user_id = request.args.get('user_id')
-    first_name = request.args.get('name', 'User')
     
     if not user_id:
         return "<h3>❌ Invalid Request!</h3>", 400
@@ -168,7 +167,10 @@ def verify_device():
     if user_ip and ',' in user_ip:
         user_ip = user_ip.split(',')[0].strip()
 
-    target_id = int(user_id)
+    try:
+        target_id = int(user_id)
+    except ValueError:
+        return "<h3>❌ Invalid User ID!</h3>", 400
     
     if users_col is not None:
         try:
@@ -775,6 +777,7 @@ def admin_panel_cmd(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_panel_"))
 def admin_panel_callbacks(call):
+    global MAINTENANCE_MODE
     if call.from_user.id not in ADMIN_IDS:
         bot.answer_callback_query(call.id, "❌ আপনি অ্যাডমিন নন!", show_alert=True)
         return
@@ -840,7 +843,6 @@ def admin_panel_callbacks(call):
         )
         bot.edit_message_text("🔘 **কাস্টম বাটন রিমুভ সিস্টেম**\nনিচের অপশনটি ব্যবহার করুন:", chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
     elif action == "maint":
-        global MAINTENANCE_MODE
         MAINTENANCE_MODE = not MAINTENANCE_MODE
         status_str = "ON 🛠️" if MAINTENANCE_MODE else "OFF ✅"
         bot.answer_callback_query(call.id, f"Maintenance Mode is now {status_str}")
