@@ -417,7 +417,7 @@ def main_menu_keyboard():
     )
     return markup
 
-# --- UPDATED ADMIN PANEL KEYBOARD & FEATURES ---
+# --- EXACT ADMIN PANEL KEYBOARD MATCHING THE SCREENSHOT ---
 def admin_dashboard_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -799,7 +799,7 @@ def screenshot_approval_callback(call):
             except:
                 pass
 
-# --- UPDATED ADMIN PANEL COMMAND & CALLBACKS ---
+# --- ADMIN PANEL COMMAND & CALLBACKS ---
 @bot.message_handler(commands=['admin'])
 def admin_panel_cmd(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -844,7 +844,7 @@ def admin_panel_callbacks(call):
         )
     elif action == "manage":
         admin_step[call.from_user.id] = {"action": "manage_user"}
-        bot.send_message(call.message.chat.id, "👤 অনুগ্রহ করে যে ইউজারের বিবরণ দেখতে চান তার **User ID** লিখে পাঠান:")
+        bot.send_message(call.message.chat.id, "👤 যে ইউজারের বিবরণ দেখতে চান তার **User ID** লিখে পাঠান:")
     elif action == "addbal":
         admin_step[call.from_user.id] = {"action": "addbal_step1"}
         bot.send_message(call.message.chat.id, "➕ যে ইউজারের অ্যাকাউন্টে ব্যালেন্স যোগ করবেন তার **User ID** দিন:")
