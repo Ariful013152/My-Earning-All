@@ -105,7 +105,7 @@ WATCH_AD_3_LINKS = [
     'https://exe.io/gCczg6'
 ]
 
-# --- DATABASE SETUP (High Performance Connection Pool) ---
+# --- DATABASE SETUP ---
 users_col = None
 memory_users = {}
 
@@ -113,15 +113,15 @@ if MONGO_URI:
     try:
         client = pymongo.MongoClient(
             MONGO_URI, 
-            serverSelectionTimeoutMS=3000, 
+            serverSelectionTimeoutMS=2000, 
             maxPoolSize=200, 
-            minPoolSize=10,
+            minPoolSize=20,
             maxIdleTimeMS=45000
         )
         db = client["telegram_bot"]
         users_col = db["users"]
         users_col.create_index("user_id", unique=True)
-        print("MongoDB Connected Successfully with High Performance Pool.")
+        print("MongoDB Connected Successfully.")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
 
@@ -131,7 +131,7 @@ app = Flask(__name__)
 # --- WEBHOOK & FLASK ROUTES ---
 @app.route('/')
 def home():
-    return "Bot is running with High Speed Webhook!"
+    return "Bot is running ultra fast!"
 
 @app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
@@ -156,12 +156,7 @@ def verify_device():
         user_ip = user_ip.split(',')[0].strip()
 
     target_id = int(user_id)
-    
-    if users_col is not None:
-        try:
-            users_col.update_one({"user_id": target_id}, {"$set": {"temp_ip": user_ip}}, upsert=True)
-        except Exception as e:
-            print(f"IP Save Error: {e}")
+    update_user_field(target_id, {"temp_ip": user_ip})
 
     return f"""
     <html>
@@ -191,10 +186,15 @@ admin_step = {}
 user_waiting_screenshot = set()
 user_waiting_ad3_screenshot = set()
 
-# --- DATABASE HELPERS ---
+# --- FAST IN-MEMORY & BACKGROUND DB HELPERS ---
 def get_user(user_id, first_name="User", referred_by=None):
     current_now = time.time()
     
+    # ইন-মেমোরিতে থাকলে সরাসরি মেমোরি থেকে রিটার্ন (Ultra Fast Response)
+    if user_id in memory_users:
+        memory_users[user_id]["last_active"] = current_now
+        return memory_users[user_id].get("balance", 0.0), memory_users[user_id]
+
     default_user_data = {
         "user_id": user_id, 
         "first_name": str(first_name)[:30],
@@ -223,53 +223,45 @@ def get_user(user_id, first_name="User", referred_by=None):
         "ad3_last_reset": current_now
     }
 
-    if users_col is None:
-        if user_id not in memory_users:
-            memory_users[user_id] = default_user_data
-        else:
-            memory_users[user_id]["last_active"] = current_now
-        return memory_users[user_id].get("balance", 0.0), memory_users[user_id]
-        
-    try:
-        user = users_col.find_one({"user_id": user_id})
-        if not user:
-            user = default_user_data
-            users_col.insert_one(user)
-            
-            if referred_by:
-                ref_user = users_col.find_one({"user_id": referred_by})
-                if ref_user and not ref_user.get("is_banned", False):
-                    users_col.update_one({"user_id": referred_by}, {"$inc": {"balance": REFERRAL_BONUS, "referrals_count": 1}})
-                    try:
-                        bot.send_message(referred_by, f"🎉 আপনার রেফারেল লিংকের মাধ্যমে নতুন ইউজার যুক্ত হয়েছে! আপনি পেয়েছেন ${REFERRAL_BONUS:.3f} USDT বোনাস।")
-                    except:
-                        pass
-        else:
-            users_col.update_one({"user_id": user_id}, {"$set": {"last_active": current_now}})
-            user["last_active"] = current_now
+    if users_col is not None:
+        try:
+            user = users_col.find_one({"user_id": user_id})
+            if not user:
+                user = default_user_data
+                threading.Thread(target=lambda: users_col.insert_one(user), daemon=True).start()
+                
+                if referred_by:
+                    def handle_ref():
+                        ref_user = users_col.find_one({"user_id": referred_by})
+                        if ref_user and not ref_user.get("is_banned", False):
+                            add_balance(referred_by, REFERRAL_BONUS)
+                            if referred_by in memory_users:
+                                memory_users[referred_by]["referrals_count"] = memory_users[referred_by].get("referrals_count", 0) + 1
+                            users_col.update_one({"user_id": referred_by}, {"$inc": {"referrals_count": 1}})
+                            try:
+                                bot.send_message(referred_by, f"🎉 আপনার রেফারেল লিংকের মাধ্যমে নতুন ইউজার যুক্ত হয়েছে! আপনি পেয়েছেন ${REFERRAL_BONUS:.3f} USDT বোনাস।")
+                            except:
+                                pass
+                    threading.Thread(target=handle_ref, daemon=True).start()
+            memory_users[user_id] = user
+            return user.get("balance", 0.0), user
+        except Exception as e:
+            print(f"DB Fetch Error: {e}")
 
-        return user.get("balance", 0.0), user
-    except Exception as e:
-        print(f"DB Error: {e}")
-        return 0.0, default_user_data
+    memory_users[user_id] = default_user_data
+    return 0.0, default_user_data
 
 def update_user_field(user_id, field_dict):
-    if users_col is not None:
-        try:
-            users_col.update_one({"user_id": user_id}, {"$set": field_dict}, upsert=True)
-        except Exception as e:
-            print(f"DB Update Error: {e}")
     if user_id in memory_users:
         memory_users[user_id].update(field_dict)
+    if users_col is not None:
+        threading.Thread(target=lambda: users_col.update_one({"user_id": user_id}, {"$set": field_dict}, upsert=True), daemon=True).start()
 
 def add_balance(user_id, amount):
-    if users_col is not None:
-        try:
-            users_col.update_one({"user_id": user_id}, {"$inc": {"balance": float(amount)}})
-        except Exception as e:
-            print(f"DB Balance Error: {e}")
     if user_id in memory_users:
         memory_users[user_id]["balance"] = memory_users[user_id].get("balance", 0.0) + float(amount)
+    if users_col is not None:
+        threading.Thread(target=lambda: users_col.update_one({"user_id": user_id}, {"$inc": {"balance": float(amount)}}), daemon=True).start()
 
 def add_payment_history(user_id, method, amount_usdt, amount_bdt, number):
     record = {
@@ -279,15 +271,12 @@ def add_payment_history(user_id, method, amount_usdt, amount_bdt, number):
         "number": str(number).strip(),
         "date": get_bd_time_str()
     }
-    if users_col is not None:
-        try:
-            users_col.update_one({"user_id": user_id}, {"$push": {"history": record}})
-        except Exception as e:
-            print(f"DB History Error: {e}")
     if user_id in memory_users:
         if "history" not in memory_users[user_id]:
             memory_users[user_id]["history"] = []
         memory_users[user_id]["history"].append(record)
+    if users_col is not None:
+        threading.Thread(target=lambda: users_col.update_one({"user_id": user_id}, {"$push": {"history": record}}), daemon=True).start()
 
 def get_all_active_users():
     if users_col is not None:
@@ -298,41 +287,44 @@ def get_all_active_users():
     return [u for u in memory_users.values() if not u.get("is_banned", False)]
 
 def check_duplicate_withdraw_number(current_user_id, current_name, number, method, withdraw_amount, bdt_amount):
-    if users_col is None:
-        return
-    try:
-        clean_num = str(number).strip()
-        previous_users = list(users_col.find({"history.number": clean_num, "user_id": {"$ne": current_user_id}}))
-        
-        if previous_users:
-            other_user_ids = [str(u.get("user_id")) for u in previous_users]
-            other_ids_str = ", ".join(other_user_ids)
+    def async_check():
+        if users_col is None:
+            return
+        try:
+            clean_num = str(number).strip()
+            previous_users = list(users_col.find({"history.number": clean_num, "user_id": {"$ne": current_user_id}}))
             
-            alert_msg = (
-                "🚨 **সন্দেহভাজন মাল্টি-অ্যাকাউন্ট উইথড্র অ্যালার্ট!**\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                f"👤 ইউজারের নাম: {current_name}\n"
-                f"🆔 বর্তমান ইউজার আইডি: `{current_user_id}`\n"
-                f"📱 দেওয়া নম্বর: `{clean_num}` ({method})\n"
-                f"💵 উইথড্র পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} BDT)\n"
-                f"⚠️ পূর্বে একই নম্বর ব্যবহারকারী আইডি: `{other_ids_str}`\n"
-                "━━━━━━━━━━━━━━━━━━━\n"
-                "আপনি চাইলে নিচের বাটনে ক্লিক করে সিদ্ধান্ত নিতে পারেন:"
-            )
-            
-            markup = InlineKeyboardMarkup()
-            markup.row(
-                InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{current_user_id}"),
-                InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{current_user_id}")
-            )
-            
-            for admin_id in ADMIN_IDS:
-                try:
-                    bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
-                except Exception as e:
-                    print(f"Failed to send alert to admin {admin_id}: {e}")
-    except Exception as e:
-        print(f"Duplicate withdraw check error: {e}")
+            if previous_users:
+                other_user_ids = [str(u.get("user_id")) for u in previous_users]
+                other_ids_str = ", ".join(other_user_ids)
+                
+                alert_msg = (
+                    "🚨 **সন্দেহভাজন মাল্টি-অ্যাকাউন্ট উইথড্র অ্যালার্ট!**\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    f"👤 ইউজারের নাম: {current_name}\n"
+                    f"🆔 বর্তমান ইউজার আইডি: `{current_user_id}`\n"
+                    f"📱 দেওয়া নম্বর: `{clean_num}` ({method})\n"
+                    f"💵 উইথড্র পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} BDT)\n"
+                    f"⚠️ পূর্বে একই নম্বর ব্যবহারকারী আইডি: `{other_ids_str}`\n"
+                    "━━━━━━━━━━━━━━━━━━━\n"
+                    "আপনি চাইলে নিচের বাটনে ক্লিক করে সিদ্ধান্ত নিতে পারেন:"
+                )
+                
+                markup = InlineKeyboardMarkup()
+                markup.row(
+                    InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{current_user_id}"),
+                    InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{current_user_id}")
+                )
+                
+                for admin_id in ADMIN_IDS:
+                    try:
+                        bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
+                    except Exception as e:
+                        print(f"Failed to send alert to admin {admin_id}: {e}")
+        except Exception as e:
+            print(f"Duplicate withdraw check error: {e}")
+    
+    threading.Thread(target=async_check, daemon=True).start()
 
 def check_user_channels(user_id):
     for channel in REQUIRED_CHANNELS:
@@ -987,38 +979,40 @@ def check_device_ip_callback(call):
         bot.answer_callback_query(call.id, "❌ আপনি এখনো ব্রাউজারে গিয়ে লিংকটি ওপেন করেননি!", show_alert=True)
         return
 
-    existing_ip_user = None
-    if users_col is not None:
-        try:
-            existing_ip_user = users_col.find_one({"last_ip": user_ip, "user_id": {"$ne": user_id}})
-        except Exception as e:
-            print(f"IP Check Error: {e}")
+    def async_ip_check():
+        existing_ip_user = None
+        if users_col is not None:
+            try:
+                existing_ip_user = users_col.find_one({"last_ip": user_ip, "user_id": {"$ne": user_id}})
+            except Exception as e:
+                print(f"IP Check Error: {e}")
+
+        if existing_ip_user:
+            other_id = existing_ip_user.get("user_id")
+            alert_msg = (
+                "⚠️ **ডুপ্লিকেট ডিভাইস/আইপি ডিটেক্টেড!**\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 ইউজার: {first_name} (ID: `{user_id}`)\n"
+                f"🌐 আইপি: `{user_ip}`\n"
+                f"🔗 আগে ব্যবহারকারী আইডি: `{other_id}`\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "ইউজার ভেরিফাই করেছে, আপনি চাইলে এখান থেকে ব্যবস্থা নিন:"
+            )
+            
+            markup = InlineKeyboardMarkup()
+            markup.row(
+                InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{user_id}"),
+                InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{user_id}")
+            )
+            
+            for admin_id in ADMIN_IDS:
+                try:
+                    bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
+                except:
+                    pass
 
     update_user_field(user_id, {"last_ip": user_ip, "device_verified": True})
-
-    if existing_ip_user:
-        other_id = existing_ip_user.get("user_id")
-        alert_msg = (
-            "⚠️ **ডুপ্লিকেট ডিভাইস/আইপি ডিটেক্টেড!**\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 ইউজার: {first_name} (ID: `{user_id}`)\n"
-            f"🌐 আইপি: `{user_ip}`\n"
-            f"🔗 আগে ব্যবহারকারী আইডি: `{other_id}`\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "ইউজার ভেরিফাই করেছে, আপনি চাইলে এখান থেকে ব্যবস্থা নিন:"
-        )
-        
-        markup = InlineKeyboardMarkup()
-        markup.row(
-            InlineKeyboardButton("🚫 Ban User", callback_data=f"adm_ban_{user_id}"),
-            InlineKeyboardButton("✅ Unban User", callback_data=f"adm_unban_{user_id}")
-        )
-        
-        for admin_id in ADMIN_IDS:
-            try:
-                bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
-            except:
-                pass
+    threading.Thread(target=async_ip_check, daemon=True).start()
 
     try:
         bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -1159,7 +1153,7 @@ def handle_all_messages(message):
             del admin_step[user_id]
             try:
                 amt = float(text)
-                add_balance(target_id, amt)  # সঠিক করা হয়েছে (প্লাস করা হয়েছে)
+                add_balance(target_id, amt)
                 bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}`-কে ${amt:.4f} USDT প্রদান করা হয়েছে।", parse_mode="Markdown")
                 try:
                     bot.send_message(target_id, f"🎉 আপনার অ্যাকাউন্টে ${amt:.4f} USDT যোগ করা হয়েছে!")
@@ -1182,13 +1176,11 @@ def handle_all_messages(message):
             del admin_step[user_id]
             try:
                 amt = float(text)
-                
-                # ব্যালেন্স কাটার আগে পর্যাপ্ত ব্যালেন্স আছে কিনা চেক করা এবং মাইনাস না হওয়া নিশ্চিত করা
                 current_bal, _ = get_user(target_id)
                 if amt > current_bal:
-                    amt = current_bal  # সর্বোচ্চ বর্তমান ব্যালেন্স পর্যন্ত কাটা যাবে যাতে মাইনাসে না যায়
+                    amt = current_bal
                 
-                add_balance(target_id, -amt)  # সঠিক করা হয়েছে (মাইনাস করা হয়েছে)
+                add_balance(target_id, -amt)
                 bot.send_message(message.chat.id, f"✂️ ইউজার `{target_id}`-এর ব্যালেন্স থেকে ${amt:.4f} USDT কেটে নেওয়া হয়েছে।", parse_mode="Markdown")
                 try:
                     bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে ${amt:.4f} USDT কেটে নিয়েছেন।")
@@ -1386,5 +1378,5 @@ if __name__ == '__main__':
     threading.Thread(target=auto_post_loop, daemon=True).start()
     threading.Thread(target=inactivity_push_loop, daemon=True).start()
 
-    print("Telegram Bot is running with Webhook...")
+    print("Telegram Bot is running with Fast Webhook...")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
