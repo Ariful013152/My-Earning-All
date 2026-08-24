@@ -24,12 +24,12 @@ PROOF_CHANNEL = "@myearningall"
 # স্ক্রিনশট সাবমিট হওয়ার নির্দিষ্ট চ্যানেল
 SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"
 
-PAYMENT_BANNER_URL = "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=800"
+# বিকাশ/নগদ টাকার নতুন ব্যানার লিংক
+PAYMENT_BANNER_URL = "https://i.ibb.co/6P6X5mD/bkash-nagad-banner.jpg"  # প্রয়োজনমত আপনার ছবির লিংক বসিয়ে নিতে পারেন
 
-MIN_WITHDRAW = 1.0    # সর্বনিম্ন উইথড্র ১ ডলার
-USDT_TO_BDT = 100.0   # ১ ডলার = ১০০ টাকা
-REFERRAL_BONUS = 0.005
-FAKE_USER_OFFSET = 506  # ৫০৬+ ফেক ইউজার কাউন্ট
+MIN_WITHDRAW = 100.0   # সর্বনিম্ন উইথড্র ১০০ টাকা
+REFERRAL_BONUS = 0.50  # ০.৫০ টাকা রেফার বোনাস
+FAKE_USER_OFFSET = 506 # ৫০৬+ ফেক ইউজার কাউন্ট
 
 # --- TIMEZONE FUNCTION (Bangladesh Time GMT+6) ---
 def get_bd_time_str():
@@ -128,7 +128,7 @@ if MONGO_URI:
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=100)
 app = Flask(__name__)
 
-# --- WEBHOOK & FLASK ROUTES (ULTRA FAST RE-ENGINEERED) ---
+# --- WEBHOOK & FLASK ROUTES ---
 @app.route('/')
 def home():
     return "Bot is running ultra fast!"
@@ -138,7 +138,6 @@ def webhook():
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
         update = telebot.types.Update.de_json(json_string)
-        # ব্যাকগ্রাউন্ড থ্রেডে পাঠান যাতে টেলিগ্রাম সাথে সাথে ২০০ রেসপন্স পেয়ে ফ্রি হয়
         threading.Thread(target=bot.process_new_updates, args=([update],), daemon=True).start()
         return "OK", 200
     else:
@@ -239,7 +238,7 @@ def get_user(user_id, first_name="User", referred_by=None):
                                 memory_users[referred_by]["referrals_count"] = memory_users[referred_by].get("referrals_count", 0) + 1
                             users_col.update_one({"user_id": referred_by}, {"$inc": {"referrals_count": 1}})
                             try:
-                                bot.send_message(referred_by, f"🎉 আপনার রেফারেল লিংকের মাধ্যমে নতুন ইউজার যুক্ত হয়েছে! আপনি পেয়েছেন ${REFERRAL_BONUS:.3f} USDT বোনাস।")
+                                bot.send_message(referred_by, f"🎉 আপনার রেফারেল লিংকের মাধ্যমে নতুন ইউজার যুক্ত হয়েছে! আপনি পেয়েছেন {REFERRAL_BONUS:.2f} টাকা বোনাস।")
                             except:
                                 pass
                     threading.Thread(target=handle_ref, daemon=True).start()
@@ -263,10 +262,9 @@ def add_balance(user_id, amount):
     if users_col is not None:
         threading.Thread(target=lambda: users_col.update_one({"user_id": user_id}, {"$inc": {"balance": float(amount)}}), daemon=True).start()
 
-def add_payment_history(user_id, method, amount_usdt, amount_bdt, number):
+def add_payment_history(user_id, method, amount_bdt, number):
     record = {
         "method": method,
-        "amount_usdt": amount_usdt,
         "amount_bdt": amount_bdt,
         "number": str(number).strip(),
         "date": get_bd_time_str()
@@ -286,7 +284,7 @@ def get_all_active_users():
             print(f"Error fetching users: {e}")
     return [u for u in memory_users.values() if not u.get("is_banned", False)]
 
-def check_duplicate_withdraw_number(current_user_id, current_name, number, method, withdraw_amount, bdt_amount):
+def check_duplicate_withdraw_number(current_user_id, current_name, number, method, bdt_amount):
     def async_check():
         if users_col is None:
             return
@@ -304,7 +302,7 @@ def check_duplicate_withdraw_number(current_user_id, current_name, number, metho
                     f"👤 ইউজারের নাম: {current_name}\n"
                     f"🆔 বর্তমান ইউজার আইডি: `{current_user_id}`\n"
                     f"📱 দেওয়া নম্বর: `{clean_num}` ({method})\n"
-                    f"💵 উইথড্র পরিমাণ: ${withdraw_amount:.4f} USDT (={bdt_amount:.2f} BDT)\n"
+                    f"💵 উইথড্র পরিমাণ: {bdt_amount:.2f} BDT\n"
                     f"⚠️ পূর্বে একই নম্বর ব্যবহারকারী আইডি: `{other_ids_str}`\n"
                     "━━━━━━━━━━━━━━━━━━━\n"
                     "আপনি চাইলে নিচের বাটনে ক্লিক করে সিদ্ধান্ত নিতে পারেন:"
@@ -360,7 +358,7 @@ def send_step_by_step_verification(chat_id, user_id, first_name):
             chat_id,
             "🛡️ **ধাপ ২: ডিভাইস ও আইপি সিকিউরিটি চেক!**\n\n"
             "👉 **ধাপ ১:** 'ব্রাউজারে গিয়ে চেক করুন' বাটনে ক্লিক করে ব্রাউজারে যান।\n"
-            "👉 **ধাপ ২:** ব্রাউজার থেকে টেলিগ্রামে ফিরে এসে 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন.",
+            "👉 **ধাপ ২:** ব্রাউজার থেকে টেলিগ্রামে ফিরে এসে 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন।",
             reply_markup=markup,
             parse_mode="Markdown"
         )
@@ -428,19 +426,21 @@ def auto_post_loop():
         try:
             time.sleep(180)
             method = random.choice(methods)
-            amount_usdt = round(random.uniform(2.0, 8.0), 3)
-            amount_bdt = round(amount_usdt * USDT_TO_BDT, 2)
+            amount_bdt = round(random.uniform(200.0, 800.0), 2)
             
             prefix = random.choice(["017", "018", "019", "016", "015", "013", "014"])
             fake_num = prefix + "".join([str(random.randint(0, 9)) for _ in range(8)])
             masked_num = fake_num[:3] + "xxxxx" + fake_num[-2:]
             
+            trx_id = "".join(random.choices("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", k=10))
+            
             channel_msg = (
                 "My Earning All Payment\n"
                 "✅ Withdrawal Paid\n\n"
-                f"💵 {amount_usdt} USDT ({amount_bdt} BDT)\n"
+                f"💵 {amount_bdt:.2f} BDT\n"
                 f"🌐 {method}\n"
-                f"👛 {masked_num}"
+                f"👛 {masked_num}\n"
+                f"🆔 TrxID: {trx_id}"
             )
             
             bot.send_photo(PROOF_CHANNEL, photo=PAYMENT_BANNER_URL, caption=channel_msg)
@@ -562,7 +562,7 @@ def watch_ad_2_handler(message):
     text_msg = (
         "📺 Watch Ad 2 - টাস্ক পেজ\n\n"
         "🔗 লিংক ক্লিক করার পর একটি স্ক্রিনশট নিবেন ভেরিফাই কমপ্লিট করবেন আর বাটনে ক্লিক করলে অ্যাড আসলে ব্যাক বাটনে ব্যাক করে আবার ক্লিক করবেন তারপর ইউটিউবে আপনাকে নিয়ে যাবে একটা স্ক্রিনশট নিবেন আপনার কাজ শেষ তারপর বটে ফিরে আসবেন স্ক্রিনশট দুটি পাঠিয়ে দিবেন ✅\n\n"
-        f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.10 টাকা)\n"
+        f"💵 প্রতি কাজের রিওয়ার্ড: 0.10 টাকা\n"
         f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
     )
 
@@ -611,7 +611,7 @@ def watch_ad_3_handler(message):
     text_msg = (
         "📺 Watch Ad 3 - টাস্ক পেজ\n\n"
         "🔗 লিংক ক্লিক করার পর একটি স্ক্রিনশট নিবেন ভেরিফাই কমপ্লিট করবেন আর বাটনে ক্লিক করলে অ্যাড আসলে ব্যাক বাটনে ব্যাক করে আবার ক্লিক করবেন তারপর ShrinkMe তে আপনাকে নিয়ে যাবে একটা স্ক্রিনশট নিবেন আপনার কাজ শেষ তারপর বটে ফিরে আসবেন স্ক্রিনশট দুটি পাঠিয়ে দিবেন ✅\n\n"
-        f"💵 প্রতি কাজের রিওয়ার্ড: 0.001 USDT (=0.10 টাকা)\n"
+        f"💵 প্রতি কাজের রিওয়ার্ড: 0.10 টাকা\n"
         f"📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক"
     )
 
@@ -648,7 +648,7 @@ def handle_user_screenshot(message):
 
         try:
             bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
-            bot.reply_to(message, "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.", reply_markup=main_menu_keyboard())
+            bot.reply_to(message, "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে।", reply_markup=main_menu_keyboard())
         except Exception as e:
             print(f"Error sending screenshot to channel: {e}")
             bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
@@ -680,7 +680,7 @@ def handle_user_screenshot(message):
 
         try:
             bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
-            bot.reply_to(message, "✅ আপনার Exe.io স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.", reply_markup=main_menu_keyboard())
+            bot.reply_to(message, "✅ আপনার Exe.io স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে।", reply_markup=main_menu_keyboard())
         except Exception as e:
             print(f"Error sending ad3 screenshot to channel: {e}")
             bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
@@ -688,7 +688,7 @@ def handle_user_screenshot(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("scr_yes_") or call.data.startswith("scr_no_") or call.data.startswith("ad3_yes_") or call.data.startswith("ad3_no_"))
 def screenshot_approval_callback(call):
-    bot.answer_callback_query(call.id)  # লোডিং সঙ্গে সঙ্গে বাদ
+    bot.answer_callback_query(call.id)
     if call.from_user.id not in ADMIN_IDS:
         bot.answer_callback_query(call.id, "❌ আপনি অ্যাডমিন নন!", show_alert=True)
         return
@@ -703,7 +703,7 @@ def screenshot_approval_callback(call):
             completed_today = int(data_parts[3])
             next_index = int(data_parts[4])
             
-            reward = 0.001
+            reward = 0.10
             add_balance(target_user_id, reward)
             
             update_user_field(target_user_id, {
@@ -722,7 +722,7 @@ def screenshot_approval_callback(call):
                 pass
 
             try:
-                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
+                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে {reward:.2f} টাকা উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
             except:
                 pass
 
@@ -738,7 +738,7 @@ def screenshot_approval_callback(call):
                 pass
 
             try:
-                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=main_menu_keyboard())
+                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন।", reply_markup=main_menu_keyboard())
             except:
                 pass
 
@@ -747,7 +747,7 @@ def screenshot_approval_callback(call):
             completed_today = int(data_parts[3])
             next_index = int(data_parts[4])
             
-            reward = 0.001
+            reward = 0.10
             add_balance(target_user_id, reward)
             
             update_user_field(target_user_id, {
@@ -766,7 +766,7 @@ def screenshot_approval_callback(call):
                 pass
 
             try:
-                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার Exe.io স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
+                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার Exe.io স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে {reward:.2f} টাকা উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
             except:
                 pass
 
@@ -782,7 +782,7 @@ def screenshot_approval_callback(call):
                 pass
 
             try:
-                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা Exe.io স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=main_menu_keyboard())
+                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা Exe.io স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন।", reply_markup=main_menu_keyboard())
             except:
                 pass
 
@@ -903,7 +903,7 @@ def claim_reward_callback(call):
         bot.answer_callback_query(call.id, f"⏳ আরও {remaining} সেকেন্ড অপেক্ষা করুন!", show_alert=True)
         return
 
-    reward = 0.001
+    reward = 0.10
     add_balance(user_id, reward)
     
     current_count = user.get("daily_count", 0) + 1
@@ -933,7 +933,7 @@ def claim_reward_callback(call):
         update_user_field(user_id, {"can_claim": False, "daily_count": current_count})
         bot.send_message(
             call.message.chat.id,
-            f"🎉 অভিনন্দন! আপনি সফলভাবে ${reward:.3f} USDT উপার্জন করেছেন。\n📈 আজকের দেখা মোট এড: {current_count}/30",
+            f"🎉 অভিনন্দন! আপনি সফলভাবে {reward:.2f} টাকা উপার্জন করেছেন。\n📈 আজকের দেখা মোট এড: {current_count}/30",
             reply_markup=main_menu_keyboard()
         )
 
@@ -960,7 +960,7 @@ def withdraw_method_callback(call):
         
     bot.send_message(
         call.message.chat.id,
-        f"💵 আপনি **{method}** এর মাধ্যমে উইথড্র করতে চান।\n\nবর্তমান ব্যালেন্স: **${balance:.4f} USDT**\n👉 আপনি কত USDT উইথড্র করতে চান তা সংখ্যায় লিখে পাঠান (যেমন: 1.0):",
+        f"💵 আপনি **{method}** এর মাধ্যমে উইথড্র করতে চান।\n\nবর্তমান ব্যালেন্স: **{balance:.2f} BDT**\n👉 আপনি কত টাকা উইথড্র করতে চান তা সংখ্যায় লিখে পাঠান (যেমন: 100):",
         parse_mode="Markdown"
     )
 
@@ -1118,7 +1118,6 @@ def handle_all_messages(message):
             target_id = int(text)
             _, target_user = get_user(target_id)
             user_bal = target_user.get("balance", 0.0)
-            bdt_val = user_bal * USDT_TO_BDT
             name = target_user.get("first_name", "Unknown")
             ref_count = target_user.get("referrals_count", 0)
             phone = target_user.get("verified_phone", "ভেরিফাই করা হয়নি")
@@ -1127,7 +1126,7 @@ def handle_all_messages(message):
             msg = (
                 f"👤 **ইউজার প্যানেল**\n━━━━━━━━━━━━━━━━━━━\n"
                 f"📛 নাম: {name}\n🆔 আইডি: `{target_id}`\n📱 ফোন: `{phone}`\n"
-                f"💰 ব্যালেন্স: ${user_bal:.4f} USDT (={bdt_val:.2f} টাকা)\n"
+                f"💰 ব্যালেন্স: {user_bal:.2f} BDT\n"
                 f"👥 মোট রেফার: {ref_count} জন\n"
                 f"🚫 স্ট্যাটাস: {'🚫 Banned' if is_banned else '✅ Active'}\n━━━━━━━━━━━━━━━━━━━"
             )
@@ -1146,7 +1145,7 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, "❌ সঠিক ইউজার আইডি দিন!")
                 return
             admin_step[user_id] = {"action": "addbal_step2", "target_id": int(text)}
-            bot.send_message(message.chat.id, f"➕ যে ইউজারের অ্যাকাউন্টে ব্যালেন্স যোগ করবেন তার কত USDT যোগ করতে চান তা লিখুন:")
+            bot.send_message(message.chat.id, f"➕ যে ইউজারের অ্যাকাউন্টে ব্যালেন্স যোগ করবেন তার কত BDT যোগ করতে চান তা লিখুন:")
             return
 
         elif state == "addbal_step2":
@@ -1155,9 +1154,9 @@ def handle_all_messages(message):
             try:
                 amt = float(text)
                 add_balance(target_id, amt)
-                bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}`-কে ${amt:.4f} USDT প্রদান করা হয়েছে।", parse_mode="Markdown")
+                bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}`-কে {amt:.2f} BDT প্রদান করা হয়েছে।", parse_mode="Markdown")
                 try:
-                    bot.send_message(target_id, f"🎉 আপনার অ্যাকাউন্টে ${amt:.4f} USDT যোগ করা হয়েছে!")
+                    bot.send_message(target_id, f"🎉 আপনার অ্যাকাউন্টে {amt:.2f} BDT যোগ করা হয়েছে!")
                 except:
                     pass
             except ValueError:
@@ -1169,7 +1168,7 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, "❌ সঠিক ইউজার আইডি দিন!")
                 return
             admin_step[user_id] = {"action": "cutbal_step2", "target_id": int(text)}
-            bot.send_message(message.chat.id, f"✂️ যে ইউজারের অ্যাকাউন্ট থেকে ব্যালেন্স কাটবেন, কত USDT কাটতে চান তা লিখুন:")
+            bot.send_message(message.chat.id, f"✂️ যে ইউজারের অ্যাকাউন্ট থেকে ব্যালেন্স কাটবেন, কত BDT কাটতে চান তা লিখুন:")
             return
 
         elif state == "cutbal_step2":
@@ -1182,9 +1181,9 @@ def handle_all_messages(message):
                     amt = current_bal
                 
                 add_balance(target_id, -amt)
-                bot.send_message(message.chat.id, f"✂️ ইউজার `{target_id}`-এর ব্যালেন্স থেকে ${amt:.4f} USDT কেটে নেওয়া হয়েছে।", parse_mode="Markdown")
+                bot.send_message(message.chat.id, f"✂️ ইউজার `{target_id}`-এর ব্যালেন্স থেকে {amt:.2f} BDT কেটে নেওয়া হয়েছে।", parse_mode="Markdown")
                 try:
-                    bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে ${amt:.4f} USDT কেটে নিয়েছেন।")
+                    bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে {amt:.2f} BDT কেটে নিয়েছেন।")
                 except:
                     pass
             except ValueError:
@@ -1212,17 +1211,17 @@ def handle_all_messages(message):
                 amt = float(text)
                 balance, _ = get_user(user_id)
                 if amt < MIN_WITHDRAW:
-                    bot.reply_to(message, f"❌ সর্বনিম্ন উইথড্র ${MIN_WITHDRAW} USDT। আবার সঠিক পরিমাণ লিখুন:")
+                    bot.reply_to(message, f"❌ সর্বনিম্ন উইথড্র {MIN_WITHDRAW} টাকা। আবার সঠিক পরিমাণ লিখুন:")
                     return
                 if amt > balance:
-                    bot.reply_to(message, f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই! বর্তমান ব্যালেন্স: ${balance:.4f} USDT। সঠিক পরিমাণ লিখুন:")
+                    bot.reply_to(message, f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই! বর্তমান ব্যালেন্স: {balance:.2f} BDT। সঠিক পরিমাণ লিখুন:")
                     return
                 
                 step_data['amount'] = amt
                 step_data['step'] = 'number'
                 bot.send_message(message.chat.id, f"📱 আপনি **{step_data['method']}** নম্বরে উইথড্র করবেন।\n👉 আপনার ১১ ডিজিটের **{step_data['method']} নম্বর**টি লিখে পাঠান (যেমন: 017xxxxxxxx):", parse_mode="Markdown")
             except ValueError:
-                bot.reply_to(message, "❌ সঠিক সংখ্যা লিখুন (যেমন: 1.0):")
+                bot.reply_to(message, "❌ সঠিক সংখ্যা লিখুন (যেমন: 100):")
             return
             
         elif step_data['step'] == 'number':
@@ -1232,21 +1231,23 @@ def handle_all_messages(message):
                 return
                 
             method = step_data['method']
-            amount_usdt = step_data['amount']
-            amount_bdt = amount_usdt * USDT_TO_BDT
+            amount_bdt = step_data['amount']
             
             del user_withdraw_step[user_id]
-            add_balance(user_id, -amount_usdt)
-            add_payment_history(user_id, method, amount_usdt, amount_bdt, number)
+            add_balance(user_id, -amount_bdt)
+            add_payment_history(user_id, method, amount_bdt, number)
             
-            check_duplicate_withdraw_number(user_id, first_name, number, method, amount_usdt, amount_bdt)
+            check_duplicate_withdraw_number(user_id, first_name, number, method, amount_bdt)
             
+            trx_id = "".join(random.choices("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", k=10))
+
             channel_msg = (
                 "My Earning All Payment\n"
                 "✅ Withdrawal Paid\n\n"
-                f"💵 {amount_usdt:.3f} USDT ({amount_bdt:.2f} BDT)\n"
+                f"💵 {amount_bdt:.2f} BDT\n"
                 f"🌐 {method}\n"
-                f"👛 {str(number)[:3]}xxxxx{str(number)[-2:]}"
+                f"👛 {str(number)[:3]}xxxxx{str(number)[-2:]}\n"
+                f"🆔 TrxID: {trx_id}"
             )
             try:
                 bot.send_photo(PROOF_CHANNEL, photo=PAYMENT_BANNER_URL, caption=channel_msg)
@@ -1260,10 +1261,10 @@ def handle_all_messages(message):
                 f"👤 নাম: {first_name}\n"
                 f"🆔 আইডি: `{user_id}`\n"
                 f"📱 ফোন: {user_phone}\n"
-                f"💰 ব্যালেন্স: ${current_user_data.get('balance', 0.0):.4f} USDT (={current_user_data.get('balance', 0.0)*USDT_TO_BDT:.2f} BDT)\n"
+                f"💰 ব্যালেন্স: {current_user_data.get('balance', 0.0):.2f} BDT\n"
                 f"👥 মোট রেফারেল: {ref_count} জন\n\n"
                 f"💸 **নতুন উইথড্র রিকোয়েস্ট:**\n"
-                f"💵 পরিমাণ: ${amount_usdt:.3f} USDT ({amount_bdt:.2f} BDT)\n"
+                f"💵 পরিমাণ: {amount_bdt:.2f} BDT\n"
                 f"🌐 মেথড: {method}\n"
                 f"👛 নম্বর: `{number}`"
             )
@@ -1276,7 +1277,7 @@ def handle_all_messages(message):
             bot.send_message(
                 message.chat.id,
                 f"✅ **উইথড্র সফলভাবে সাবমিট হয়েছে!**\n\n"
-                f"💵 পরিমাণ: ${amount_usdt:.3f} USDT (={amount_bdt:.2f} BDT)\n"
+                f"💵 পরিমাণ: {amount_bdt:.2f} BDT\n"
                 f"🌐 মেথড: {method}\n"
                 f"📱 নম্বর: `{number}`\n\n"
                 f"⏳ ২৪ ঘণ্টার মধ্যে পেমেন্ট পৌঁছে যাবে।",
@@ -1290,7 +1291,6 @@ def handle_all_messages(message):
 
     if text == "🖥 Account":
         balance, user = get_user(user_id, first_name)
-        bdt_val = balance * USDT_TO_BDT
         phone = user.get("verified_phone", "ভেরিফাই করা হয়নি")
         ref_count = user.get("referrals_count", 0)
         bot.send_message(
@@ -1300,7 +1300,7 @@ def handle_all_messages(message):
             f"👤 নাম: {first_name}\n"
             f"🆔 আইডি: `{user_id}`\n"
             f"📱 ফোন: `{phone}`\n"
-            f"💰 ব্যালেন্স: **${balance:.4f} USDT** (={bdt_val:.2f} BDT)\n"
+            f"💰 ব্যালেন্স: **{balance:.2f} BDT**\n"
             f"👥 মোট রেফারেল: {ref_count} জন\n"
             f"━━━━━━━━━━━━━━━━━━━",
             parse_mode="Markdown"
@@ -1315,7 +1315,7 @@ def handle_all_messages(message):
             message.chat.id,
             f"✨ **রেফারেল প্রোগ্রাম**\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"প্রতিটি সফল রেফারেলের জন্য পাবেন **${REFERRAL_BONUS:.3f} USDT** বোনাস!\n\n"
+            f"প্রতিটি সফল রেফারেলের জন্য পাবেন **{REFERRAL_BONUS:.2f} BDT** বোনাস!\n\n"
             f"🔗 আপনার রেফারেল লিংক:\n`{ref_link}`\n\n"
             f"👥 মোট রেফার: {ref_count} জন",
             parse_mode="Markdown"
@@ -1328,7 +1328,7 @@ def handle_all_messages(message):
             bot.reply_to(message, "❌ আপনার অ্যাকাউন্টটি ক্যাপচা লক করা আছে। আগে ক্যাপচা পূরণ করুন।")
             return
         if balance < MIN_WITHDRAW:
-            bot.reply_to(message, f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই। সর্বনিম্ন উইথড্র ${MIN_WITHDRAW} USDT। বর্তমান ব্যালেন্স: ${balance:.4f} USDT")
+            bot.reply_to(message, f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই। সর্বনিম্ন উইথড্র {MIN_WITHDRAW} BDT। বর্তমান ব্যালেন্স: {balance:.2f} BDT")
             return
         
         markup = InlineKeyboardMarkup(row_width=2)
@@ -1338,7 +1338,7 @@ def handle_all_messages(message):
         )
         bot.send_message(
             message.chat.id,
-            f"💸 **উইথড্র সেকশন**\n\nবর্তমান ব্যালেন্স: **${balance:.4f} USDT**\n👉 পেমেন্ট মেথড সিলেক্ট করুন:",
+            f"💸 **উইথড্র সেকশন**\n\nবর্তমান ব্যালেন্স: **{balance:.2f} BDT**\n👉 পেমেন্ট মেথড সিলেক্ট করুন:",
             reply_markup=markup,
             parse_mode="Markdown"
         )
@@ -1353,7 +1353,7 @@ def handle_all_messages(message):
         
         hist_text = "📜 **আপনার শেষ ৫টি উইথড্র রেকর্ড:**\n━━━━━━━━━━━━━━━━━━━\n"
         for h in history[-5:]:
-            hist_text += f"💳 {h['method']} | ${h['amount_usdt']:.3f} ({h['amount_bdt']:.2f} BDT)\n📱 `{h['number']}`\n🕒 {h['date']}\n\n"
+            hist_text += f"💳 {h['method']} | {h['amount_bdt']:.2f} BDT\n📱 `{h['number']}`\n🕒 {h['date']}\n\n"
         bot.send_message(message.chat.id, hist_text, parse_mode="Markdown")
         return
 
