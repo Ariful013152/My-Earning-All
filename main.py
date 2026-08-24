@@ -128,7 +128,7 @@ if MONGO_URI:
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=100)
 app = Flask(__name__)
 
-# --- WEBHOOK & FLASK ROUTES ---
+# --- WEBHOOK & FLASK ROUTES (ULTRA FAST RE-ENGINEERED) ---
 @app.route('/')
 def home():
     return "Bot is running ultra fast!"
@@ -138,8 +138,9 @@ def webhook():
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
         update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return "!", 200
+        # ব্যাকগ্রাউন্ড থ্রেডে পাঠান যাতে টেলিগ্রাম সাথে সাথে ২০০ রেসপন্স পেয়ে ফ্রি হয়
+        threading.Thread(target=bot.process_new_updates, args=([update],), daemon=True).start()
+        return "OK", 200
     else:
         return "Invalid request", 403
 
@@ -190,7 +191,6 @@ user_waiting_ad3_screenshot = set()
 def get_user(user_id, first_name="User", referred_by=None):
     current_now = time.time()
     
-    # ইন-মেমোরিতে থাকলে সরাসরি মেমোরি থেকে রিটার্ন (Ultra Fast Response)
     if user_id in memory_users:
         memory_users[user_id]["last_active"] = current_now
         return memory_users[user_id].get("balance", 0.0), memory_users[user_id]
@@ -688,6 +688,7 @@ def handle_user_screenshot(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("scr_yes_") or call.data.startswith("scr_no_") or call.data.startswith("ad3_yes_") or call.data.startswith("ad3_no_"))
 def screenshot_approval_callback(call):
+    bot.answer_callback_query(call.id)  # লোডিং সঙ্গে সঙ্গে বাদ
     if call.from_user.id not in ADMIN_IDS:
         bot.answer_callback_query(call.id, "❌ আপনি অ্যাডমিন নন!", show_alert=True)
         return
@@ -720,7 +721,6 @@ def screenshot_approval_callback(call):
             except:
                 pass
 
-            bot.answer_callback_query(call.id, "✅ সফলভাবে পেমেন্ট প্রদান করা হয়েছে!")
             try:
                 bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
             except:
@@ -737,7 +737,6 @@ def screenshot_approval_callback(call):
             except:
                 pass
 
-            bot.answer_callback_query(call.id, "❌ স্ক্রিনশটটি বাতিল করা হয়েছে।")
             try:
                 bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=main_menu_keyboard())
             except:
@@ -766,7 +765,6 @@ def screenshot_approval_callback(call):
             except:
                 pass
 
-            bot.answer_callback_query(call.id, "✅ সফলভাবে পেমেন্ট প্রদান করা হয়েছে!")
             try:
                 bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার Exe.io স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে $0.001 USDT উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
             except:
@@ -783,7 +781,6 @@ def screenshot_approval_callback(call):
             except:
                 pass
 
-            bot.answer_callback_query(call.id, "❌ স্ক্রিনশটটি বাতিল করা হয়েছে।")
             try:
                 bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা Exe.io স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=main_menu_keyboard())
             except:
@@ -804,6 +801,7 @@ def admin_panel_cmd(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_panel_"))
 def admin_panel_callbacks(call):
+    bot.answer_callback_query(call.id)
     if call.from_user.id not in ADMIN_IDS:
         bot.answer_callback_query(call.id, "❌ আপনি অ্যাডমিন নন!", show_alert=True)
         return
@@ -844,6 +842,7 @@ def admin_panel_callbacks(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_ban_") or call.data.startswith("adm_unban_"))
 def admin_ban_unban_callback(call):
+    bot.answer_callback_query(call.id)
     if call.from_user.id not in ADMIN_IDS:
         bot.answer_callback_query(call.id, "❌ আপনি অ্যাডমিন নন!", show_alert=True)
         return
@@ -853,15 +852,14 @@ def admin_ban_unban_callback(call):
     
     if action == "adm_ban":
         update_user_field(target_id, {"is_banned": True})
-        bot.answer_callback_query(call.id, f"User {target_id} banned successfully.")
         bot.send_message(call.message.chat.id, f"🚫 ইউজার `{target_id}` কে সফলভাবে ব্যান করা হয়েছে।", parse_mode="Markdown")
     elif action == "adm_unban":
         update_user_field(target_id, {"is_banned": False})
-        bot.answer_callback_query(call.id, f"User {target_id} unbanned successfully.")
         bot.send_message(call.message.chat.id, f"✅ ইউজার `{target_id}` কে আনব্যান করা হয়েছে।", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_join")
 def check_join_callback(call):
+    bot.answer_callback_query(call.id)
     user_id = call.from_user.id
     _, user_data = get_user(user_id, call.from_user.first_name)
     if user_data.get("is_banned", False):
@@ -883,6 +881,7 @@ def check_join_callback(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "claim_reward")
 def claim_reward_callback(call):
+    bot.answer_callback_query(call.id)
     user_id = call.from_user.id
     _, user = get_user(user_id, call.from_user.first_name)
     
@@ -940,6 +939,7 @@ def claim_reward_callback(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("w_method_"))
 def withdraw_method_callback(call):
+    bot.answer_callback_query(call.id)
     user_id = call.from_user.id
     _, user_data = get_user(user_id, call.from_user.first_name)
     if user_data.get("is_banned", False):
@@ -966,6 +966,7 @@ def withdraw_method_callback(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_device_ip")
 def check_device_ip_callback(call):
+    bot.answer_callback_query(call.id)
     user_id = call.from_user.id
     first_name = call.from_user.first_name
     _, user = get_user(user_id, first_name)
@@ -1378,5 +1379,5 @@ if __name__ == '__main__':
     threading.Thread(target=auto_post_loop, daemon=True).start()
     threading.Thread(target=inactivity_push_loop, daemon=True).start()
 
-    print("Telegram Bot is running with Fast Webhook...")
+    print("Telegram Bot is running with Ultra Fast Webhook...")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
