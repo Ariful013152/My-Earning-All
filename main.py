@@ -16,15 +16,16 @@ from telebot.types import (
 )
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k"
+# সিকিউরিটির জন্য BOT_TOKEN এনভায়রনমেন্ট ভেরিয়েবল থেকে নেওয়া ভালো, না পেলে ডিফল্ট হিসেবে কাজ করবে।
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 MONGO_URI = os.environ.get("MONGO_URI", "")
 
 BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
 
-# মিনি অ্যাপের URL (আপনার Render অ্যাপের লিংক)
-MINI_APP_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-all.onrender.com")
+# মিনি অ্যাপের URL (আপনার ওয়েবসাইটের লিংক এখানে দিন)
+MINI_APP_URL = "https://my-earning-all.onrender.com" 
 
 # স্ক্রিনশট সাবমিট হওয়ার নির্দিষ্ট চ্যানেল
 SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"
@@ -46,9 +47,15 @@ ADMIN_IDS = [8414665404, 5034445579]
 
 # --- 10 MONETAG & 10 ADSTERRA LINKS ---
 MONETAG_LINKS = [
-    'https://omg10.com/4/11522087', 'https://omg10.com/4/11522086', 'https://omg10.com/4/11522081',
-    'https://omg10.com/4/11522080', 'https://omg10.com/4/11522079', 'https://omg10.com/4/11522078',
-    'https://omg10.com/4/11522077', 'https://omg10.com/4/11522076', 'https://omg10.com/4/11522074',
+    'https://omg10.com/4/11522087',
+    'https://omg10.com/4/11522086',
+    'https://omg10.com/4/11522081',
+    'https://omg10.com/4/11522080',
+    'https://omg10.com/4/11522079',
+    'https://omg10.com/4/11522078',
+    'https://omg10.com/4/11522077',
+    'https://omg10.com/4/11522076',
+    'https://omg10.com/4/11522074',
     'https://omg10.com/4/11516146'
 ]
 
@@ -65,19 +72,42 @@ ADSTERRA_LINKS = [
     'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
 ]
 
+# --- WATCH AD 2 15 SHRINKME LINKS ---
 WATCH_AD_2_LINKS = [
-    'https://shrinkme.click/g2qGUb', 'https://shrinkme.click/8Uar', 'https://shrinkme.click/ptEvVdG',
-    'https://shrinkme.click/ndirPw', 'https://shrinkme.click/LwsLmzvi', 'https://shrinkme.click/p4MaWq3R',
-    'https://shrinkme.click/0jOAuZOk', 'https://shrinkme.click/EIZYof', 'https://shrinkme.click/ALuVs5',
-    'https://shrinkme.click/9SB8', 'https://shrinkme.click/UYMQ', 'https://shrinkme.click/ven3VA7p',
-    'https://shrinkme.click/xTRge', 'https://shrinkme.click/MjwBLrK', 'https://shrinkme.click/U9Tetn2'
+    'https://shrinkme.click/g2qGUb',
+    'https://shrinkme.click/8Uar',
+    'https://shrinkme.click/ptEvVdG',
+    'https://shrinkme.click/ndirPw',
+    'https://shrinkme.click/LwsLmzvi',
+    'https://shrinkme.click/p4MaWq3R',
+    'https://shrinkme.click/0jOAuZOk',
+    'https://shrinkme.click/EIZYof',
+    'https://shrinkme.click/ALuVs5',
+    'https://shrinkme.click/9SB8',
+    'https://shrinkme.click/UYMQ',
+    'https://shrinkme.click/ven3VA7p',
+    'https://shrinkme.click/xTRge',
+    'https://shrinkme.click/MjwBLrK',
+    'https://shrinkme.click/U9Tetn2'
 ]
 
+# --- WATCH AD 3 15 EXE.IO LINKS ---
 WATCH_AD_3_LINKS = [
-    'https://exe.io/0gptze35', 'https://exe.io/ry8Ka', 'https://exe.io/7nLiu', 'https://exe.io/57NKwlj',
-    'https://exe.io/2qeCFj', 'https://exe.io/Bo0QN', 'https://exe.io/QcaC1jjV', 'https://exe.io/uJ8x4v',
-    'https://exe.io/4CMD9lc', 'https://exe.io/7t5U3dg', 'https://exe.io/h3s7q', 'https://exe.io/vp05amHW',
-    'https://exe.io/4VgpGc', 'https://exe.io/FhwbU5QN', 'https://exe.io/gCczg6'
+    'https://exe.io/0gptze35',
+    'https://exe.io/ry8Ka',
+    'https://exe.io/7nLiu',
+    'https://exe.io/57NKwlj',
+    'https://exe.io/2qeCFj',
+    'https://exe.io/Bo0QN',
+    'https://exe.io/QcaC1jjV',
+    'https://exe.io/uJ8x4v',
+    'https://exe.io/4CMD9lc',
+    'https://exe.io/7t5U3dg',
+    'https://exe.io/h3s7q',
+    'https://exe.io/vp05amHW',
+    'https://exe.io/4VgpGc',
+    'https://exe.io/FhwbU5QN',
+    'https://exe.io/gCczg6'
 ]
 
 # --- DATABASE SETUP ---
@@ -103,81 +133,10 @@ if MONGO_URI:
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=100)
 app = Flask(__name__)
 
-# --- WEBHOOK & FLASK ROUTES (WITH MINI APP UI) ---
+# --- WEBHOOK & FLASK ROUTES (ULTRA FAST RE-ENGINEERED) ---
 @app.route('/')
 def home():
-    return """
-    <!DOCTYPE html>
-    <html lang="bn">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>My Earning All Mini App</title>
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <style>
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background-color: #0f172a;
-                color: #ffffff;
-                margin: 0;
-                padding: 15px;
-                text-align: center;
-            }
-            .card {
-                background: #1e293b;
-                padding: 20px;
-                border-radius: 12px;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-                margin-bottom: 15px;
-            }
-            h2 { color: #38bdf8; margin-top: 0; }
-            .btn {
-                background: linear-gradient(135deg, #0284c7, #2563eb);
-                color: white;
-                border: none;
-                padding: 12px;
-                border-radius: 8px;
-                font-weight: bold;
-                width: 100%;
-                margin-top: 10px;
-                cursor: pointer;
-                font-size: 15px;
-            }
-            .btn:active { opacity: 0.8; }
-            .notice { font-size: 13px; color: #94a3b8; }
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h2>💎 My Earning App</h2>
-            <p id="welcome-text">স্বাগতম!</p>
-        </div>
-
-        <div class="card">
-            <h3>⚡ কাজ নির্বাচন করুন</h3>
-            <button class="btn" onclick="sendTask('Watch Ad')">📺 Watch Ad (30 Task)</button>
-            <button class="btn" onclick="sendTask('Watch Ad 2')">📺 Watch Ad 2 (ShrinkMe)</button>
-            <button class="btn" onclick="sendTask('Watch Ad 3')">📺 Watch Ad 3 (Exe.io)</button>
-        </div>
-
-        <p class="notice">বাটনে ক্লিক করার পর চ্যাটে ফিরে গিয়ে নির্দেশনা অনুসরণ করুন।</p>
-
-        <script>
-            const tg = window.Telegram.WebApp;
-            tg.expand();
-            
-            if(tg.initDataUnsafe && tg.initDataUnsafe.user) {
-                document.getElementById('welcome-text').innerText = "স্বাগতম, " + tg.initDataUnsafe.user.first_name + "!";
-            }
-
-            function sendTask(taskName) {
-                tg.sendData(taskName);
-                tg.close();
-            }
-        </script>
-    </body>
-    </html>
-    """
+    return "Bot is running ultra fast!"
 
 @app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
@@ -404,7 +363,7 @@ def send_step_by_step_verification(chat_id, user_id, first_name):
             chat_id,
             "🛡️ **ধাপ ২: ডিভাইস ও আইপি সিকিউরিটি চেক!**\n\n"
             "👉 **ধাপ ১:** 'ব্রাউজারে গিয়ে চেক করুন' বাটনে ক্লিক করে ব্রাউজারে যান।\n"
-            "👉 **ধাপ ২:** ব্রাউজার থেকে টেলিগ্রামে ফিরে এসে 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন.",
+            "👉 **ধাপ ২:** ব্রাউজার থেকে টেলিগ্রামে ফিরে এসে 'ভেরিফাই কমপ্লিট করুন' বাটনে ক্লিক করুন।",
             reply_markup=markup,
             parse_mode="Markdown"
         )
@@ -440,6 +399,7 @@ def contact_keyboard():
     return markup
 
 def mini_app_inline_keyboard():
+    """ মিনি অ্যাপ খোলার ইনলাইন বাটন """
     markup = InlineKeyboardMarkup()
     web_app = WebAppInfo(url=MINI_APP_URL)
     markup.add(InlineKeyboardButton("🚀 Open App 🚀", web_app=web_app))
@@ -548,7 +508,7 @@ def watch_ad_handler(message):
         message.chat.id,
         f"📺 **বিজ্ঞাপন দেখুন এবং আয় করুন!**\n\n"
         f"👉 নিচের ভিজিট লিংকে ক্লিক করে ওয়েবসাইট ভিজিট করুন এবং অন্তত **২০ সেকেন্ড** অপেক্ষা করুন।\n"
-        f"⏳ এরপর 'Claim Reward' বাটনে ক্লিক করে আপনার রিওয়ার্ড সংগ্রহ করুন。\n\n"
+        f"⏳ এরপর 'Claim Reward' বাটনে ক্লিক করে আপনার রিওয়ার্ড সংগ্রহ করুন।\n\n"
         f"📈 আজকের দেখা এড: {current_count}/30",
         reply_markup=markup,
         parse_mode="Markdown"
@@ -967,7 +927,7 @@ def claim_reward_callback(call):
         update_user_field(user_id, {"can_claim": False, "daily_count": current_count})
         bot.send_message(
             call.message.chat.id,
-            f"🎉 অভিনন্দন! আপনি সফলভাবে ৳{reward:.2f} টাকা উপার্জন করেছেন。\n📈 আজকের দেখা মোট এড: {current_count}/30",
+            f"🎉 অভিনন্দন! আপনি সফলভাবে ৳{reward:.2f} টাকা উপার্জন করেছেন।\n📈 আজকের দেখা মোট এড: {current_count}/30",
             reply_markup=mini_app_inline_keyboard()
         )
 
@@ -1076,6 +1036,7 @@ def start_cmd(message):
     if not send_step_by_step_verification(message.chat.id, user_id, first_name):
         return
 
+    # ১. ইউজারদের আগের রিপ্লাই বাটনগুলো পুরোপুরি রিমুভ করার জন্য প্রথম মেসেজ পাঠানো
     remove_markup = ReplyKeyboardRemove()
     bot.send_message(
         message.chat.id, 
@@ -1083,6 +1044,7 @@ def start_cmd(message):
         reply_markup=remove_markup
     )
 
+    # ২. মিনি অ্যাপ খোলার জন্য ইনলাইন বাটন পাঠানো
     bot.send_message(
         message.chat.id,
         "👇 অ্যাপ খুলুন:",
@@ -1119,19 +1081,6 @@ def handle_all_messages(message):
     user_id = message.from_user.id
     text = message.text.strip() if message.text else ""
     first_name = message.from_user.first_name
-
-    # মিনি অ্যাপ থেকে পাঠানো ডাটা হ্যান্ডেল করা
-    if message.web_app_data:
-        task = message.web_app_data.data
-        if task == "Watch Ad":
-            watch_ad_handler(message)
-            return
-        elif task == "Watch Ad 2":
-            watch_ad_2_handler(message)
-            return
-        elif task == "Watch Ad 3":
-            watch_ad_3_handler(message)
-            return
 
     _, user_data = get_user(user_id, first_name)
     if user_data.get("is_banned", False):
@@ -1340,13 +1289,14 @@ def handle_all_messages(message):
     if not send_step_by_step_verification(message.chat.id, user_id, first_name):
         return
 
+    # অন্য কোনো মেসেজ পাঠালে এটি রেসপন্স হিসেবে মিনি অ্যাপ লিংক দিবে
     bot.send_message(
         message.chat.id,
         "নিচের বাটনে ক্লিক করে অ্যাপ ওপেন করুন:",
         reply_markup=mini_app_inline_keyboard()
     )
 
-# --- MAIN EXECUTION ---
+# --- MAIN EXECUTION (WEBHOOK SETUP) ---
 if __name__ == '__main__':
     SERVER_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-all.onrender.com")
     
