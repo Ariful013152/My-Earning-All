@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trust Pay Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+        body { background: #f4f7fe; padding: 15px; }
+        
+        /* Header Profile & Balance Card */
+        .profile-card {
+            background: linear-gradient(135deg, #4361ee, #3f37c9);
+            color: white; padding: 20px; border-radius: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 10px 20px rgba(67, 97, 238, 0.3);
+        }
+        .balance-box {
+            background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(10px);
+            padding: 8px 15px; border-radius: 12px; font-weight: bold;
+        }
+
+        /* Modern Colorful Grid Buttons */
+        .grid-container {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 12px; margin-top: 20px;
+        }
+        .grid-btn {
+            background: white; border: none; border-radius: 16px;
+            padding: 18px 10px; display: flex; flex-direction: column;
+            align-items: center; gap: 8px; cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s ease;
+        }
+        .grid-btn:active { transform: scale(0.95); }
+        .grid-btn i { font-size: 22px; }
+        .grid-btn span { font-size: 12px; font-weight: 600; color: #2b2d42; }
+
+        /* Icon Colors */
+        .btn-task i { color: #4361ee; }
+        .btn-profile i { color: #7209b7; }
+        .btn-video i { color: #f72585; }
+        .btn-withdraw i { color: #4cc9f0; }
+        .btn-refer i { color: #3a0ca3; }
+        .btn-support i { color: #10b981; }
+
+        /* Task & Mystery Box Section */
+        .special-section { display: flex; gap: 12px; margin-top: 15px; }
+        .task-card, .mystery-card {
+            flex: 1; padding: 15px; border-radius: 16px; color: white;
+        }
+        .task-card { background: white; color: #333; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .mystery-card {
+            background: linear-gradient(135deg, #7209b7, #f72585);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="profile-card">
+        <div>
+            <h3 id="user-name">🧑‍💻 User</h3>
+            <small id="user-id">ID: 000000</small>
+        </div>
+        <div class="balance-box">
+            💳 ৳ <span id="user-balance">0.00</span>
+        </div>
+    </div>
+
+    <div class="grid-container">
+        <button class="grid-btn btn-task">
+            <i class="fa-solid fa-circle-play"></i>
+            <span>Start Task</span>
+        </button>
+        <button class="grid-btn btn-profile">
+            <i class="fa-solid fa-user"></i>
+            <span>Profile</span>
+        </button>
+        <button class="grid-btn btn-video">
+            <i class="fa-solid fa-video"></i>
+            <span>Work Video</span>
+        </button>
+        <button class="grid-btn btn-withdraw">
+            <i class="fa-solid fa-wallet"></i>
+            <span>Withdraw</span>
+        </button>
+        <button class="grid-btn btn-refer">
+            <i class="fa-solid fa-users"></i>
+            <span>Refer</span>
+        </button>
+        <button class="grid-btn btn-support">
+            <i class="fa-solid fa-headset"></i>
+            <span>Support</span>
+        </button>
+    </div>
+
+    <div class="special-section">
+        <div class="task-card">
+            <h4>আজকের কাজ</h4>
+            <small>টাস্ক কমপ্লিট করুন</small>
+            <p style="margin-top:10px; font-weight:bold; color:#4361ee;">0 / 15</p>
+        </div>
+        <div class="mystery-card">
+            🎁 <b>মিষ্ট্রি বক্স</b>
+            <small style="margin-top:5px;">🔒 15 বাকি</small>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        if(tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            document.getElementById('user-name').innerText = tg.initDataUnsafe.user.first_name;
+            document.getElementById('user-id').innerText = 'ID: ' + tg.initDataUnsafe.user.id;
+        }
+    </script>
+</body>
+</html>
