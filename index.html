@@ -1,9 +1,394 @@
 <!DOCTYPE html>
-<html>
+<html lang="bn">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All-in-One Earning App</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --accent: #38bdf8;
+      --accent-green: #22c55e;
+      --accent-amber: #f59e0b;
+      --accent-purple: #a855f7;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+      padding: 16px;
+      padding-bottom: 30px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 450px;
+    }
+
+    .header-card {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .user-avatar {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 20px;
+    }
+
+    .balance-box {
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px dashed var(--accent);
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+
+    .balance-amount {
+      font-size: 28px;
+      font-weight: bold;
+      color: var(--accent-green);
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 20px 0 10px 4px;
+      color: var(--accent);
+    }
+
+    .task-card {
+      background-color: var(--card-bg);
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
+
+    .task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .task-title {
+      font-size: 15px;
+      font-weight: bold;
+    }
+
+    .progress-badge {
+      font-size: 12px;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.15);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-weight: bold;
+    }
+
+    .task-desc {
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-bottom: 12px;
+    }
+
+    .btn {
+      color: #000;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 14px;
+      width: 100%;
+      transition: opacity 0.2s;
+    }
+
+    .btn-monetag { background-color: var(--accent-green); }
+    .btn-adsterra { background-color: var(--accent); }
+    .btn-shrinkme { background-color: var(--accent-amber); }
+    .btn-exeio { background-color: var(--accent-purple); color: #fff; }
+
+    .btn:disabled {
+      background-color: #475569 !important;
+      color: #94a3b8 !important;
+      cursor: not-allowed;
+    }
+
+    .status-msg {
+      font-size: 11px;
+      color: var(--accent-amber);
+      margin-top: 6px;
+      text-align: center;
+    }
+  </style>
 </head>
-<body style="text-align: center; font-family: sans-serif; padding-top: 50px;">
-  <h1>অভিনন্দন! এটি আপনার প্রথম টেলিগ্রাম মিনি অ্যাপ!</h1>
+<body>
+
+  <div class="container">
+
+    <!-- Header & Balance -->
+    <div class="header-card">
+      <div class="user-profile">
+        <div class="user-avatar" id="avatar">U</div>
+        <div style="text-align: left;">
+          <div id="username" style="font-weight: bold;">ইউজার</div>
+          <div style="font-size: 11px; color: var(--text-sub);" id="user-id">ID: 000000</div>
+        </div>
+      </div>
+
+      <div class="balance-box">
+        <div style="font-size: 13px; color: var(--text-sub);">বর্তমান ব্যালেন্স</div>
+        <div class="balance-amount"><span id="balance">0.00</span> BDT</div>
+      </div>
+    </div>
+
+    <div class="section-title">🎯 ইনকাম টাস্কসমূহ</div>
+
+    <!-- 1. Monetag Task -->
+    <div class="task-card">
+      <div class="task-header">
+        <div class="task-title">🚀 Monetag Tasks</div>
+        <div class="progress-badge" id="monetag-progress">0/10</div>
+      </div>
+      <div class="task-desc">প্রতিটি অ্যাডের জন্য পাবেন +১.০০ BDT</div>
+      <button class="btn btn-monetag" id="monetag-btn" onclick="processTask('monetag')">অ্যাড দেখুন</button>
+      <div class="status-msg" id="monetag-msg"></div>
+    </div>
+
+    <!-- 2. Adsterra Task -->
+    <div class="task-card">
+      <div class="task-header">
+        <div class="task-title">📺 Adsterra Tasks</div>
+        <div class="progress-badge" id="adsterra-progress">0/10</div>
+      </div>
+      <div class="task-desc">প্রতিটি অ্যাডের জন্য পাবেন +০.৫০ BDT</div>
+      <button class="btn btn-adsterra" id="adsterra-btn" onclick="processTask('adsterra')">অ্যাড দেখুন</button>
+      <div class="status-msg" id="adsterra-msg"></div>
+    </div>
+
+    <!-- 3. Shrinkme Task -->
+    <div class="task-card">
+      <div class="task-header">
+        <div class="task-title">🔗 Shrinkme Shortlinks</div>
+        <div class="progress-badge" id="shrinkme-progress">0/15</div>
+      </div>
+      <div class="task-desc">প্রতিটি লিঙ্ক ভিজিটে পাবেন +২.০০ BDT</div>
+      <button class="btn btn-shrinkme" id="shrinkme-btn" onclick="processTask('shrinkme')">লিঙ্ক ভিজিট করুন</button>
+      <div class="status-msg" id="shrinkme-msg"></div>
+    </div>
+
+    <!-- 4. Exe.io Task -->
+    <div class="task-card">
+      <div class="task-header">
+        <div class="task-title">🌐 Exe.io Shortlinks</div>
+        <div class="progress-badge" id="exeio-progress">0/15</div>
+      </div>
+      <div class="task-desc">প্রতিটি লিঙ্ক ভিজিটে পাবেন +২.০০ BDT</div>
+      <button class="btn btn-exeio" id="exeio-btn" onclick="processTask('exeio')">লিঙ্ক ভিজিট করুন</button>
+      <div class="status-msg" id="exeio-msg"></div>
+    </div>
+
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    // Link Arrays Setup
+    const taskConfig = {
+      monetag: {
+        reward: 1.00,
+        links: [
+          'https://omg10.com/4/11522087',
+          'https://omg10.com/4/11522086',
+          'https://omg10.com/4/11522081',
+          'https://omg10.com/4/11522080',
+          'https://omg10.com/4/11522079',
+          'https://omg10.com/4/11522078',
+          'https://omg10.com/4/11522077',
+          'https://omg10.com/4/11522076',
+          'https://omg10.com/4/11522074',
+          'https://omg10.com/4/11516146'
+        ]
+      },
+      adsterra: {
+        reward: 0.50,
+        links: [
+          'https://www.effectivecpmnetwork.com/nx2nqegj3p?key=8fb4f6d68a89919faeee5ec3846d4292',
+          'https://www.effectivecpmnetwork.com/bbjq6k48?key=4707c2aa3827755848d5332b72a9c955',
+          'https://www.effectivecpmnetwork.com/hqrjr5jzm?key=fe9a5012689a62a78d579d93d0864575',
+          'https://www.effectivecpmnetwork.com/nqch6m5jc?key=3eecd9428d8b55066d6cfdcadeda271c',
+          'https://www.effectivecpmnetwork.com/ie1pgkmbcc?key=1298a27dc3477c9aef05ead4c6778088',
+          'https://www.effectivecpmnetwork.com/wg9r001v7?key=4f2213d1fb414c2e0c9ac7dde1c72402',
+          'https://www.effectivecpmnetwork.com/m36r7xvy?key=e8b267b7b19cae2daee8f96118e5326e',
+          'https://www.effectivecpmnetwork.com/jwsp4r2rtr?key=63a26410a1f920c6de29b0e73bf69055',
+          'https://www.effectivecpmnetwork.com/dwja24niv?key=6a9552e41b528897598e4eec709d5115',
+          'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
+        ]
+      },
+      shrinkme: {
+        reward: 2.00,
+        links: [
+          'https://shrinkme.click/g2qGUb',
+          'https://shrinkme.click/8Uar',
+          'https://shrinkme.click/ptEvVdG',
+          'https://shrinkme.click/ndirPw',
+          'https://shrinkme.click/LwsLmzvi',
+          'https://shrinkme.click/p4MaWq3R',
+          'https://shrinkme.click/0jOAuZOk',
+          'https://shrinkme.click/EIZYof',
+          'https://shrinkme.click/ALuVs5',
+          'https://shrinkme.click/9SB8',
+          'https://shrinkme.click/UYMQ',
+          'https://shrinkme.click/ven3VA7p',
+          'https://shrinkme.click/xTRge',
+          'https://shrinkme.click/MjwBLrK',
+          'https://shrinkme.click/U9Tetn2'
+        ]
+      },
+      exeio: {
+        reward: 2.00,
+        links: [
+          'https://exe.io/0gptze35',
+          'https://exe.io/ry8Ka',
+          'https://exe.io/7nLiu',
+          'https://exe.io/57NKwlj',
+          'https://exe.io/2qeCFj',
+          'https://exe.io/Bo0QN',
+          'https://exe.io/QcaC1jjV',
+          'https://exe.io/uJ8x4v',
+          'https://exe.io/4CMD9lc',
+          'https://exe.io/7t5U3dg',
+          'https://exe.io/h3s7q',
+          'https://exe.io/vp05amHW',
+          'https://exe.io/4VgpGc',
+          'https://exe.io/FhwbU5QN',
+          'https://exe.io/gCczg6'
+        ]
+      }
+    };
+
+    // User Profile
+    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      const user = tg.initDataUnsafe.user;
+      document.getElementById('username').innerText = user.first_name;
+      document.getElementById('user-id').innerText = 'ID: ' + user.id;
+      document.getElementById('avatar').innerText = user.first_name.charAt(0).toUpperCase();
+    }
+
+    // Load Balance
+    let currentBalance = parseFloat(localStorage.getItem('user_balance') || '0.00');
+    document.getElementById('balance').innerText = currentBalance.toFixed(2);
+
+    // Load/Init Network Progress
+    function getTaskState(network) {
+      const defaultState = { count: 0, lastReset: 0 };
+      const saved = localStorage.getItem(`task_${network}`);
+      return saved ? JSON.parse(saved) : defaultState;
+    }
+
+    function saveTaskState(network, state) {
+      localStorage.setItem(`task_${network}`, JSON.stringify(state));
+    }
+
+    // Update Network UI
+    function updateNetworkUI(network) {
+      const config = taskConfig[network];
+      const state = getTaskState(network);
+      const currentTime = new Date().getTime();
+      const twentyFourHours = 24 * 60 * 60 * 1000;
+
+      // 24 Hour Reset
+      if (currentTime - state.lastReset >= twentyFourHours) {
+        state.count = 0;
+        saveTaskState(network, state);
+      }
+
+      const totalLinks = config.links.length;
+      document.getElementById(`${network}-progress`).innerText = `${state.count}/${totalLinks}`;
+      
+      const btn = document.getElementById(`${network}-btn`);
+      const msg = document.getElementById(`${network}-msg`);
+
+      if (state.count >= totalLinks) {
+        btn.disabled = true;
+        btn.innerText = "আজকের কাজ শেষ";
+        
+        const nextTime = state.lastReset + twentyFourHours;
+        const diffHours = Math.ceil((nextTime - currentTime) / (1000 * 60 * 60));
+        msg.innerText = `⏳ আবার ${diffHours > 0 ? diffHours : 1} ঘণ্টা পর চেষ্টা করুন।`;
+      } else {
+        btn.disabled = false;
+        btn.innerText = `কাজ করুন (${state.count + 1}/${totalLinks})`;
+        msg.innerText = "";
+      }
+    }
+
+    // Process Task
+    function processTask(network) {
+      const config = taskConfig[network];
+      const state = getTaskState(network);
+
+      if (state.count >= config.links.length) return;
+
+      const linkToOpen = config.links[state.count];
+
+      tg.openLink(linkToOpen);
+
+      setTimeout(() => {
+        if (state.count === 0) {
+          state.lastReset = new Date().getTime();
+        }
+
+        state.count++;
+        currentBalance += config.reward;
+
+        saveTaskState(network, state);
+        localStorage.setItem('user_balance', currentBalance.toString());
+
+        document.getElementById('balance').innerText = currentBalance.toFixed(2);
+        updateNetworkUI(network);
+
+        alert(`শুভেচ্ছা! কাজ সফলভাবে করার জন্য +${config.reward.toFixed(2)} BDT পেয়েছেন।`);
+      }, 3000);
+    }
+
+    // Initialize All Networks
+    ['monetag', 'adsterra', 'shrinkme', 'exeio'].forEach(updateNetworkUI);
+  </script>
 </body>
 </html>
