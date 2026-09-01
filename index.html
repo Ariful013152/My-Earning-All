@@ -43,7 +43,7 @@
     .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 16px; }
 
     /* Navigation Bar */
-    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #0d1322; border-top: 1px solid var(--card-border); display: flex; justify-content: space-around; padding: 10px 0; max-width: 480px; margin: 0 auto; z-index: 100; }
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #0d1322; border-top: 1px solid var(--card-border); display: flex; justify-around: space-around; padding: 10px 0; max-width: 480px; margin: 0 auto; z-index: 100; }
     .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-sub); font-size: 11px; text-decoration: none; cursor: pointer; gap: 4px; }
     .nav-item i { font-size: 18px; }
     .nav-item.active { color: var(--accent-blue); font-weight: bold; }
@@ -119,7 +119,7 @@
       </div>
     </div>
 
-    <!-- TAB 2: TASK (All Networks Integrated) -->
+    <!-- TAB 2: TASK -->
     <div id="tab-task" class="tab-content">
       
       <!-- Monetag -->
@@ -263,7 +263,41 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // Your exact provided links database
+    // ডিভাইস ট্র্যাকিং লজিক
+    function getDeviceId() {
+      let deviceId = localStorage.getItem('app_device_uuid');
+      if (!deviceId) {
+        deviceId = 'DEV-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
+        localStorage.setItem('app_device_uuid', deviceId);
+      }
+      return deviceId;
+    }
+
+    const deviceId = getDeviceId();
+    let user = tg.initDataUnsafe?.user || { id: "GUEST_" + Date.now(), first_name: "Guest", username: "none" };
+
+    // Render ব্যাকএন্ডের আসল URL সংযুক্ত করা হয়েছে
+    fetch('https://my-earning-all.onrender.com/check-device', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_id: deviceId,
+        user_id: user.id,
+        first_name: user.first_name,
+        username: user.username || 'নাই'
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'multi_account_detected') {
+        alert("⚠️ একই ডিভাইসে অন্য অ্যাকাউন্ট পাওয়া গেছে! এডমিন নোটিফিকেশন পাঠানো হয়েছে।");
+      } else if (data.status === 'banned') {
+        document.body.innerHTML = "<h2 style='color:red; text-align:center; margin-top:50px;'>🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h2>";
+      }
+    })
+    .catch(err => console.log(err));
+
+    // Task & App Configuration
     const taskConfig = {
       monetag: {
         reward: 1.00,
@@ -367,7 +401,6 @@
         const state = getState(net);
         const currentTime = new Date().getTime();
 
-        // 24 Hour Reset Logic
         if (currentTime - state.lastReset >= 86400000) {
           state.count = 0;
           saveState(net, state);
