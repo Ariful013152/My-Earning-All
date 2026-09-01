@@ -1,129 +1,82 @@
-import telebot
-from telebot.types import ReplyKeyboardRemove, MenuButtonWebApp, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
+import os
+import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import threading
 
-BOT_TOKEN = "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k"
-WEB_APP_URL = "https://ariful013152.github.io/My-Earning-All/"
-ADMIN_IDS = [8414665404, 5034445579]
-
-bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # HTML Mini App থেকে API রিকোয়েস্ট অ্যালাউ করার জন্য
 
-# ডাটাবেজ অপশন (মেমোরিতে স্টোর করা হচ্ছে)
-device_map = {}  # { device_id: primary_telegram_user_id }
+# ----------------- টেলিগ্রাম বোট ও এডমিন সেটিং -----------------
+BOT_TOKEN = "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k"
+ADMIN_CHAT_IDS = [8414665404, 5034445579]  # আপনার প্রদান করা ২টি এডমিন আইডি
+
+# ডাটাবেস (মেমোরি স্টোরেজ)
+device_db = {}
 banned_users = set()
 
-try:
-    bot.remove_webhook()
-except Exception as e:
-    print(f"Error removing webhook: {e}")
-
-# ১. বট স্টার্ট মেসেজ
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    user_id = message.from_user.id
+def send_telegram_alert(message):
+    """উভয় এডমিনকে টেলিগ্রামে নোটিফিকেশন পাঠানোর ফাংশন"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     
-    if user_id in banned_users:
-        bot.send_message(message.chat.id, "🚫 **আপনার অ্যাকাউন্টটি ব্যান (Ban) করা হয়েছে!**", parse_mode="Markdown")
-        return
+    for admin_id in ADMIN_CHAT_IDS:
+        payload = {
+            "chat_id": admin_id,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        try:
+            requests.post(url, json=payload, timeout=5)
+        except Exception as e:
+            print(f"Admin {admin_id} কে মেসেজ পাঠাতে সমস্যা হয়েছে: {e}")
 
-    bot.set_chat_menu_button(
-        message.chat.id,
-        MenuButtonWebApp(type="web_app", text="Open App", web_app=WebAppInfo(url=WEB_APP_URL))
-    )
+@app.route('/')
+def home():
+    return "Earning App Backend Server is Running Live!"
 
-    bot.send_message(
-        message.chat.id,
-        "👋 **স্বাগতম!**\n\nকাজ করতে নিচে থাকা **'Open App'** বাটনে চাপ দিন।",
-        parse_mode="Markdown",
-        reply_markup=ReplyKeyboardRemove()
-    )
-
-# ২. WebApp থেকে ডিভাইস চেক করার API endpoint
 @app.route('/check-device', methods=['POST'])
 def check_device():
     data = request.json
+    if not data:
+        return jsonify({"status": "error", "message": "No data provided"}), 400
+
     device_id = data.get('device_id')
-    user_id = data.get('user_id')
-    user_name = data.get('first_name', 'Unknown')
-    username = data.get('username', 'নাই')
+    user_id = str(data.get('user_id'))
+    first_name = data.get('first_name', 'Unknown')
+    username = data.get('username', 'No Username')
 
-    if not device_id or not user_id:
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
+    # ১. ইউজার ব্যান কিনা চেক করা
+    if user_id in banned_users:
+        return jsonify({"status": "banned"}), 200
 
-    # ব্যানড চেক
-    if int(user_id) in banned_users:
-        return jsonify({"status": "banned"}), 403
+    # ২. নতুন ডিভাইস হলে এনট্রি নেওয়া
+    if device_id not in device_db:
+        device_db[device_id] = [user_id]
+        return jsonify({"status": "success", "message": "New device registered"}), 200
 
-    # ডিভাইস চেকিং লজিক
-    if device_id in device_map:
-        existing_user_id = device_map[device_id]
-        
-        # যদি একই ডিভাইসে অন্য কোনো টেলিগ্রাম আইডি পাওয়া যায়
-        if str(existing_user_id) != str(user_id):
-            admin_msg = (
-                f"🚨 **মাল্টিপল অ্যাকাউন্ট সতর্কতা!** 🚨\n\n"
-                f"একটি ফোন থেকে একাধিক টেলিগ্রাম আইডিতে ঢোকার চেষ্টা করা হয়েছে!\n\n"
-                f"📱 **ডিভাইস ID:** `{device_id}`\n"
-                f"👤 **বর্তমান ইউজার:** {user_name} (`{user_id}`)\n"
-                f"🏷 **ইউজারনেম:** @{username}\n"
-                f"🆔 **প্রথম রেজিস্টার্ড ID:** `{existing_user_id}`"
-            )
+    # ৩. একই ডিভাইসে একই ইউজার আবার প্রবেশ করলে
+    if user_id in device_db[device_id]:
+        return jsonify({"status": "success", "message": "User matched with device"}), 200
 
-            markup = InlineKeyboardMarkup()
-            markup.row(
-                InlineKeyboardButton("🚫 Ban User", callback_data=f"ban_{user_id}"),
-                InlineKeyboardButton("✅ Unban User", callback_data=f"unban_{user_id}")
-            )
+    # ৪. একই ডিভাইসে অন্য টেলিগ্রাম আইডি সনাক্ত হলে (Multi-Account Fraud!)
+    device_db[device_id].append(user_id)
+    all_associated_users = ", ".join(device_db[device_id])
 
-            for admin_id in ADMIN_IDS:
-                try:
-                    bot.send_message(admin_id, admin_msg, parse_mode="Markdown", reply_markup=markup)
-                except Exception as e:
-                    print(f"Admin message error ({admin_id}): {e}")
+    # ২টি এডমিন আইডিতেই নোটিফিকেশন পাঠাবে
+    alert_msg = (
+        f"<b>⚠️ মাল্টিপল অ্যাকাউন্ট সতর্কবার্তা!</b>\n\n"
+        f"<b>ডিভাইস ID:</b> <code>{device_id}</code>\n"
+        f"<b>নতুন ইউজার:</b> {first_name} (@{username})\n"
+        f"<b>ইউজার ID:</b> <code>{user_id}</code>\n"
+        f"<b>এই ডিভাইসের সব ID সমূহ:</b> <code>{all_associated_users}</code>\n\n"
+        f"🚫 <i>একই ডিভাইসে একাধিক টেলিগ্রাম অ্যাকাউন্ট ব্যবহার করা হচ্ছে!</i>"
+    )
+    send_telegram_alert(alert_msg)
 
-            return jsonify({"status": "multi_account_detected"}), 200
-    else:
-        # নতুন ফোন হলে ডিভাইস এবং ইউজার আইডি সেভ করা হলো
-        device_map[device_id] = user_id
+    return jsonify({
+        "status": "multi_account_detected",
+        "message": "Multiple Telegram accounts detected on this device!"
+    }), 200
 
-    return jsonify({"status": "ok"}), 200
-
-# ৩. এডমিন Ban / Unban হ্যান্ডলার
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('ban_', 'unban_')))
-def handle_ban_unban(call):
-    if call.from_user.id not in ADMIN_IDS:
-        bot.answer_callback_query(call.id, "আপনি এডমিন নন!", show_alert=True)
-        return
-
-    action, target_id = call.data.split('_')
-    target_id = int(target_id)
-
-    if action == "ban":
-        banned_users.add(target_id)
-        bot.answer_callback_query(call.id, f"ইউজার {target_id} ব্যান হয়েছে!", show_alert=True)
-        bot.edit_message_text(
-            f"{call.message.text}\n\n❌ **স্ট্যাটাস: ইউজারের অ্যাকাউন্ট ব্যান করা হয়েছে।**",
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id
-        )
-    elif action == "unban":
-        banned_users.discard(target_id)
-        bot.answer_callback_query(call.id, f"ইউজার {target_id} আনব্যান হয়েছে!", show_alert=True)
-        bot.edit_message_text(
-            f"{call.message.text}\n\n✅ **স্ট্যাটাস: ইউজারকে আনব্যান করা হয়েছে।**",
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id
-        )
-
-# Flask API এবং Telegram Bot একসাথে রান করানো
-def run_flask():
-    app.run(host='0.0.0.0', port=5000)
-
-if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
-    print("Bot and Server are running...")
-    bot.infinity_polling(skip_pending=True)
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
