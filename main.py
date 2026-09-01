@@ -11,21 +11,15 @@ from telebot.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
-    WebAppInfo
 )
 
 # --- CONFIGURATION ---
-# সিকিউরিটির জন্য BOT_TOKEN এনভায়রনমেন্ট ভেরিয়েবল থেকে নেওয়া ভালো, না পেলে ডিফল্ট হিসেবে কাজ করবে।
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 MONGO_URI = os.environ.get("MONGO_URI", "")
 
 BOT_USERNAME = "myearningall01_bot"
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PROOF_CHANNEL = "@myearningall"
-
-# মিনি অ্যাপের URL (আপনার ওয়েবসাইটের লিংক এখানে দিন)
-MINI_APP_URL = "https://my-earning-all.onrender.com" 
 
 # স্ক্রিনশট সাবমিট হওয়ার নির্দিষ্ট চ্যানেল
 SCREENSHOT_TARGET_CHANNEL = "@allinoneg3"
@@ -133,7 +127,7 @@ if MONGO_URI:
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=100)
 app = Flask(__name__)
 
-# --- WEBHOOK & FLASK ROUTES (ULTRA FAST RE-ENGINEERED) ---
+# --- WEBHOOK & FLASK ROUTES ---
 @app.route('/')
 def home():
     return "Bot is running ultra fast!"
@@ -143,7 +137,7 @@ def webhook():
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
         update = telebot.types.Update.de_json(json_string)
-        threading.Thread(target=bot.process_new_updates, args=([update],), daemon=True).start()
+        bot.process_new_updates([update])
         return "OK", 200
     else:
         return "Invalid request", 403
@@ -244,7 +238,7 @@ def get_user(user_id, first_name="User", referred_by=None):
                             users_col.update_one({"user_id": referred_by}, {"$inc": {"referrals_count": 1}})
                             try:
                                 bot.send_message(referred_by, f"🎉 আপনার রেফারেল লিংকের মাধ্যমে নতুন ইউজার যুক্ত হয়েছে! আপনি পেয়েছেন ৳{REFERRAL_BONUS:.2f} টাকা বোনাস।")
-                            except:
+                            except Exception:
                                 pass
                     threading.Thread(target=handle_ref, daemon=True).start()
             memory_users[user_id] = user
@@ -394,15 +388,22 @@ def is_valid_bd_number(number_str):
 
 # --- KEYBOARDS ---
 def contact_keyboard():
-    markup = ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    markup = ReplyKeyboardMarkup(row_width=1, resize_keyboard=True, one_time_keyboard=True)
     markup.add(KeyboardButton("📱 Share Contact", request_contact=True))
     return markup
 
-def mini_app_inline_keyboard():
-    """ মিনি অ্যাপ খোলার ইনলাইন বাটন """
-    markup = InlineKeyboardMarkup()
-    web_app = WebAppInfo(url=MINI_APP_URL)
-    markup.add(InlineKeyboardButton("🚀 Open App 🚀", web_app=web_app))
+def main_menu_keyboard():
+    markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    markup.add(
+        KeyboardButton("📺 Watch Ad"),
+        KeyboardButton("📺 Watch Ad 2"),
+        KeyboardButton("📺 Watch Ad 3"),
+        KeyboardButton("🖥 Account"),
+        KeyboardButton("📜 Payment History"),
+        KeyboardButton("✨ Referral"),
+        KeyboardButton("💸 Withdraw"),
+        KeyboardButton("📩 Support")
+    )
     return markup
 
 def admin_dashboard_keyboard():
@@ -456,7 +457,7 @@ def inactivity_push_loop():
                 if (current_now - last_act >= day_in_seconds) and (current_now - last_push >= day_in_seconds):
                     u_id = u.get("user_id")
                     try:
-                        bot.send_message(u_id, "আজকের এডগুলো দেখে আপনার আয় নিশ্চিত করুন!", reply_markup=mini_app_inline_keyboard())
+                        bot.send_message(u_id, "আজকের এডগুলো দেখে আপনার আয় নিশ্চিত করুন!")
                         update_user_field(u_id, {"last_inactivity_push": current_now})
                         time.sleep(0.05)
                     except Exception as push_err:
@@ -464,7 +465,7 @@ def inactivity_push_loop():
         except Exception as e:
             print(f"Inactivity push loop error: {e}")
 
-# --- WATCH AD HANDLERS ---
+# --- WATCH AD HANDLER ---
 @bot.message_handler(func=lambda message: message.text == "📺 Watch Ad")
 def watch_ad_handler(message):
     user_id = message.from_user.id
@@ -643,10 +644,10 @@ def handle_user_screenshot(message):
 
         try:
             bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
-            bot.reply_to(message, "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.", reply_markup=mini_app_inline_keyboard())
+            bot.reply_to(message, "✅ আপনার স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.", reply_markup=main_menu_keyboard())
         except Exception as e:
             print(f"Error sending screenshot to channel: {e}")
-            bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=mini_app_inline_keyboard())
+            bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
         return
 
     if user_id in user_waiting_ad3_screenshot:
@@ -675,13 +676,13 @@ def handle_user_screenshot(message):
 
         try:
             bot.send_photo(SCREENSHOT_TARGET_CHANNEL, photo=file_id, caption=caption_text, parse_mode="Markdown", reply_markup=markup)
-            bot.reply_to(message, "✅ আপনার Exe.io স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.", reply_markup=mini_app_inline_keyboard())
+            bot.reply_to(message, "✅ আপনার Exe.io স্ক্রিনশটটি সফলভাবে অ্যাডমিনের কাছে পাঠানো হয়েছে!\nঅ্যাডমিন চেক করার পর আপনার ব্যালেন্সে রিওয়ার্ড যোগ করে দেওয়া হবে.", reply_markup=main_menu_keyboard())
         except Exception as e:
             print(f"Error sending ad3 screenshot to channel: {e}")
-            bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=mini_app_inline_keyboard())
+            bot.reply_to(message, "❌ স্ক্রিনশট পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।", reply_markup=main_menu_keyboard())
         return
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("scr_yes_") or call.data.startswith("scr_no_") or call.data.startswith("ad3_yes_") or call.data.startswith("ad3_no_"))
+@bot.callback_query_handler(func=lambda call: call.data.startswith(("scr_yes_", "scr_no_", "ad3_yes_", "ad3_no_")))
 def screenshot_approval_callback(call):
     bot.answer_callback_query(call.id)
     if call.from_user.id not in ADMIN_IDS:
@@ -713,12 +714,12 @@ def screenshot_approval_callback(call):
                     caption=call.message.caption + "\n\n✅ **স্ট্যাটাস: অ্যাপ্রুভড (Approved & Paid)**",
                     parse_mode="Markdown"
                 )
-            except:
+            except Exception:
                 pass
 
             try:
-                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে ৳0.10 টাকা উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=mini_app_inline_keyboard())
-            except:
+                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে ৳0.10 টাকা উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
+            except Exception:
                 pass
 
         elif action == "no":
@@ -729,12 +730,12 @@ def screenshot_approval_callback(call):
                     caption=call.message.caption + "\n\n❌ **স্ট্যাটাস: রিজেক্টেড (Rejected)**",
                     parse_mode="Markdown"
                 )
-            except:
+            except Exception:
                 pass
 
             try:
-                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=mini_app_inline_keyboard())
-            except:
+                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=main_menu_keyboard())
+            except Exception:
                 pass
 
     elif prefix == "ad3":
@@ -757,12 +758,12 @@ def screenshot_approval_callback(call):
                     caption=call.message.caption + "\n\n✅ **স্ট্যাটাস: অ্যাপ্রুভড (Approved & Paid)**",
                     parse_mode="Markdown"
                 )
-            except:
+            except Exception:
                 pass
 
             try:
-                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার Exe.io স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে ৳0.10 টাকা উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=mini_app_inline_keyboard())
-            except:
+                bot.send_message(target_user_id, f"🎉 অভিনন্দন! আপনার Exe.io স্ক্রিনশট অ্যাডমিন কর্তৃক অনুমোদিত হয়েছে। আপনি সফলভাবে ৳0.10 টাকা উপার্জন করেছেন!\n📈 সম্পন্ন হয়েছে: {completed_today}/15 টি লিংক", reply_markup=main_menu_keyboard())
+            except Exception:
                 pass
 
         elif action == "no":
@@ -773,12 +774,12 @@ def screenshot_approval_callback(call):
                     caption=call.message.caption + "\n\n❌ **স্ট্যাটাস: রিজেক্টেড (Rejected)**",
                     parse_mode="Markdown"
                 )
-            except:
+            except Exception:
                 pass
 
             try:
-                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা Exe.io স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=mini_app_inline_keyboard())
-            except:
+                bot.send_message(target_user_id, "❌ দুঃখিত, আপনার সাবমিট করা Exe.io স্ক্রিনশটটি সঠিক নয় বা রিজেক্ট করা হয়েছে। দয়া করে সঠিক নিয়মে আবার কাজ করুন.", reply_markup=main_menu_keyboard())
+            except Exception:
                 pass
 
 # --- ADMIN PANEL ---
@@ -805,7 +806,7 @@ def admin_panel_callbacks(call):
     if action == "close":
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
-        except:
+        except Exception:
             pass
     elif action == "stats":
         all_u = get_all_active_users()
@@ -835,7 +836,7 @@ def admin_panel_callbacks(call):
         admin_step[call.from_user.id] = {"action": "cutbal_step1"}
         bot.send_message(call.message.chat.id, "✂️ যে ইউজারের অ্যাকাউন্ট থেকে ব্যালেন্স কাটবেন তার **User ID** দিন:")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("adm_ban_") or call.data.startswith("adm_unban_"))
+@bot.callback_query_handler(func=lambda call: call.data.startswith(("adm_ban_", "adm_unban_")))
 def admin_ban_unban_callback(call):
     bot.answer_callback_query(call.id)
     if call.from_user.id not in ADMIN_IDS:
@@ -864,12 +865,12 @@ def check_join_callback(call):
     if check_user_channels(user_id):
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
-        except:
+        except Exception:
             pass
         bot.send_message(
             call.message.chat.id,
-            "✅ ধন্যবাদ! সমস্ত ভেরিফিকেশন সফলভাবে সম্পন্ন হয়েছে। এখন আপনি মিনি অ্যাপ ব্যবহার করতে পারেন:",
-            reply_markup=mini_app_inline_keyboard()
+            "✅ ধন্যবাদ! সমস্ত ভেরিফিকেশন সফলভাবে সম্পন্ন হয়েছে। এখন আপনি নিচের মেনু থেকে কাজ করতে পারেন:",
+            reply_markup=main_menu_keyboard()
         )
     else:
         bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
@@ -905,7 +906,7 @@ def claim_reward_callback(call):
     
     try:
         bot.delete_message(call.message.chat.id, call.message.message_id)
-    except:
+    except Exception:
         pass
         
     if current_count >= 30:
@@ -927,8 +928,8 @@ def claim_reward_callback(call):
         update_user_field(user_id, {"can_claim": False, "daily_count": current_count})
         bot.send_message(
             call.message.chat.id,
-            f"🎉 অভিনন্দন! আপনি সফলভাবে ৳{reward:.2f} টাকা উপার্জন করেছেন।\n📈 আজকের দেখা মোট এড: {current_count}/30",
-            reply_markup=mini_app_inline_keyboard()
+            f"🎉 অভিনন্দন! আপনি সফলভাবে ৳{reward:.2f} টাকা উপার্জন করেছেন。\n📈 আজকের দেখা মোট এড: {current_count}/30",
+            reply_markup=main_menu_keyboard()
         )
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("w_method_"))
@@ -949,7 +950,7 @@ def withdraw_method_callback(call):
     }
     try:
         bot.delete_message(call.message.chat.id, call.message.message_id)
-    except:
+    except Exception:
         pass
         
     bot.send_message(
@@ -1003,7 +1004,7 @@ def check_device_ip_callback(call):
             for admin_id in ADMIN_IDS:
                 try:
                     bot.send_message(admin_id, alert_msg, parse_mode="Markdown", reply_markup=markup)
-                except:
+                except Exception:
                     pass
 
     update_user_field(user_id, {"last_ip": user_ip, "device_verified": True})
@@ -1011,9 +1012,10 @@ def check_device_ip_callback(call):
 
     try:
         bot.delete_message(call.message.chat.id, call.message.message_id)
-    except:
+    except Exception:
         pass
         
+    bot.send_message(call.message.chat.id, "✅ ডিভাইস ও আইপি সফলভাবে ভেরিফাই করা হয়েছে!")
     send_step_by_step_verification(call.message.chat.id, user_id, first_name)
 
 @bot.message_handler(commands=['start'])
@@ -1036,19 +1038,10 @@ def start_cmd(message):
     if not send_step_by_step_verification(message.chat.id, user_id, first_name):
         return
 
-    # ১. ইউজারদের আগের রিপ্লাই বাটনগুলো পুরোপুরি রিমুভ করার জন্য প্রথম মেসেজ পাঠানো
-    remove_markup = ReplyKeyboardRemove()
-    bot.send_message(
-        message.chat.id, 
-        f"👋 স্বাগতম, 👤 {first_name}!\nআমাদের মিনি অ্যাপটি চালু করতে নিচের বাটনে ক্লিক করুন:",
-        reply_markup=remove_markup
-    )
-
-    # ২. মিনি অ্যাপ খোলার জন্য ইনলাইন বাটন পাঠানো
     bot.send_message(
         message.chat.id,
-        "👇 অ্যাপ খুলুন:",
-        reply_markup=mini_app_inline_keyboard()
+        f"👋 স্বাগতম, 👤 {first_name}!\n\nআমাদের বটে কাজ করে আপনি সহজেই ইনকাম করতে পারবেন। নিচের বাটনগুলো ব্যবহার করে কাজ শুরু করুন:",
+        reply_markup=main_menu_keyboard()
     )
 
 @bot.message_handler(content_types=['contact'])
@@ -1108,7 +1101,7 @@ def handle_all_messages(message):
                     bot.copy_message(chat_id=u_id, from_chat_id=message.chat.id, message_id=message.message_id)
                     success += 1
                     time.sleep(0.04)
-                except Exception as e:
+                except Exception:
                     failed += 1
             bot.send_message(message.chat.id, f"✅ **ব্রডকাস্ট সম্পন্ন হয়েছে!**\n📊 মোট প্রাপক: {total}\n✅ সফল: {success}\n❌ ব্যর্থ: {failed}", parse_mode="Markdown")
             return
@@ -1160,7 +1153,7 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, f"✅ ইউজার `{target_id}`-কে ৳{amt:.2f} BDT প্রদান করা হয়েছে।", parse_mode="Markdown")
                 try:
                     bot.send_message(target_id, f"🎉 আপনার অ্যাকাউন্টে ৳{amt:.2f} BDT যোগ করা হয়েছে!")
-                except:
+                except Exception:
                     pass
             except ValueError:
                 bot.send_message(message.chat.id, "❌ সঠিক সংখ্যা লিখুন!")
@@ -1187,7 +1180,7 @@ def handle_all_messages(message):
                 bot.send_message(message.chat.id, f"✂️ ইউজার `{target_id}`-এর ব্যালেন্স থেকে ৳{amt:.2f} BDT কেটে নেওয়া হয়েছে।", parse_mode="Markdown")
                 try:
                     bot.send_message(target_id, f"⚠️ অ্যাডমিন আপনার অ্যাকাউন্ট থেকে ৳{amt:.2f} BDT কেটে নিয়েছেন।")
-                except:
+                except Exception:
                     pass
             except ValueError:
                 bot.send_message(message.chat.id, "❌ সঠিক সংখ্যা লিখুন!")
@@ -1200,7 +1193,7 @@ def handle_all_messages(message):
             if ans == correct_ans:
                 del user_captcha_step[user_id]
                 update_user_field(user_id, {"captcha_locked": False})
-                bot.reply_to(message, "✅ ক্যাপচা সফলভাবে সমাধান হয়েছে! ২৪ ঘণ্টা পর আপনার কাজের লিমিট সম্পূর্ণ রিসেট হবে।", reply_markup=mini_app_inline_keyboard())
+                bot.reply_to(message, "✅ ক্যাপচা সফলভাবে সমাধান হয়েছে! ২৪ ঘণ্টা পর আপনার কাজের লিমিট সম্পূর্ণ রিসেট হবে।", reply_markup=main_menu_keyboard())
             else:
                 bot.reply_to(message, "❌ ভুল উত্তর! আবার সঠিক উত্তরটি লিখে পাঠান:")
         except ValueError:
@@ -1281,7 +1274,7 @@ def handle_all_messages(message):
                 f"🌐 মেথড: {method}\n"
                 f"📱 নম্বর: `{number}`\n\n"
                 f"⏳ ২৪ ঘণ্টার মধ্যে পেমেন্ট পৌঁছে যাবে।",
-                reply_markup=mini_app_inline_keyboard(),
+                reply_markup=main_menu_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -1289,12 +1282,83 @@ def handle_all_messages(message):
     if not send_step_by_step_verification(message.chat.id, user_id, first_name):
         return
 
-    # অন্য কোনো মেসেজ পাঠালে এটি রেসপন্স হিসেবে মিনি অ্যাপ লিংক দিবে
-    bot.send_message(
-        message.chat.id,
-        "নিচের বাটনে ক্লিক করে অ্যাপ ওপেন করুন:",
-        reply_markup=mini_app_inline_keyboard()
-    )
+    if text == "🖥 Account":
+        balance, user = get_user(user_id, first_name)
+        phone = user.get("verified_phone", "ভেরিফাই করা হয়নি")
+        ref_count = user.get("referrals_count", 0)
+        bot.send_message(
+            message.chat.id,
+            f"🖥 **আপনার অ্যাকাউন্ট বিবরণী**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 নাম: {first_name}\n"
+            f"🆔 আইডি: `{user_id}`\n"
+            f"📱 ফোন: `{phone}`\n"
+            f"💰 ব্যালেন্স: **৳{balance:.2f} BDT**\n"
+            f"👥 মোট রেফারেল: {ref_count} জন\n"
+            f"━━━━━━━━━━━━━━━━━━━",
+            parse_mode="Markdown"
+        )
+        return
+
+    elif text == "✨ Referral":
+        _, user = get_user(user_id, first_name)
+        ref_count = user.get("referrals_count", 0)
+        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+        bot.send_message(
+            message.chat.id,
+            f"✨ **রেফারেল প্রোগ্রাম**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"প্রতিটি সফল রেফারেলের জন্য পাবেন **৳{REFERRAL_BONUS:.2f} BDT** বোনাস!\n\n"
+            f"🔗 আপনার রেফারেল লিংক:\n`{ref_link}`\n\n"
+            f"👥 মোট রেফার: {ref_count} জন",
+            parse_mode="Markdown"
+        )
+        return
+
+    elif text == "💸 Withdraw":
+        balance, user = get_user(user_id, first_name)
+        if user.get("captcha_locked", False):
+            bot.reply_to(message, "❌ আপনার অ্যাকাউন্টটি ক্যাপচা লক করা আছে। আগে ক্যাপচা পূরণ করুন।")
+            return
+        if balance < MIN_WITHDRAW:
+            bot.reply_to(message, f"❌ আপনার পর্যাপ্ত ব্যালেন্স নেই। সর্বনিম্ন উইথড্র ৳{MIN_WITHDRAW:.2f} BDT। বর্তমান ব্যালেন্স: ৳{balance:.2f} BDT")
+            return
+        
+        markup = InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            InlineKeyboardButton("bKash", callback_data="w_method_bKash"),
+            InlineKeyboardButton("Nagad", callback_data="w_method_Nagad")
+        )
+        bot.send_message(
+            message.chat.id,
+            f"💸 **উইথড্র সেকশন**\n\nবর্তমান ব্যালেন্স: **৳{balance:.2f} BDT**\n👉 পেমেন্ট মেথড সিলেক্ট করুন:",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        return
+
+    elif text == "📜 Payment History":
+        _, user = get_user(user_id, first_name)
+        history = user.get("history", [])
+        if not history:
+            bot.send_message(message.chat.id, "📜 আপনার কোনো পেমেন্ট হিস্ট্রি নেই।")
+            return
+        
+        hist_text = "📜 **আপনার শেষ ৫টি উইথড্র রেকর্ড:**\n━━━━━━━━━━━━━━━━━━━\n"
+        for h in history[-5:]:
+            hist_text += f"💳 {h['method']} | ৳{h['amount_bdt']:.2f} BDT\n📱 `{h['number']}`\n🕒 {h['date']}\n\n"
+        bot.send_message(message.chat.id, hist_text, parse_mode="Markdown")
+        return
+
+    elif text == "📩 Support":
+        bot.send_message(
+            message.chat.id,
+            "🌐 ALL IN ONE 🌐\n\n"
+            "🖇️ আমাদের সাপোর্ট গ্রুপ লিংক: https://t.me/allinoneg1\n\n"
+            "✅ টেলিগ্রাম এডমিন লিংক: @akadmin02\n\n"
+            "✅ Whatsapp এডমিন লিংক: 👇 https://wa.me/qr/TLGSBEYHL74LD1"
+        )
+        return
 
 # --- MAIN EXECUTION (WEBHOOK SETUP) ---
 if __name__ == '__main__':
@@ -1309,4 +1373,5 @@ if __name__ == '__main__':
     threading.Thread(target=inactivity_push_loop, daemon=True).start()
 
     print("Telegram Bot is running with Ultra Fast Webhook...")
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
