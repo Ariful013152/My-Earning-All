@@ -1,4 +1,4 @@
-pyTelegramBotAPI
+pytelegrambotapi
 Flask
 flask-cors
 requests
