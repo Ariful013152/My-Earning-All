@@ -22,7 +22,13 @@ def send_welcome(message):
     bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
 def run_bot():
-    bot.infinity_polling()
+    # পুরানো Webhook মুছে ফেলা হচ্ছে যেন 409 Error না আসে
+    try:
+        bot.remove_webhook()
+    except Exception as e:
+        print(f"Webhook remove error: {e}")
+        
+    bot.infinity_polling(skip_pending=True)
 
 # -------- TELEGRAM ALERT FUNCTION --------
 def send_telegram_alert(message):
@@ -74,7 +80,6 @@ def check_device():
     return jsonify({"status": "multi_account_detected"}), 200
 
 if __name__ == '__main__':
-    # বোট আলাদা থ্রেডে ব্যাকগ্রাউন্ডে চলবে
     threading.Thread(target=run_bot, daemon=True).start()
     
     port = int(os.environ.get('PORT', 5000))
