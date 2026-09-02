@@ -1,23 +1,53 @@
 import os
+import time
 import requests
 import threading
 import telebot
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+from pymongo import MongoClient
 
-# সিকিউরিটির জন্য Environment Variable থেকে Token ও Admin ID নেওয়া হচ্ছে
+# Environment Variables থেকে মানসমূহ সংগ্রহ
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 
-# Admin IDs কমা (,) দিয়ে আলাদা করে স্ট্রিপ করে লিস্ট তৈরি করা হচ্ছে
 ADMIN_IDS_RAW = os.environ.get("ADMIN_CHAT_IDS", "8414665404,5034445579")
 ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",") if admin_id.strip()]
 
+MONGO_URI = os.environ.get("MONGO_URI")
+RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
+
+# Flask & Telegram Bot ইনিশিয়ালাইজেশন
 app = Flask(__name__, template_folder='.', static_folder='.')
 CORS(app)
 bot = telebot.TeleBot(BOT_TOKEN)
 
+# MongoDB কানেকশন সেটআপ
+db = None
+users_collection = None
+
+if MONGO_URI:
+    try:
+        mongo_client = MongoClient(MONGO_URI)
+        db = mongo_client.get_database() # ডিফল্ট ডাটাবেজ
+        users_collection = db["users"]
+        print("✅ MongoDB Connection Successful!")
+    except Exception as e:
+        print(f"❌ MongoDB Connection Error: {e}")
+
 device_db = {}
 banned_users = set()
+
+# -------- KEEP ALIVE SCRIPT (Render 24/7 Active) --------
+def keep_alive():
+    """ Render-এর ফ্রি ইনস্ট্যান্স যেন বন্ধ না হয় তাই প্রতি ১৪ মিনিটে সার্ভারে পিং করবে """
+    if RENDER_EXTERNAL_URL:
+        while True:
+            time.sleep(840)  # ১৪ মিনিট (৮৪০ সেকেন্ড)
+            try:
+                requests.get(RENDER_EXTERNAL_URL, timeout=10)
+                print("🔄 Keep-Alive Ping Sent Successfully!")
+            except Exception as e:
+                print(f"⚠️ Keep-Alive Ping Failed: {e}")
 
 # -------- TELEGRAM BOT HANDLERS --------
 @bot.message_handler(commands=['start'])
@@ -59,6 +89,24 @@ def check_device():
     first_name = data.get('first_name', 'Unknown')
     username = data.get('username', 'No Username')
 
+    # MongoDB-তে ইউজার ডাটা সেভ/আপডেট করার লজিক
+    if users_collection is not None:
+        try:
+            users_collection.update_one(
+                {"user_id": user_id},
+                {
+                    "$set": {
+                        "first_name": first_name,
+                        "username": username,
+                        "device_id": device_id,
+                        "last_active": time.time()
+                    }
+                },
+                upsert=True
+            )
+        except Exception as e:
+            print(f"Database save error: {e}")
+
     if user_id in banned_users:
         return jsonify({"status": "banned"}), 200
 
@@ -83,7 +131,12 @@ def check_device():
     return jsonify({"status": "multi_account_detected"}), 200
 
 if __name__ == '__main__':
+    # টেলিগ্রাম বট চালানোর জন্য থ্রেড
     threading.Thread(target=run_bot, daemon=True).start()
+    
+    # Render সার্ভার ২৪ ঘণ্টা সচল রাখার জন্য Keep-Alive থ্রেড
+    if RENDER_EXTERNAL_URL:
+        threading.Thread(target=keep_alive, daemon=True).start()
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
