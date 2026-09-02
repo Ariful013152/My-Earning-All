@@ -1,422 +1,399 @@
 <!DOCTYPE html>
 <html lang="bn">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Earning All</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- Adsgram SDK -->
-  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    body { background-color: #0b0e14; color: #e1e7ef; padding-bottom: 80px; }
-    
-    header { background: #121824; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; }
-    .profile-info { display: flex; align-items: center; gap: 12px; }
-    .avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #00c6ff, #0072ff); display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; font-size: 18px; border: 2px solid #00f2fe; }
-    .user-details h3 { font-size: 15px; color: #ffffff; font-weight: 600; }
-    .badge { font-size: 10px; background: rgba(0, 242, 254, 0.15); color: #00f2fe; border: 1px solid #00f2fe; padding: 2px 8px; border-radius: 12px; margin-top: 3px; display: inline-block; font-weight: bold; }
-    .notif-btn { background: #1e293b; border: none; width: 38px; height: 38px; border-radius: 10px; color: #00f2fe; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Earning App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --accent-color: #0088cc;
+            --text-color: #c9d1d9;
+            --text-white: #ffffff;
+            --success-color: #2ea44f;
+            --border-color: #30363d;
+        }
 
-    .container { padding: 16px; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
 
-    .card { background: #121824; border: 1px solid #1e293b; border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-    
-    .balance-card { background: linear-gradient(135deg, #2563eb, #1d4ed8, #0f172a); border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; position: relative; overflow: hidden; }
-    .balance-title { font-size: 13px; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.5px; }
-    .balance-amount { font-size: 36px; font-weight: 800; color: #ffffff; margin: 8px 0 16px; letter-spacing: -0.5px; }
-    
-    .grid-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-    .stat-card { background: #121824; border: 1px solid #1e293b; border-radius: 14px; padding: 14px; text-align: left; }
-    .stat-icon { font-size: 20px; margin-bottom: 6px; }
-    .stat-label { font-size: 12px; color: #94a3b8; }
-    .stat-value { font-size: 18px; font-weight: bold; color: #f8fafc; margin-top: 2px; }
+        .header {
+            background-color: var(--card-bg);
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+        }
 
-    .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .btn-primary { background: linear-gradient(90deg, #00c6ff, #0072ff); color: white; box-shadow: 0 4px 15px rgba(0, 114, 255, 0.3); }
-    .btn-green { background: linear-gradient(90deg, #10b981, #059669); color: white; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
-    .btn-secondary { background: #1e293b; color: #f8fafc; border: 1px solid #334155; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
-    .task-card { text-align: center; padding: 24px 16px; }
-    .task-icon-circle { width: 60px; height: 60px; border-radius: 50%; background: rgba(0, 198, 255, 0.1); border: 1px solid rgba(0, 198, 255, 0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 26px; color: #00f2fe; }
-    .task-heading { font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 6px; }
-    .task-subtext { font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
-    .reward-badge { display: inline-block; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 12px; padding: 4px 12px; border-radius: 20px; font-weight: 600; margin-bottom: 16px; }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
 
-    .input-field { width: 100%; padding: 14px; background: #0b0e14; border: 1px solid #1e293b; border-radius: 10px; color: white; margin: 8px 0 16px; font-size: 14px; outline: none; }
-    .input-field:focus { border-color: #0072ff; }
-    .method-selector { display: flex; gap: 10px; margin: 10px 0 16px; }
-    .method-btn { flex: 1; padding: 12px; background: #0b0e14; border: 1px solid #1e293b; color: #94a3b8; border-radius: 10px; cursor: pointer; text-align: center; font-weight: 600; font-size: 13px; }
-    .method-btn.active { border-color: #00c6ff; background: rgba(0, 198, 255, 0.1); color: #00c6ff; }
+        .badge {
+            background: #238636;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            text-transform: uppercase;
+        }
 
-    .nav-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #121824; display: flex; justify-space: around; padding: 10px 0; border-top: 1px solid #1e293b; z-index: 100; }
-    .nav-item { display: flex; flex-direction: column; align-items: center; color: #64748b; font-size: 11px; cursor: pointer; text-decoration: none; width: 20%; font-weight: 500; }
-    .nav-item span:first-child { font-size: 20px; margin-bottom: 2px; }
-    .nav-item.active { color: #00f2fe; }
-  </style>
+        .container {
+            padding: 15px;
+            flex: 1;
+            margin-bottom: 70px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .balance-card h3 {
+            margin: 0 0 5px 0;
+            font-size: 14px;
+            color: #8b949e;
+        }
+
+        .balance-card h1 {
+            margin: 0;
+            font-size: 28px;
+            color: var(--text-white);
+        }
+
+        .btn {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .btn:disabled {
+            background-color: #30363d;
+            cursor: not-allowed;
+            color: #8b949e;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: var(--card-bg);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #8b949e;
+            text-decoration: none;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .nav-item i {
+            font-size: 18px;
+            margin-bottom: 3px;
+        }
+
+        .nav-item.active {
+            color: var(--accent-color);
+        }
+
+        .timer-text {
+            color: #e3b341;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+    </style>
 </head>
 <body>
 
-  <header>
-    <div class="profile-info">
-      <div class="avatar" id="avatar">U</div>
-      <div class="user-details">
-        <h3 id="username">ইউজার</h3>
-        <span class="badge">BRONZE</span>
-      </div>
-    </div>
-    <button class="notif-btn">🔔</button>
-  </header>
-
-  <div class="container">
-    
-    <!-- HOME TAB -->
-    <div id="tab-home" class="tab-content active">
-      <div class="card balance-card">
-        <div class="balance-title">বর্তমান মোট ব্যালেন্স</div>
-        <div class="balance-amount">TK <span id="home-balance">0.00</span></div>
-        <button class="btn btn-primary" onclick="switchTab('wallet', document.querySelectorAll('.nav-item')[4])">💳 টাকা উত্তোলন করুন</button>
-      </div>
-
-      <div class="grid-stats">
-        <div class="stat-card" onclick="switchTab('task', document.querySelectorAll('.nav-item')[1])" style="cursor:pointer;">
-          <div class="stat-icon">⚡</div>
-          <div class="stat-label">দৈনিক টাস্ক</div>
-          <div class="stat-value">কাজ শুরু করুন</div>
+    <div class="header">
+        <div class="user-info">
+            <div class="avatar" id="userAvatar"><i class="fas fa-user"></i></div>
+            <div>
+                <div style="font-weight: bold; color: white;" id="userName">User</div>
+                <span class="badge">BRONZE</span>
+            </div>
         </div>
-        <div class="stat-card" onclick="switchTab('refer', document.querySelectorAll('.nav-item')[3])" style="cursor:pointer;">
-          <div class="stat-icon">🎁</div>
-          <div class="stat-label">রেফারেল বোনাস</div>
-          <div class="stat-value">ইনভাইট করুন</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">✔</div>
-          <div class="stat-label">আজকের টাস্ক</div>
-          <div class="stat-value" id="home-today-tasks">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">👥</div>
-          <div class="stat-label">মোট রেফার</div>
-          <div class="stat-value" id="home-total-ref">0</div>
-        </div>
-      </div>
+        <i class="fas fa-bell" style="color: #8b949e;"></i>
     </div>
 
-    <!-- TASK TAB -->
-    <div id="tab-task" class="tab-content">
-      <!-- Adsgram Task Card -->
-      <div class="card task-card">
-        <div class="task-icon-circle">🎬</div>
-        <div class="task-heading">Adsgram ভিডিও টাস্ক</div>
-        <div class="task-subtext">ভিডিও দেখুন এবং রিওয়ার্ড অর্জন করুন</div>
-        <div class="reward-badge">রিওয়ার্ড: TK 0.10 per ad</div>
-        <div style="margin-bottom: 12px; font-weight: bold; color: #94a3b8;">সীমা: <span id="adsgram-count">0/10</span></div>
-        <button id="adsgram-btn" class="btn btn-primary" onclick="runAdsgramTask()">▶ ভিডিও এড চালু করুন</button>
-      </div>
-
-      <!-- Monetag Task Card -->
-      <div class="card task-card">
-        <div class="task-icon-circle">🚀</div>
-        <div class="task-heading">Monetag টাস্ক</div>
-        <div class="task-subtext">ওয়েবসাইট ভিজিট করে ১৫ সেকেন্ড অপেক্ষা করুন</div>
-        <div class="reward-badge">রিওয়ার্ড: TK 0.10 per ad</div>
-        <div style="margin-bottom: 12px; font-weight: bold; color: #94a3b8;">সীমা: <span id="monetag-count">0/10</span></div>
-        <button id="monetag-btn" class="btn btn-primary" onclick="runTask('monetag')">কাজ করুন (1/10)</button>
-      </div>
-
-      <!-- Adsterra Task Card -->
-      <div class="card task-card">
-        <div class="task-icon-circle">📺</div>
-        <div class="task-heading">Adsterra টাস্ক</div>
-        <div class="task-subtext">লিঙ্ক ওপেন করুন এবং ১৫ সেকেন্ড অপেক্ষা করুন</div>
-        <div class="reward-badge">রিওয়ার্ড: TK 0.10 per ad</div>
-        <div style="margin-bottom: 12px; font-weight: bold; color: #94a3b8;">সীমা: <span id="adsterra-count">0/10</span></div>
-        <button id="adsterra-btn" class="btn btn-green" onclick="runTask('adsterra')">কাজ করুন (1/10)</button>
-      </div>
-    </div>
-
-    <!-- SUPPORT TAB -->
-    <div id="tab-support" class="tab-content">
-      <div class="card task-card">
-        <div class="task-icon-circle">🎧</div>
-        <div class="task-heading">সাপোর্ট সেন্টার</div>
-        <div class="task-subtext">যেকোনো পেমেন্ট সমস্যা বা প্রশ্নের জন্য এডমিনের সাথে যোগাযোগ করুন</div>
-        <button class="btn btn-primary" onclick="tg.openTelegramLink('https://t.me/your_support_channel')">✈ টেলিগ্রাম সাপোর্টে মেসেজ দিন</button>
-      </div>
-    </div>
-
-    <!-- REFER TAB -->
-    <div id="tab-refer" class="tab-content">
-      <div class="card task-card">
-        <div class="task-icon-circle">🎁</div>
-        <div class="task-heading">রেফার করুন ও আনলিমিটেড আয় করুন</div>
-        <div class="task-subtext">আপনার রেফার লিঙ্ক বন্ধুদের শেয়ার করুন। প্রতি সফল রেফারে পাবেন নিশ্চিত ক্যাশ বোনাস!</div>
-        <input type="text" id="ref-link" class="input-field" readonly value="https://t.me/your_bot?start=12345">
-        <div style="display: flex; gap: 10px;">
-          <button class="btn btn-secondary" onclick="copyReferLink()">📋 লিঙ্ক কপি</button>
-          <button class="btn btn-primary" onclick="shareReferLink()">📲 শেয়ার করুন</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- WALLET TAB -->
-    <div id="tab-wallet" class="tab-content">
-      <div class="card">
-        <div style="text-align: center; margin-bottom: 16px;">
-          <div style="font-size: 13px; color: #94a3b8;">উত্তোলনযোগ্য মেইন ব্যালেন্স</div>
-          <div style="font-size: 28px; font-weight: bold; color: #00f2fe; margin-top: 4px;">TK <span id="wallet-balance">0.00</span></div>
+    <div class="container">
+        <!-- Home Tab -->
+        <div id="home" class="tab-content active">
+            <div class="card balance-card">
+                <h3>মোট ব্যালেন্স</h3>
+                <h1><span id="userBalance">0.00</span> BDT</h1>
+            </div>
+            <div class="card">
+                <h3>স্বাগতম!</h3>
+                <p>টাস্ক ট্যাবে গিয়ে বিজ্ঞাপন দেখে আয় করা শুরু করুন।</p>
+            </div>
         </div>
 
-        <label style="font-size: 13px; color: #94a3b8;">পেমেন্ট মেথড সিলেক্ট করুন</label>
-        <div class="method-selector">
-          <div class="method-btn active" onclick="selectMethod(this)">বিকাশ (bKash)</div>
-          <div class="method-btn" onclick="selectMethod(this)">নগদ (Nagad)</div>
+        <!-- Task Tab -->
+        <div id="tasks" class="tab-content">
+            <!-- Adsgram Task -->
+            <div class="card">
+                <i class="fas fa-film" style="font-size: 30px; color: var(--accent-color);"></i>
+                <h3>Adsgram ভিডিও টাস্ক</h3>
+                <p>ভিডিও দেখুন এবং রিওয়ার্ড অর্জন করুন</p>
+                <div style="font-size: 12px; color: #8b949e;">রিওয়ার্ড: TK 0.10 per ad</div>
+                <button class="btn" id="adsgramBtn" onclick="watchAdsgram()">কাজ করুন</button>
+            </div>
+
+            <!-- Monetag Task -->
+            <div class="card">
+                <i class="fas fa-globe" style="font-size: 30px; color: #2ea44f;"></i>
+                <h3>Monetag টাস্ক</h3>
+                <p>ওয়েবসাইট ভিজিট করে ১৫ সেকেন্ড অপেক্ষা করুন</p>
+                <div style="font-size: 12px; color: #8b949e;">সীমা: <span id="monetagCount">0</span>/10</div>
+                <div id="monetagTimer" class="timer-text"></div>
+                <button class="btn" id="monetagBtn" onclick="startMonetagTask()">কাজ করুন</button>
+            </div>
+
+            <!-- Adsterra Task -->
+            <div class="card">
+                <i class="fas fa-tv" style="font-size: 30px; color: #e3b341;"></i>
+                <h3>Adsterra টাস্ক</h3>
+                <p>ওয়েবসাইট ভিজিট করে ১৫ সেকেন্ড অপেক্ষা করুন</p>
+                <div style="font-size: 12px; color: #8b949e;">সীমা: <span id="adsterraCount">0</span>/10</div>
+                <div id="adsterraTimer" class="timer-text"></div>
+                <button class="btn" id="adsterraBtn" onclick="startAdsterraTask()">কাজ করুন</button>
+            </div>
         </div>
 
-        <label style="font-size: 13px; color: #94a3b8;">টাকার পরিমাণ (TK)</label>
-        <input type="number" class="input-field" placeholder="মিনিমাম ৫০ টাকা">
+        <!-- Support Tab -->
+        <div id="support" class="tab-content">
+            <div class="card">
+                <h3>সাপোর্ট</h3>
+                <p>কোনো সমস্যা বা জিজ্ঞাসার জন্য আমাদের টেলিগ্রাম গ্রুপে যুক্ত হন।</p>
+                <button class="btn" onclick="window.open('https://t.me/', '_blank')">টেলিগ্রাম সাপোর্ট</button>
+            </div>
+        </div>
 
-        <label style="font-size: 13px; color: #94a3b8;">অ্যাকাউন্ট নম্বর / অ্যাড্রেস</label>
-        <input type="number" class="input-field" placeholder="01XXXXXXXXX">
+        <!-- Referral Tab -->
+        <div id="refer" class="tab-content">
+            <div class="card">
+                <h3>রেফার করে আয় করুন</h3>
+                <p>বন্ধুদের ইনভাইট করুন এবং বাড়তি বোনাস পান!</p>
+                <button class="btn" onclick="copyReferLink()">রেফার লিংক কপি করুন</button>
+            </div>
+        </div>
 
-        <button class="btn btn-primary" onclick="alert('উইথড্র রিকোয়েস্ট সফলভাবে সাবমিট হয়েছে!')">উইথড্র রিকোয়েস্ট পাঠান</button>
-      </div>
+        <!-- Wallet Tab -->
+        <div id="wallet" class="tab-content">
+            <div class="card">
+                <h3>উইথড্র</h3>
+                <p>নূন্যতম উইথড্র: ৫০ টাকা</p>
+                <button class="btn" onclick="alert('পেমেন্ট সিস্টেম শীঘ্রই চালু হবে।')">টাকা তুলুন</button>
+            </div>
+        </div>
     </div>
 
-  </div>
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="switchTab('home', this)"><i class="fas fa-home"></i>হোম</div>
+        <div class="nav-item" onclick="switchTab('tasks', this)"><i class="fas fa-bolt"></i>টাস্ক</div>
+        <div class="nav-item" onclick="switchTab('support', this)"><i class="fas fa-headset"></i>সাপোর্ট</div>
+        <div class="nav-item" onclick="switchTab('refer', this)"><i class="fas fa-gift"></i>রেফার</div>
+        <div class="nav-item" onclick="switchTab('wallet', this)"><i class="fas fa-wallet"></i>ওয়ালেট</div>
+    </div>
 
-  <!-- Bottom Navigation -->
-  <div class="nav-bar">
-    <div class="nav-item active" onclick="switchTab('home', this)"><span>🏠</span><span>হোম</span></div>
-    <div class="nav-item" onclick="switchTab('task', this)"><span>⚡</span><span>টাস্ক</span></div>
-    <div class="nav-item" onclick="switchTab('support', this)"><span>🎧</span><span>সাপোর্ট</span></div>
-    <div class="nav-item" onclick="switchTab('refer', this)"><span>🎁</span><span>রেফার</span></div>
-    <div class="nav-item" onclick="switchTab('wallet', this)"><span>💼</span><span>ওয়ালেট</span></div>
-  </div>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
 
-  <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
+        // ------------------ Adsgram Config ------------------
+        const adsgramBlockId = "45802"; // আপনার আপডেট করা আসল ব্লক আইডি
 
-    const adsgramBlockId = "45793";
+        // ------------------ Direct Links ------------------
+        const monetagLinks = [
+            "https://othtoopt.net/4/8847059", "https://othtoopt.net/4/8847059",
+            "https://othtoopt.net/4/8847059", "https://othtoopt.net/4/8847059",
+            "https://othtoopt.net/4/8847059", "https://othtoopt.net/4/8847059",
+            "https://othtoopt.net/4/8847059", "https://othtoopt.net/4/8847059",
+            "https://othtoopt.net/4/8847059", "https://othtoopt.net/4/8847059"
+        ];
 
-    function getDeviceId() {
-      let deviceId = localStorage.getItem('app_device_uuid');
-      if (!deviceId) {
-        deviceId = 'DEV-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
-        localStorage.setItem('app_device_uuid', deviceId);
-      }
-      return deviceId;
-    }
+        const adsterraLinks = [
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039",
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039",
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039",
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039",
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039",
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039",
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039",
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039",
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039",
+            "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039"
+        ];
 
-    const deviceId = getDeviceId();
-    let user = tg.initDataUnsafe?.user || { id: "GUEST_" + Date.now(), first_name: "Guest", username: "none" };
+        // ------------------ App State & Local Storage ------------------
+        let balance = parseFloat(localStorage.getItem('balance')) || 0.00;
+        let monetagCount = parseInt(localStorage.getItem('monetagCount')) || 0;
+        let adsterraCount = parseInt(localStorage.getItem('adsterraCount')) || 0;
+        let lastResetTime = localStorage.getItem('lastResetTime') || Date.now();
 
-    fetch('/check-device', { 
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        device_id: deviceId,
-        user_id: user.id,
-        first_name: user.first_name,
-        username: user.username || 'নাই'
-      })
-    }).catch(err => console.log(err));
-
-    const taskConfig = {
-      monetag: {
-        reward: 0.10, timer: 15,
-        links: [
-          'https://omg10.com/4/11522087',
-          'https://omg10.com/4/11522086',
-          'https://omg10.com/4/11522081',
-          'https://omg10.com/4/11522080',
-          'https://omg10.com/4/11522079',
-          'https://omg10.com/4/11522078',
-          'https://omg10.com/4/11522077',
-          'https://omg10.com/4/11522076',
-          'https://omg10.com/4/11522074',
-          'https://omg10.com/4/11516146'
-        ]
-      },
-      adsterra: {
-        reward: 0.10, timer: 15,
-        links: [
-          'https://www.effectivecpmnetwork.com/nx2nqegj3p?key=8fb4f6d68a89919faeee5ec3846d4292',
-          'https://www.effectivecpmnetwork.com/bbjq6k48?key=4707c2aa3827755848d5332b72a9c955',
-          'https://www.effectivecpmnetwork.com/hqrjr5jzm?key=fe9a5012689a62a78d579d93d0864575',
-          'https://www.effectivecpmnetwork.com/nqch6m5jc?key=3eecd9428d8b55066d6cfdcadeda271c',
-          'https://www.effectivecpmnetwork.com/ie1pgkmbcc?key=1298a27dc3477c9aef05ead4c6778088',
-          'https://www.effectivecpmnetwork.com/wg9r001v7?key=4f2213d1fb414c2e0c9ac7dde1c72402',
-          'https://www.effectivecpmnetwork.com/m36r7xvy?key=e8b267b7b19cae2daee8f96118e5326e',
-          'https://www.effectivecpmnetwork.com/jwsp4r2rtr?key=63a26410a1f920c6de29b0e73bf69055',
-          'https://www.effectivecpmnetwork.com/dwja24niv?key=6a9552e41b528897598e4eec709d5115',
-          'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
-        ]
-      }
-    };
-
-    let userBalance = parseFloat(localStorage.getItem('user_balance') || '0.00');
-
-    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-      const u = tg.initDataUnsafe.user;
-      document.getElementById('username').innerText = u.first_name;
-      document.getElementById('avatar').innerText = u.first_name.charAt(0).toUpperCase();
-      document.getElementById('ref-link').value = `https://t.me/your_bot?start=${u.id}`;
-    }
-
-    function getState(network) {
-      const saved = localStorage.getItem(`net_${network}`);
-      return saved ? JSON.parse(saved) : { count: 0, lastReset: 0 };
-    }
-
-    function saveState(network, state) {
-      localStorage.setItem(`net_${network}`, JSON.stringify(state));
-    }
-
-    function runAdsgramTask() {
-      const btn = document.getElementById("adsgram-btn");
-      const state = getState('adsgram');
-
-      if (state.count >= 10) {
-        alert("আজকের ভিডিও অ্যাড দেখার লিমিট শেষ!");
-        return;
-      }
-
-      if (window.Adsgram) {
-        btn.disabled = true;
-        btn.innerText = "অ্যাড লোড হচ্ছে...";
-
-        const AdController = window.Adsgram.init({ blockId: adsgramBlockId });
-        AdController.show().then((result) => {
-          if (state.count === 0) state.lastReset = new Date().getTime();
-          state.count++;
-          userBalance += 0.10;
-
-          saveState('adsgram', state);
-          localStorage.setItem('user_balance', userBalance.toString());
-
-          updateAllUI();
-          alert("🎉 অভিনন্দন! ভিডিও দেখার জন্য +0.10 TK যোগ হয়েছে।");
-        }).catch((result) => {
-          alert("অ্যাড সম্পন্ন হয়নি বা কোনো সমস্যা হয়েছে!");
-          updateAllUI();
-        });
-      } else {
-        alert("Adsgram SDK লোড হতে ব্যর্থ হয়েছে। দয়া করে পেজটি রিফ্রেশ করুন।");
-      }
-    }
-
-    function updateAllUI() {
-      document.getElementById('home-balance').innerText = userBalance.toFixed(2);
-      document.getElementById('wallet-balance').innerText = userBalance.toFixed(2);
-
-      let grandTotalDone = 0;
-      const adsgramState = getState('adsgram');
-      const currentTime = new Date().getTime();
-
-      if (currentTime - adsgramState.lastReset >= 86400000) {
-        adsgramState.count = 0;
-        saveState('adsgram', adsgramState);
-      }
-
-      grandTotalDone += adsgramState.count;
-      document.getElementById('adsgram-count').innerText = `${adsgramState.count}/10`;
-      const adsBtn = document.getElementById('adsgram-btn');
-      if (adsgramState.count >= 10) {
-        adsBtn.disabled = true;
-        adsBtn.innerText = "আজকের কাজ শেষ";
-      } else {
-        adsBtn.disabled = false;
-        adsBtn.innerText = `▶ ভিডিও এড চালু করুন (${adsgramState.count + 1}/10)`;
-      }
-
-      ['monetag', 'adsterra'].forEach(net => {
-        const config = taskConfig[net];
-        const state = getState(net);
-
-        if (currentTime - state.lastReset >= 86400000) {
-          state.count = 0;
-          saveState(net, state);
+        // 24 Hour Reset Logic
+        if (Date.now() - lastResetTime > 24 * 60 * 60 * 1000) {
+            monetagCount = 0;
+            adsterraCount = 0;
+            localStorage.setItem('monetagCount', 0);
+            localStorage.setItem('adsterraCount', 0);
+            localStorage.setItem('lastResetTime', Date.now());
         }
 
-        grandTotalDone += state.count;
-        document.getElementById(`${net}-count`).innerText = `${state.count}/${config.links.length}`;
+        // Init UI
+        document.getElementById('userBalance').innerText = balance.toFixed(2);
+        document.getElementById('monetagCount').innerText = monetagCount;
+        document.getElementById('adsterraCount').innerText = adsterraCount;
 
-        const btn = document.getElementById(`${net}-btn`);
-        if (state.count >= config.links.length) {
-          btn.disabled = true;
-          btn.innerText = "আজকের কাজ শেষ";
-        } else {
-          btn.disabled = false;
-          btn.innerText = `কাজ করুন (${state.count + 1}/${config.links.length})`;
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            document.getElementById('userName').innerText = tg.initDataUnsafe.user.first_name;
         }
-      });
 
-      document.getElementById('home-today-tasks').innerText = grandTotalDone;
-    }
-
-    function runTask(net) {
-      const config = taskConfig[net];
-      const state = getState(net);
-      const btn = document.getElementById(`${net}-btn`);
-
-      if (state.count >= config.links.length) return;
-
-      tg.openLink(config.links[state.count]);
-
-      let timeLeft = config.timer;
-      btn.disabled = true;
-
-      const countdown = setInterval(() => {
-        btn.innerText = `অপেক্ষা করুন (${timeLeft}s)...`;
-        timeLeft--;
-
-        if (timeLeft < 0) {
-          clearInterval(countdown);
-          if (state.count === 0) state.lastReset = new Date().getTime();
-
-          state.count++;
-          userBalance += config.reward;
-
-          saveState(net, state);
-          localStorage.setItem('user_balance', userBalance.toString());
-
-          updateAllUI();
-          alert(`শুভেচ্ছা! +${config.reward.toFixed(2)} TK যোগ হয়েছে।`);
+        function switchTab(tabId, element) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            element.classList.add('active');
         }
-      }, 1000);
-    }
 
-    function switchTab(tabId, el) {
-      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        function addReward(amount) {
+            balance += amount;
+            localStorage.setItem('balance', balance);
+            document.getElementById('userBalance').innerText = balance.toFixed(2);
+            alert(`অভিনন্দন! আপনি TK ${amount.toFixed(2)} অর্জন করেছেন।`);
+        }
 
-      document.getElementById(`tab-${tabId}`).classList.add('active');
-      if (el) el.classList.add('active');
-    }
+        // ------------------ Adsgram Handler ------------------
+        function watchAdsgram() {
+            if (window.Adsgram) {
+                const AdController = window.Adsgram.init({ blockId: adsgramBlockId });
+                AdController.show().then((result) => {
+                    addReward(0.10);
+                }).catch((result) => {
+                    alert("অ্যাড সম্পূর্ণ হয়নি বা কোনো সমস্যা হয়েছে!");
+                });
+            } else {
+                alert("Adsgram লোড হতে ব্যর্থ হয়েছে। কৃপয়া রিফ্রেশ দিন।");
+            }
+        }
 
-    function selectMethod(el) {
-      document.querySelectorAll('.method-btn').forEach(btn => btn.classList.remove('active'));
-      el.classList.add('active');
-    }
+        // ------------------ Monetag Handler ------------------
+        function startMonetagTask() {
+            if (monetagCount >= 10) {
+                alert("আজকের Monetag টাস্ক সীমা শেষ!");
+                return;
+            }
+            
+            const btn = document.getElementById('monetagBtn');
+            const timerDisplay = document.getElementById('monetagTimer');
+            btn.disabled = true;
 
-    function copyReferLink() {
-      const copyText = document.getElementById("ref-link");
-      copyText.select();
-      navigator.clipboard.writeText(copyText.value);
-      alert("রেফার লিঙ্ক কপি করা হয়েছে!");
-    }
+            window.open(monetagLinks[monetagCount], '_blank');
 
-    function shareReferLink() {
-      const url = document.getElementById("ref-link").value;
-      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent('আমার সাথে যোগ দিন এবং প্রতিদিন আয় করুন!')}`);
-    }
+            let timeLeft = 15;
+            const timer = setInterval(() => {
+                timeLeft--;
+                timerDisplay.innerText = `অপেক্ষা করুন: ${timeLeft} সে.`;
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    timerDisplay.innerText = "";
+                    btn.disabled = false;
+                    monetagCount++;
+                    localStorage.setItem('monetagCount', monetagCount);
+                    document.getElementById('monetagCount').innerText = monetagCount;
+                    addReward(0.10);
+                }
+            }, 1000);
+        }
 
-    updateAllUI();
-  </script>
+        // ------------------ Adsterra Handler ------------------
+        function startAdsterraTask() {
+            if (adsterraCount >= 10) {
+                alert("আজকের Adsterra টাস্ক সীমা শেষ!");
+                return;
+            }
+
+            const btn = document.getElementById('adsterraBtn');
+            const timerDisplay = document.getElementById('adsterraTimer');
+            btn.disabled = true;
+
+            window.open(adsterraLinks[adsterraCount], '_blank');
+
+            let timeLeft = 15;
+            const timer = setInterval(() => {
+                timeLeft--;
+                timerDisplay.innerText = `অপেক্ষা করুন: ${timeLeft} সে.`;
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    timerDisplay.innerText = "";
+                    btn.disabled = false;
+                    adsterraCount++;
+                    localStorage.setItem('adsterraCount', adsterraCount);
+                    document.getElementById('adsterraCount').innerText = adsterraCount;
+                    addReward(0.10);
+                }
+            }, 1000);
+        }
+
+        function copyReferLink() {
+            navigator.clipboard.writeText("https://t.me/");
+            alert("রেফার লিংক কপি করা হয়েছে!");
+        }
+    </script>
 </body>
 </html>
