@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from pymongo import MongoClient
 
-# Environment Variables থেকে মানসমূহ সংগ্রহ
+# Environment Variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 
 ADMIN_IDS_RAW = os.environ.get("ADMIN_CHAT_IDS", "8414665404,5034445579")
@@ -16,38 +16,35 @@ ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",")
 MONGO_URI = os.environ.get("MONGO_URI")
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
 
-# Flask & Telegram Bot ইনিশিয়ালাইজেশন
 app = Flask(__name__, template_folder='.', static_folder='.')
 CORS(app)
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# MongoDB কানেকশন সেটআপ
 db = None
 users_collection = None
 
 if MONGO_URI:
     try:
         mongo_client = MongoClient(MONGO_URI)
-        db = mongo_client.get_database() # ডিফল্ট ডাটাবেজ
+        db = mongo_client.get_database()
         users_collection = db["users"]
-        print("✅ MongoDB Connection Successful!")
+        print("✅ MongoDB Connected")
     except Exception as e:
-        print(f"❌ MongoDB Connection Error: {e}")
+        print(f"❌ MongoDB Error: {e}")
 
 device_db = {}
 banned_users = set()
 
-# -------- KEEP ALIVE SCRIPT (Render 24/7 Active) --------
+# -------- KEEP ALIVE ( Render 24/7 Server Running ) --------
 def keep_alive():
-    """ Render-এর ফ্রি ইনস্ট্যান্স যেন বন্ধ না হয় তাই প্রতি ১৪ মিনিটে সার্ভারে পিং করবে """
     if RENDER_EXTERNAL_URL:
         while True:
-            time.sleep(840)  # ১৪ মিনিট (৮৪০ সেকেন্ড)
+            time.sleep(840)  # ১৪ মিনিট
             try:
                 requests.get(RENDER_EXTERNAL_URL, timeout=10)
-                print("🔄 Keep-Alive Ping Sent Successfully!")
+                print("🔄 Ping Sent!")
             except Exception as e:
-                print(f"⚠️ Keep-Alive Ping Failed: {e}")
+                print(f"⚠️ Ping Error: {e}")
 
 # -------- TELEGRAM BOT HANDLERS --------
 @bot.message_handler(commands=['start'])
@@ -56,12 +53,13 @@ def send_welcome(message):
     bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
 def run_bot():
-    try:
-        bot.remove_webhook()
-    except Exception as e:
-        print(f"Webhook remove error: {e}")
-        
-    bot.infinity_polling(skip_pending=True)
+    while True:
+        try:
+            bot.remove_webhook()
+            bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            print(f"Bot polling restart error: {e}")
+            time.sleep(5)
 
 # -------- TELEGRAM ALERT FUNCTION --------
 def send_telegram_alert(message):
@@ -89,7 +87,6 @@ def check_device():
     first_name = data.get('first_name', 'Unknown')
     username = data.get('username', 'No Username')
 
-    # MongoDB-তে ইউজার ডাটা সেভ/আপডেট করার লজিক
     if users_collection is not None:
         try:
             users_collection.update_one(
@@ -131,10 +128,8 @@ def check_device():
     return jsonify({"status": "multi_account_detected"}), 200
 
 if __name__ == '__main__':
-    # টেলিগ্রাম বট চালানোর জন্য থ্রেড
     threading.Thread(target=run_bot, daemon=True).start()
     
-    # Render সার্ভার ২৪ ঘণ্টা সচল রাখার জন্য Keep-Alive থ্রেড
     if RENDER_EXTERNAL_URL:
         threading.Thread(target=keep_alive, daemon=True).start()
     
