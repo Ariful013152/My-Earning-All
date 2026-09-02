@@ -34,7 +34,6 @@
             min-height: 100vh;
         }
 
-        /* Top Header */
         .top-bar {
             display: flex;
             align-items: center;
@@ -89,7 +88,6 @@
             color: var(--accent-cyan);
         }
 
-        /* Container & Tabs */
         .container {
             padding: 10px 18px 90px;
             flex: 1;
@@ -103,7 +101,6 @@
             display: block;
         }
 
-        /* Balance Banner */
         .balance-gradient-card {
             background: linear-gradient(135deg, #1d4ed8, #6d28d9);
             border-radius: 20px;
@@ -136,7 +133,6 @@
             font-size: 14px;
         }
 
-        /* Grid System */
         .grid-2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -165,7 +161,6 @@
             font-size: 20px;
         }
 
-        /* Input Controls */
         .method-selector {
             display: flex;
             gap: 10px;
@@ -219,7 +214,6 @@
             cursor: not-allowed;
         }
 
-        /* Bottom Nav Bar */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -260,7 +254,6 @@
 </head>
 <body>
 
-    <!-- Header Area -->
     <div class="top-bar">
         <div class="user-profile">
             <div class="avatar"><i class="fas fa-user"></i></div>
@@ -357,14 +350,14 @@
                 <div class="icon-box"><i class="fas fa-play-circle"></i></div>
                 <h3>কিভাবে সঠিক নিয়মে কাজ করবেন?</h3>
                 <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 15px;">কাজ করার নিয়মাবলী এবং উইথড্র পাওয়ার সম্পূর্ণ ভিডিও টিউটোরিয়াল দেখে নিন।</p>
-                <button class="gradient-btn" style="background: transparent; border: 1px solid var(--accent-cyan);" onclick="window.open('https://youtube.com', '_blank')"><i class="fas fa-tv"></i> টিউটোরিয়াল ভিডিও</button>
+                <button class="gradient-btn" style="background: transparent; border: 1px solid var(--accent-cyan);" onclick="openExternalLink('https://youtube.com')"><i class="fas fa-tv"></i> টিউটোরিয়াল ভিডিও</button>
             </div>
 
             <div class="card">
                 <div class="icon-box"><i class="fas fa-headset"></i></div>
                 <h3>সাপোর্ট সেন্টার</h3>
                 <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 15px;">যেকোনো পেমেন্ট সমস্যা বা প্রশ্নের জন্য এডমিনের সাথে যোগাযোগ করুন</p>
-                <button class="gradient-btn" onclick="window.open('https://t.me/', '_blank')"><i class="fab fa-telegram"></i> টেলিগ্রাম সাপোর্টে মেসেজ দিন</button>
+                <button class="gradient-btn" onclick="openExternalLink('https://t.me/')"><i class="fab fa-telegram"></i> টেলিগ্রাম সাপোর্টে মেসেজ দিন</button>
             </div>
         </div>
 
@@ -408,7 +401,6 @@
 
     </div>
 
-    <!-- Navigation -->
     <div class="bottom-nav">
         <div class="nav-item active" onclick="switchTab('home', 0)"><i class="fas fa-home"></i>হোম</div>
         <div class="nav-item" onclick="switchTab('tasks', 1)"><i class="fas fa-bolt"></i>টাস্ক</div>
@@ -422,16 +414,14 @@
         tg.expand();
 
         const adsgramBlockId = "45802";
-
-        const monetagLinks = Array(15).fill("https://othtoopt.net/4/8847059");
-        const adsterraLinks = Array(15).fill("https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039");
+        const monetagUrl = "https://othtoopt.net/4/8847059";
+        const adsterraUrl = "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039";
 
         let balance = parseFloat(localStorage.getItem('balance')) || 0.00;
         let monetagCount = parseInt(localStorage.getItem('monetagCount')) || 0;
         let adsterraCount = parseInt(localStorage.getItem('adsterraCount')) || 0;
         let lastResetTime = localStorage.getItem('lastResetTime') || Date.now();
 
-        // 24 Hour Task Reset
         if (Date.now() - lastResetTime > 24 * 60 * 60 * 1000) {
             monetagCount = 0;
             adsterraCount = 0;
@@ -448,8 +438,16 @@
             document.getElementById('adsterraCount').innerText = adsterraCount;
             document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount;
 
-            if (monetagCount >= 15) document.getElementById('monetagBtn').disabled = true;
-            if (adsterraCount >= 15) document.getElementById('adsterraBtn').disabled = true;
+            if (monetagCount >= 15) {
+                const mBtn = document.getElementById('monetagBtn');
+                mBtn.disabled = true;
+                mBtn.innerText = "সীমা শেষ (১৫/১৫)";
+            }
+            if (adsterraCount >= 15) {
+                const aBtn = document.getElementById('adsterraBtn');
+                aBtn.disabled = true;
+                aBtn.innerText = "সীমা শেষ (১৫/১৫)";
+            }
 
             if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
                 document.getElementById('userName').innerText = tg.initDataUnsafe.user.first_name;
@@ -473,6 +471,14 @@
             alert(`অভিনন্দন! আপনি TK ${amount.toFixed(2)} অর্জন করেছেন।`);
         }
 
+        function openExternalLink(url) {
+            if (tg.openLink) {
+                tg.openLink(url);
+            } else {
+                window.open(url, '_blank');
+            }
+        }
+
         function watchAdsgram() {
             if (window.Adsgram) {
                 const AdController = window.Adsgram.init({ blockId: adsgramBlockId });
@@ -486,7 +492,8 @@
             if (monetagCount >= 15) return;
             const btn = document.getElementById('monetagBtn');
             btn.disabled = true;
-            window.open(monetagLinks[monetagCount], '_blank');
+            
+            openExternalLink(monetagUrl);
 
             let timeLeft = 15;
             const timer = setInterval(() => {
@@ -498,6 +505,11 @@
                     monetagCount++;
                     localStorage.setItem('monetagCount', monetagCount);
                     addReward(0.10);
+                    
+                    if (monetagCount < 15) {
+                        btn.disabled = false;
+                        btn.innerText = "টাস্ক শুরু করুন";
+                    }
                 }
             }, 1000);
         }
@@ -506,7 +518,8 @@
             if (adsterraCount >= 15) return;
             const btn = document.getElementById('adsterraBtn');
             btn.disabled = true;
-            window.open(adsterraLinks[adsterraCount], '_blank');
+            
+            openExternalLink(adsterraUrl);
 
             let timeLeft = 15;
             const timer = setInterval(() => {
@@ -518,6 +531,11 @@
                     adsterraCount++;
                     localStorage.setItem('adsterraCount', adsterraCount);
                     addReward(0.10);
+
+                    if (adsterraCount < 15) {
+                        btn.disabled = false;
+                        btn.innerText = "টাস্ক শুরু করুন";
+                    }
                 }
             }, 1000);
         }
@@ -534,7 +552,7 @@
 
         function shareReferLink() {
             const link = document.getElementById('referLinkInput').value;
-            window.open(`https://t.me/share/url?url=${encodeURIComponent(link)}`, '_blank');
+            openExternalLink(`https://t.me/share/url?url=${encodeURIComponent(link)}`);
         }
 
         function submitWithdraw() {
