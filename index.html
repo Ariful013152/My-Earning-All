@@ -5,172 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Earning All</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- Adsgram SDK Integration Script -->
-  <script src="https://sad.adsgram.ai/js/adsgram.js"></script>
+  <!-- Adsgram SDK -->
+  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    body {
-      background-color: #0d1117;
-      color: #c9d1d9;
-      padding-bottom: 70px;
-    }
-    header {
-      background-color: #161b22;
-      padding: 15px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid #30363d;
-    }
-    .profile-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #0088cc, #005588);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      color: white;
-      font-size: 18px;
-    }
-    .user-details h3 {
-      font-size: 16px;
-      color: #f0f6fc;
-    }
-    .badge {
-      font-size: 10px;
-      background: #238636;
-      color: white;
-      padding: 2px 6px;
-      border-radius: 10px;
-      text-transform: uppercase;
-    }
-    .container {
-      padding: 15px;
-    }
-    .tab-content {
-      display: none;
-    }
-    .tab-content.active {
-      display: block;
-    }
-    .card {
-      background-color: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 12px;
-      padding: 15px;
-      margin-bottom: 15px;
-    }
-    .balance-card {
-      text-align: center;
-      background: linear-gradient(135deg, #1f6feb, #114193);
-      color: white;
-    }
-    .balance-card h2 {
-      font-size: 32px;
-      margin: 10px 0;
-    }
-    .task-card {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .task-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .task-title {
-      font-weight: bold;
-      font-size: 16px;
-      color: #58a6ff;
-    }
-    .reward-info {
-      font-size: 12px;
-      color: #8b949e;
-    }
-    .btn {
-      width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 15px;
-      cursor: pointer;
-      color: white;
-      transition: background 0.3s;
-    }
-    .btn-blue { background-color: #1f6feb; }
-    .btn-green { background-color: #238636; }
-    .btn-adsgram { background-color: #0088cc; }
-    .btn:disabled {
-      background-color: #30363d;
-      color: #8b949e;
-      cursor: not-allowed;
-    }
-    .nav-bar {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background-color: #161b22;
-      display: flex;
-      justify-content: space-around;
-      padding: 10px 0;
-      border-top: 1px solid #30363d;
-    }
-    .nav-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      color: #8b949e;
-      font-size: 11px;
-      cursor: pointer;
-      text-decoration: none;
-    }
-    .nav-item.active {
-      color: #58a6ff;
-    }
-    .input-field {
-      width: 100%;
-      padding: 10px;
-      background: #0d1117;
-      border: 1px solid #30363d;
-      border-radius: 6px;
-      color: white;
-      margin-top: 5px;
-      margin-bottom: 15px;
-    }
-    .method-selector {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-    .method-btn {
-      flex: 1;
-      padding: 10px;
-      background: #0d1117;
-      border: 1px solid #30363d;
-      color: white;
-      border-radius: 6px;
-      cursor: pointer;
-      text-align: center;
-    }
-    .method-btn.active {
-      border-color: #1f6feb;
-      background: #1f6feb33;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { background-color: #0b0e14; color: #e1e7ef; padding-bottom: 80px; }
+    
+    header { background: #121824; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; }
+    .profile-info { display: flex; align-items: center; gap: 12px; }
+    .avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #00c6ff, #0072ff); display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; font-size: 18px; border: 2px solid #00f2fe; }
+    .user-details h3 { font-size: 15px; color: #ffffff; font-weight: 600; }
+    .badge { font-size: 10px; background: rgba(0, 242, 254, 0.15); color: #00f2fe; border: 1px solid #00f2fe; padding: 2px 8px; border-radius: 12px; margin-top: 3px; display: inline-block; font-weight: bold; }
+    .notif-btn { background: #1e293b; border: none; width: 38px; height: 38px; border-radius: 10px; color: #00f2fe; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+
+    .container { padding: 16px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card { background: #121824; border: 1px solid #1e293b; border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    
+    .balance-card { background: linear-gradient(135deg, #2563eb, #1d4ed8, #0f172a); border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; position: relative; overflow: hidden; }
+    .balance-title { font-size: 13px; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.5px; }
+    .balance-amount { font-size: 36px; font-weight: 800; color: #ffffff; margin: 8px 0 16px; letter-spacing: -0.5px; }
+    
+    .grid-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .stat-card { background: #121824; border: 1px solid #1e293b; border-radius: 14px; padding: 14px; text-align: left; }
+    .stat-icon { font-size: 20px; margin-bottom: 6px; }
+    .stat-label { font-size: 12px; color: #94a3b8; }
+    .stat-value { font-size: 18px; font-weight: bold; color: #f8fafc; margin-top: 2px; }
+
+    .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-primary { background: linear-gradient(90deg, #00c6ff, #0072ff); color: white; box-shadow: 0 4px 15px rgba(0, 114, 255, 0.3); }
+    .btn-green { background: linear-gradient(90deg, #10b981, #059669); color: white; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
+    .btn-secondary { background: #1e293b; color: #f8fafc; border: 1px solid #334155; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+    .task-card { text-align: center; padding: 24px 16px; }
+    .task-icon-circle { width: 60px; height: 60px; border-radius: 50%; background: rgba(0, 198, 255, 0.1); border: 1px solid rgba(0, 198, 255, 0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 26px; color: #00f2fe; }
+    .task-heading { font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 6px; }
+    .task-subtext { font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
+    .reward-badge { display: inline-block; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 12px; padding: 4px 12px; border-radius: 20px; font-weight: 600; margin-bottom: 16px; }
+
+    .input-field { width: 100%; padding: 14px; background: #0b0e14; border: 1px solid #1e293b; border-radius: 10px; color: white; margin: 8px 0 16px; font-size: 14px; outline: none; }
+    .input-field:focus { border-color: #0072ff; }
+    .method-selector { display: flex; gap: 10px; margin: 10px 0 16px; }
+    .method-btn { flex: 1; padding: 12px; background: #0b0e14; border: 1px solid #1e293b; color: #94a3b8; border-radius: 10px; cursor: pointer; text-align: center; font-weight: 600; font-size: 13px; }
+    .method-btn.active { border-color: #00c6ff; background: rgba(0, 198, 255, 0.1); color: #00c6ff; }
+
+    .nav-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #121824; display: flex; justify-space: around; padding: 10px 0; border-top: 1px solid #1e293b; z-index: 100; }
+    .nav-item { display: flex; flex-direction: column; align-items: center; color: #64748b; font-size: 11px; cursor: pointer; text-decoration: none; width: 20%; font-weight: 500; }
+    .nav-item span:first-child { font-size: 20px; margin-bottom: 2px; }
+    .nav-item.active { color: #00f2fe; }
   </style>
 </head>
 <body>
@@ -183,6 +68,7 @@
         <span class="badge">BRONZE</span>
       </div>
     </div>
+    <button class="notif-btn">🔔</button>
   </header>
 
   <div class="container">
@@ -190,132 +76,131 @@
     <!-- HOME TAB -->
     <div id="tab-home" class="tab-content active">
       <div class="card balance-card">
-        <p>বর্তমান ব্যালেন্স</p>
-        <h2>৳ <span id="home-balance">0.00</span></h2>
-        <button class="btn btn-green" onclick="switchTab('wallet')">উইথড্র করুন</button>
+        <div class="balance-title">বর্তমান মোট ব্যালেন্স</div>
+        <div class="balance-amount">TK <span id="home-balance">0.00</span></div>
+        <button class="btn btn-primary" onclick="switchTab('wallet', document.querySelectorAll('.nav-item')[4])">💳 টাকা উত্তোলন করুন</button>
       </div>
 
-      <div class="card">
-        <h3>📊 কাজের পরিসংখ্যান</h3>
-        <p style="margin-top: 8px;">মোট কাজ সম্পন্ন: <strong id="total-tasks-done">0</strong></p>
+      <div class="grid-stats">
+        <div class="stat-card" onclick="switchTab('task', document.querySelectorAll('.nav-item')[1])" style="cursor:pointer;">
+          <div class="stat-icon">⚡</div>
+          <div class="stat-label">দৈনিক টাস্ক</div>
+          <div class="stat-value">কাজ শুরু করুন</div>
+        </div>
+        <div class="stat-card" onclick="switchTab('refer', document.querySelectorAll('.nav-item')[3])" style="cursor:pointer;">
+          <div class="stat-icon">🎁</div>
+          <div class="stat-label">রেফারেল বোনাস</div>
+          <div class="stat-value">ইনভাইট করুন</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">✔</div>
+          <div class="stat-label">আজকের টাস্ক</div>
+          <div class="stat-value" id="home-today-tasks">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-label">মোট রেফার</div>
+          <div class="stat-value" id="home-total-ref">0</div>
+        </div>
       </div>
     </div>
 
     <!-- TASK TAB -->
     <div id="tab-task" class="tab-content">
-      
       <!-- Adsgram Task Card -->
       <div class="card task-card">
-        <div class="task-header">
-          <div>
-            <div class="task-title">🎬 Adsgram Video Task</div>
-            <div class="reward-info">রিওয়ার্ড: TK 0.20 per video</div>
-          </div>
-          <span id="adsgram-count">0/10</span>
-        </div>
-        <button id="adsgram-btn" class="btn btn-adsgram" onclick="runAdsgramTask()">ভিডিও অ্যাড দেখুন</button>
+        <div class="task-icon-circle">🎬</div>
+        <div class="task-heading">Adsgram ভিডিও টাস্ক</div>
+        <div class="task-subtext">ভিডিও দেখুন এবং রিওয়ার্ড অর্জন করুন</div>
+        <div class="reward-badge">রিওয়ার্ড: TK 0.10 per ad</div>
+        <div style="margin-bottom: 12px; font-weight: bold; color: #94a3b8;">সীমা: <span id="adsgram-count">0/10</span></div>
+        <button id="adsgram-btn" class="btn btn-primary" onclick="runAdsgramTask()">▶ ভিডিও এড চালু করুন</button>
       </div>
 
-      <!-- Monetag Card -->
+      <!-- Monetag Task Card -->
       <div class="card task-card">
-        <div class="task-header">
-          <div>
-            <div class="task-title">🚀 Monetag Task</div>
-            <div class="reward-info">রিওয়ার্ড: TK 0.10 per ad</div>
-          </div>
-          <span id="monetag-count">0/10</span>
-        </div>
-        <button id="monetag-btn" class="btn btn-blue" onclick="runTask('monetag')">কাজ করুন (1/10)</button>
+        <div class="task-icon-circle">🚀</div>
+        <div class="task-heading">Monetag টাস্ক</div>
+        <div class="task-subtext">ওয়েবসাইট ভিজিট করে ১৫ সেকেন্ড অপেক্ষা করুন</div>
+        <div class="reward-badge">রিওয়ার্ড: TK 0.10 per ad</div>
+        <div style="margin-bottom: 12px; font-weight: bold; color: #94a3b8;">সীমা: <span id="monetag-count">0/10</span></div>
+        <button id="monetag-btn" class="btn btn-primary" onclick="runTask('monetag')">কাজ করুন (1/10)</button>
       </div>
 
-      <!-- Adsterra Card -->
+      <!-- Adsterra Task Card -->
       <div class="card task-card">
-        <div class="task-header">
-          <div>
-            <div class="task-title">📺 Adsterra Task</div>
-            <div class="reward-info">রিওয়ার্ড: TK 0.10 per ad</div>
-          </div>
-          <span id="adsterra-count">0/10</span>
-        </div>
+        <div class="task-icon-circle">📺</div>
+        <div class="task-heading">Adsterra টাস্ক</div>
+        <div class="task-subtext">লিঙ্ক ওপেন করুন এবং ১৫ সেকেন্ড অপেক্ষা করুন</div>
+        <div class="reward-badge">রিওয়ার্ড: TK 0.10 per ad</div>
+        <div style="margin-bottom: 12px; font-weight: bold; color: #94a3b8;">সীমা: <span id="adsterra-count">0/10</span></div>
         <button id="adsterra-btn" class="btn btn-green" onclick="runTask('adsterra')">কাজ করুন (1/10)</button>
       </div>
-
     </div>
 
     <!-- SUPPORT TAB -->
     <div id="tab-support" class="tab-content">
-      <div class="card">
-        <h3>🎧 সাপোর্ট সেকশন</h3>
-        <p style="margin: 10px 0; color: #8b949e;">আপনার কোনো সমস্যা বা প্রশ্ন থাকলে আমাদের টেলিগ্রাম চ্যানেলে যুক্ত হন।</p>
-        <button class="btn btn-blue" onclick="tg.openTelegramLink('https://t.me/your_support_channel')">টেলিগ্রাম চ্যানেলে যোগ দিন</button>
+      <div class="card task-card">
+        <div class="task-icon-circle">🎧</div>
+        <div class="task-heading">সাপোর্ট সেন্টার</div>
+        <div class="task-subtext">যেকোনো পেমেন্ট সমস্যা বা প্রশ্নের জন্য এডমিনের সাথে যোগাযোগ করুন</div>
+        <button class="btn btn-primary" onclick="tg.openTelegramLink('https://t.me/your_support_channel')">✈ টেলিগ্রাম সাপোর্টে মেসেজ দিন</button>
       </div>
     </div>
 
     <!-- REFER TAB -->
     <div id="tab-refer" class="tab-content">
-      <div class="card">
-        <h3>🎁 রেফার করে আয় করুন</h3>
-        <p style="margin: 10px 0; color: #8b949e;">বন্ধুদের রেফার করুন এবং রেফার বোনাস পান!</p>
+      <div class="card task-card">
+        <div class="task-icon-circle">🎁</div>
+        <div class="task-heading">রেফার করুন ও আনলিমিটেড আয় করুন</div>
+        <div class="task-subtext">আপনার রেফার লিঙ্ক বন্ধুদের শেয়ার করুন। প্রতি সফল রেফারে পাবেন নিশ্চিত ক্যাশ বোনাস!</div>
         <input type="text" id="ref-link" class="input-field" readonly value="https://t.me/your_bot?start=12345">
-        <button class="btn btn-blue" style="margin-bottom: 8px;" onclick="copyReferLink()">লিঙ্ক কপি করুন</button>
-        <button class="btn btn-green" onclick="shareReferLink()">শেয়ার করুন</button>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-secondary" onclick="copyReferLink()">📋 লিঙ্ক কপি</button>
+          <button class="btn btn-primary" onclick="shareReferLink()">📲 শেয়ার করুন</button>
+        </div>
       </div>
     </div>
 
     <!-- WALLET TAB -->
     <div id="tab-wallet" class="tab-content">
       <div class="card">
-        <h3>💼 উইথড্র টাকা</h3>
-        <p style="margin: 10px 0;">মোট অর্জিত ব্যালেন্স: ৳ <span id="wallet-balance">0.00</span></p>
-
-        <label>পেমেন্ট মেথড সিলেক্ট করুন:</label>
-        <div class="method-selector" style="margin-top: 8px;">
-          <div class="method-btn active" onclick="selectMethod(this)">বিকাশ</div>
-          <div class="method-btn" onclick="selectMethod(this)">নগদ</div>
-          <div class="method-btn" onclick="selectMethod(this)">রকেট</div>
+        <div style="text-align: center; margin-bottom: 16px;">
+          <div style="font-size: 13px; color: #94a3b8;">উত্তোলনযোগ্য মেইন ব্যালেন্স</div>
+          <div style="font-size: 28px; font-weight: bold; color: #00f2fe; margin-top: 4px;">TK <span id="wallet-balance">0.00</span></div>
         </div>
 
-        <label>আপনার অ্যাকাউন্ট নম্বর:</label>
-        <input type="number" class="input-field" placeholder="017XXXXXXXX">
+        <label style="font-size: 13px; color: #94a3b8;">পেমেন্ট মেথড সিলেক্ট করুন</label>
+        <div class="method-selector">
+          <div class="method-btn active" onclick="selectMethod(this)">বিকাশ (bKash)</div>
+          <div class="method-btn" onclick="selectMethod(this)">নগদ (Nagad)</div>
+        </div>
 
-        <label>উইথড্র পরিমাণ (টাকা):</label>
-        <input type="number" class="input-field" placeholder="সর্বনিম্ন ৫০ টাকা">
+        <label style="font-size: 13px; color: #94a3b8;">টাকার পরিমাণ (TK)</label>
+        <input type="number" class="input-field" placeholder="মিনিমাম ৫০ টাকা">
 
-        <button class="btn btn-green" onclick="alert('উইথড্র রিকোয়েস্ট সফলভাবে জমা হয়েছে!')">উইথড্র সাবমিট করুন</button>
+        <label style="font-size: 13px; color: #94a3b8;">অ্যাকাউন্ট নম্বর / অ্যাড্রেস</label>
+        <input type="number" class="input-field" placeholder="01XXXXXXXXX">
+
+        <button class="btn btn-primary" onclick="alert('উইথড্র রিকোয়েস্ট সফলভাবে সাবমিট হয়েছে!')">উইথড্র রিকোয়েস্ট পাঠান</button>
       </div>
     </div>
 
   </div>
 
-  <!-- NAVIGATION BAR -->
+  <!-- Bottom Navigation -->
   <div class="nav-bar">
-    <div class="nav-item active" onclick="switchTab('home', this)">
-      <span>🏠</span>
-      <span>হোম</span>
-    </div>
-    <div class="nav-item" onclick="switchTab('task', this)">
-      <span>⚡</span>
-      <span>টাস্ক</span>
-    </div>
-    <div class="nav-item" onclick="switchTab('support', this)">
-      <span>🎧</span>
-      <span>সাপোর্ট</span>
-    </div>
-    <div class="nav-item" onclick="switchTab('refer', this)">
-      <span>🎁</span>
-      <span>রেফার</span>
-    </div>
-    <div class="nav-item" onclick="switchTab('wallet', this)">
-      <span>💼</span>
-      <span>ওয়ালেট</span>
-    </div>
+    <div class="nav-item active" onclick="switchTab('home', this)"><span>🏠</span><span>হোম</span></div>
+    <div class="nav-item" onclick="switchTab('task', this)"><span>⚡</span><span>টাস্ক</span></div>
+    <div class="nav-item" onclick="switchTab('support', this)"><span>🎧</span><span>সাপোর্ট</span></div>
+    <div class="nav-item" onclick="switchTab('refer', this)"><span>🎁</span><span>রেফার</span></div>
+    <div class="nav-item" onclick="switchTab('wallet', this)"><span>💼</span><span>ওয়ালেট</span></div>
   </div>
 
   <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // Adsgram Block ID Integration
     const adsgramBlockId = "45793";
 
     function getDeviceId() {
@@ -330,7 +215,7 @@
     const deviceId = getDeviceId();
     let user = tg.initDataUnsafe?.user || { id: "GUEST_" + Date.now(), first_name: "Guest", username: "none" };
 
-    fetch('https://my-earning-all.onrender.com/check-device', { 
+    fetch('/check-device', { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -339,21 +224,11 @@
         first_name: user.first_name,
         username: user.username || 'নাই'
       })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.status === 'multi_account_detected') {
-        alert("⚠️ একই ডিভাইসে অন্য অ্যাকাউন্ট পাওয়া গেছে! এডমিন নোটিফিকেশন পাঠানো হয়েছে।");
-      } else if (data.status === 'banned') {
-        document.body.innerHTML = "<h2 style='color:red; text-align:center; margin-top:50px;'>🚫 আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h2>";
-      }
-    })
-    .catch(err => console.log(err));
+    }).catch(err => console.log(err));
 
     const taskConfig = {
       monetag: {
-        reward: 0.10,
-        timer: 20,
+        reward: 0.10, timer: 15,
         links: [
           'https://omg10.com/4/11522087',
           'https://omg10.com/4/11522086',
@@ -368,8 +243,7 @@
         ]
       },
       adsterra: {
-        reward: 0.10,
-        timer: 20,
+        reward: 0.10, timer: 15,
         links: [
           'https://www.effectivecpmnetwork.com/nx2nqegj3p?key=8fb4f6d68a89919faeee5ec3846d4292',
           'https://www.effectivecpmnetwork.com/bbjq6k48?key=4707c2aa3827755848d5332b72a9c955',
@@ -416,27 +290,23 @@
         btn.disabled = true;
         btn.innerText = "অ্যাড লোড হচ্ছে...";
 
-        window.Adsgram.init({ blockId: adsgramBlockId }).show()
-          .then((result) => {
-            if (state.count === 0) {
-              state.lastReset = new Date().getTime();
-            }
+        const AdController = window.Adsgram.init({ blockId: adsgramBlockId });
+        AdController.show().then((result) => {
+          if (state.count === 0) state.lastReset = new Date().getTime();
+          state.count++;
+          userBalance += 0.10;
 
-            state.count++;
-            userBalance += 0.20; // 0.20 TK Reward
+          saveState('adsgram', state);
+          localStorage.setItem('user_balance', userBalance.toString());
 
-            saveState('adsgram', state);
-            localStorage.setItem('user_balance', userBalance.toString());
-
-            updateAllUI();
-            alert("🎉 অভিনন্দন! ভিডিও দেখার জন্য +0.20 TK যোগ হয়েছে।");
-          })
-          .catch((result) => {
-            alert("অ্যাড সম্পন্ন করতে পারেননি বা কোনো সমস্যা হয়েছে!");
-            updateAllUI();
-          });
+          updateAllUI();
+          alert("🎉 অভিনন্দন! ভিডিও দেখার জন্য +0.10 TK যোগ হয়েছে।");
+        }).catch((result) => {
+          alert("অ্যাড সম্পন্ন হয়নি বা কোনো সমস্যা হয়েছে!");
+          updateAllUI();
+        });
       } else {
-        alert("Adsgram SDK নেটওয়ার্ক সংক্রান্ত সমস্যার কারণে লোড হয়নি। দয়া করে আবার চেষ্টা করুন।");
+        alert("Adsgram SDK লোড হতে ব্যর্থ হয়েছে। দয়া করে পেজটি রিফ্রেশ করুন।");
       }
     }
 
@@ -445,8 +315,6 @@
       document.getElementById('wallet-balance').innerText = userBalance.toFixed(2);
 
       let grandTotalDone = 0;
-
-      // Adsgram UI Update
       const adsgramState = getState('adsgram');
       const currentTime = new Date().getTime();
 
@@ -463,7 +331,7 @@
         adsBtn.innerText = "আজকের কাজ শেষ";
       } else {
         adsBtn.disabled = false;
-        adsBtn.innerText = `ভিডিও অ্যাড দেখুন (${adsgramState.count + 1}/10)`;
+        adsBtn.innerText = `▶ ভিডিও এড চালু করুন (${adsgramState.count + 1}/10)`;
       }
 
       ['monetag', 'adsterra'].forEach(net => {
@@ -488,7 +356,7 @@
         }
       });
 
-      document.getElementById('total-tasks-done').innerText = grandTotalDone;
+      document.getElementById('home-today-tasks').innerText = grandTotalDone;
     }
 
     function runTask(net) {
@@ -498,8 +366,7 @@
 
       if (state.count >= config.links.length) return;
 
-      const linkToOpen = config.links[state.count];
-      tg.openLink(linkToOpen);
+      tg.openLink(config.links[state.count]);
 
       let timeLeft = config.timer;
       btn.disabled = true;
@@ -510,10 +377,7 @@
 
         if (timeLeft < 0) {
           clearInterval(countdown);
-          
-          if (state.count === 0) {
-            state.lastReset = new Date().getTime();
-          }
+          if (state.count === 0) state.lastReset = new Date().getTime();
 
           state.count++;
           userBalance += config.reward;
@@ -522,7 +386,7 @@
           localStorage.setItem('user_balance', userBalance.toString());
 
           updateAllUI();
-          alert(`শুভেচ্ছা! সময় সম্পন্ন করায় +${config.reward.toFixed(2)} TK যোগ হয়েছে।`);
+          alert(`শুভেচ্ছা! +${config.reward.toFixed(2)} TK যোগ হয়েছে।`);
         }
       }, 1000);
     }
@@ -532,16 +396,7 @@
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
       document.getElementById(`tab-${tabId}`).classList.add('active');
-      if (el) {
-        el.classList.add('active');
-      } else {
-        const navs = document.querySelectorAll('.nav-item');
-        if(tabId === 'home') navs[0].classList.add('active');
-        if(tabId === 'task') navs[1].classList.add('active');
-        if(tabId === 'support') navs[2].classList.add('active');
-        if(tabId === 'refer') navs[3].classList.add('active');
-        if(tabId === 'wallet') navs[4].classList.add('active');
-      }
+      if (el) el.classList.add('active');
     }
 
     function selectMethod(el) {
