@@ -2,13 +2,17 @@ import os
 import requests
 import threading
 import telebot
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 
-BOT_TOKEN = "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k"
-ADMIN_CHAT_IDS = [8414665404, 5034445579]
+# সিকিউরিটির জন্য Environment Variable থেকে Token ও Admin ID নেওয়া হচ্ছে
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 
-app = Flask(__name__)
+# Admin IDs কমা (,) দিয়ে আলাদা করে স্ট্রিপ করে লিস্ট তৈরি করা হচ্ছে
+ADMIN_IDS_RAW = os.environ.get("ADMIN_CHAT_IDS", "8414665404,5034445579")
+ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",") if admin_id.strip()]
+
+app = Flask(__name__, template_folder='.', static_folder='.')
 CORS(app)
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -22,7 +26,6 @@ def send_welcome(message):
     bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
 def run_bot():
-    # পুরানো Webhook মুছে ফেলা হচ্ছে যেন 409 Error না আসে
     try:
         bot.remove_webhook()
     except Exception as e:
@@ -43,7 +46,7 @@ def send_telegram_alert(message):
 # -------- FLASK ROUTES --------
 @app.route('/')
 def home():
-    return "Earning App Backend Server is Running Live!"
+    return render_template('index.html')
 
 @app.route('/check-device', methods=['POST'])
 def check_device():
