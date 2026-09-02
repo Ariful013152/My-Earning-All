@@ -329,7 +329,7 @@
             <div class="card" style="margin-bottom: 15px;">
                 <div class="icon-box"><i class="fas fa-globe"></i></div>
                 <h3>Monetag টাস্ক</h3>
-                <p style="font-size: 12px; color: var(--text-sub);">সীমা: <span id="monetagCount">0</span>/15</p>
+                <p style="font-size: 12px; color: var(--text-sub);">সীমা: <span id="monetagCount">0</span>/20</p>
                 <div id="monetagTimer" style="color: #e3b341; font-weight: bold; margin-bottom: 8px;"></div>
                 <button class="gradient-btn" id="monetagBtn" onclick="startMonetagTask()">টাস্ক শুরু করুন</button>
             </div>
@@ -338,7 +338,7 @@
             <div class="card">
                 <div class="icon-box"><i class="fas fa-tv"></i></div>
                 <h3>Adsterra টাস্ক</h3>
-                <p style="font-size: 12px; color: var(--text-sub);">সীমা: <span id="adsterraCount">0</span>/15</p>
+                <p style="font-size: 12px; color: var(--text-sub);">সীমা: <span id="adsterraCount">0</span>/20</p>
                 <div id="adsterraTimer" style="color: #e3b341; font-weight: bold; margin-bottom: 8px;"></div>
                 <button class="gradient-btn" id="adsterraBtn" onclick="startAdsterraTask()">টাস্ক শুরু করুন</button>
             </div>
@@ -414,8 +414,32 @@
         tg.expand();
 
         const adsgramBlockId = "45802";
-        const monetagUrl = "https://othtoopt.net/4/8847059";
-        const adsterraUrl = "https://www.effectiveratecpm.com/z482t39y?key=381a95bfce1bd1be8ad982b6c934f039";
+
+        const MONETAG_LINKS = [
+            'https://omg10.com/4/11522087',
+            'https://omg10.com/4/11522086',
+            'https://omg10.com/4/11522081',
+            'https://omg10.com/4/11522080',
+            'https://omg10.com/4/11522079',
+            'https://omg10.com/4/11522078',
+            'https://omg10.com/4/11522077',
+            'https://omg10.com/4/11522076',
+            'https://omg10.com/4/11522074',
+            'https://omg10.com/4/11516146'
+        ];
+
+        const ADSTERRA_LINKS = [
+            'https://www.effectivecpmnetwork.com/nx2nqegj3p?key=8fb4f6d68a89919faeee5ec3846d4292',
+            'https://www.effectivecpmnetwork.com/bbjq6k48?key=4707c2aa3827755848d5332b72a9c955',
+            'https://www.effectivecpmnetwork.com/hqrjr5jzm?key=fe9a5012689a62a78d579d93d0864575',
+            'https://www.effectivecpmnetwork.com/nqch6m5jc?key=3eecd9428d8b55066d6cfdcadeda271c',
+            'https://www.effectivecpmnetwork.com/ie1pgkmbcc?key=1298a27dc3477c9aef05ead4c6778088',
+            'https://www.effectivecpmnetwork.com/wg9r001v7?key=4f2213d1fb414c2e0c9ac7dde1c72402',
+            'https://www.effectivecpmnetwork.com/m36r7xvy?key=e8b267b7b19cae2daee8f96118e5326e',
+            'https://www.effectivecpmnetwork.com/jwsp4r2rtr?key=63a26410a1f920c6de29b0e73bf69055',
+            'https://www.effectivecpmnetwork.com/dwja24niv?key=6a9552e41b528897598e4eec709d5115',
+            'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
+        ];
 
         let balance = parseFloat(localStorage.getItem('balance')) || 0.00;
         let monetagCount = parseInt(localStorage.getItem('monetagCount')) || 0;
@@ -438,15 +462,15 @@
             document.getElementById('adsterraCount').innerText = adsterraCount;
             document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount;
 
-            if (monetagCount >= 15) {
+            if (monetagCount >= 20) {
                 const mBtn = document.getElementById('monetagBtn');
                 mBtn.disabled = true;
-                mBtn.innerText = "সীমা শেষ (১৫/১৫)";
+                mBtn.innerText = "সীমা শেষ (২০/২০)";
             }
-            if (adsterraCount >= 15) {
+            if (adsterraCount >= 20) {
                 const aBtn = document.getElementById('adsterraBtn');
                 aBtn.disabled = true;
-                aBtn.innerText = "সীমা শেষ (১৫/১৫)";
+                aBtn.innerText = "সীমা শেষ (২০/২০)";
             }
 
             if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
@@ -472,8 +496,8 @@
         }
 
         function openExternalLink(url) {
-            if (tg.openLink) {
-                tg.openLink(url);
+            if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openLink) {
+                window.Telegram.WebApp.openLink(url);
             } else {
                 window.open(url, '_blank');
             }
@@ -489,11 +513,12 @@
         }
 
         function startMonetagTask() {
-            if (monetagCount >= 15) return;
+            if (monetagCount >= 20) return;
             const btn = document.getElementById('monetagBtn');
             btn.disabled = true;
             
-            openExternalLink(monetagUrl);
+            const targetUrl = MONETAG_LINKS[monetagCount % MONETAG_LINKS.length];
+            openExternalLink(targetUrl);
 
             let timeLeft = 15;
             const timer = setInterval(() => {
@@ -506,7 +531,7 @@
                     localStorage.setItem('monetagCount', monetagCount);
                     addReward(0.10);
                     
-                    if (monetagCount < 15) {
+                    if (monetagCount < 20) {
                         btn.disabled = false;
                         btn.innerText = "টাস্ক শুরু করুন";
                     }
@@ -515,11 +540,12 @@
         }
 
         function startAdsterraTask() {
-            if (adsterraCount >= 15) return;
+            if (adsterraCount >= 20) return;
             const btn = document.getElementById('adsterraBtn');
             btn.disabled = true;
             
-            openExternalLink(adsterraUrl);
+            const targetUrl = ADSTERRA_LINKS[adsterraCount % ADSTERRA_LINKS.length];
+            openExternalLink(targetUrl);
 
             let timeLeft = 15;
             const timer = setInterval(() => {
@@ -532,7 +558,7 @@
                     localStorage.setItem('adsterraCount', adsterraCount);
                     addReward(0.10);
 
-                    if (adsterraCount < 15) {
+                    if (adsterraCount < 20) {
                         btn.disabled = false;
                         btn.innerText = "টাস্ক শুরু করুন";
                     }
