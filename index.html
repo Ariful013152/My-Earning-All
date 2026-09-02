@@ -3,292 +3,310 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Earn Pro App</title>
+  <title>My Earning All</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Adsgram SDK Integration Script -->
+  <script src="https://sad.adsgram.ai/js/adsgram.js"></script>
   <style>
-    :root {
-      --bg-color: #0b0f19;
-      --card-bg: #151c2c;
-      --card-border: #232d42;
-      --text-main: #ffffff;
-      --text-sub: #8e9bb0;
-      --accent-blue: #00d2ff;
-      --accent-green: #00e676;
-      --accent-purple: #7c4dff;
-      --accent-amber: #f59e0b;
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background-color: var(--bg-color); color: var(--text-main); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding-bottom: 85px; }
-    .container { width: 100%; max-width: 480px; padding: 16px; }
-
-    /* Profile Header */
-    .user-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .profile-info { display: flex; align-items: center; gap: 12px; }
-    .avatar { width: 45px; height: 45px; border-radius: 50%; background: linear-gradient(45deg, var(--accent-blue), var(--accent-purple)); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; border: 2px solid var(--accent-blue); }
-    .badge { font-size: 10px; background: rgba(0, 210, 255, 0.2); color: var(--accent-blue); padding: 2px 8px; border-radius: 10px; border: 1px solid var(--accent-blue); display: inline-block; margin-top: 2px; }
-    .bell-btn { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--accent-blue); width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
-
-    /* UI Components */
-    .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px; padding: 20px; margin-bottom: 16px; position: relative; }
-    .wallet-card { background: linear-gradient(135deg, #1e1e38 0%, #0d1322 100%); border: 1px solid #2d3752; }
-    
-    .btn { background: linear-gradient(90deg, #00c6ff 0%, #0072ff 100%); color: #fff; border: none; padding: 14px; border-radius: 12px; font-weight: bold; width: 100%; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.2s; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; background: #334155; }
-    .btn-outline { background: transparent; border: 1px solid var(--accent-blue); color: var(--accent-blue); }
-    .input-box { width: 100%; background: #0c101d; border: 1px solid var(--card-border); padding: 14px; border-radius: 12px; color: #fff; margin-bottom: 12px; outline: none; }
-
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-    .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 16px; }
-
-    /* Fixed Navigation Bar Style */
-    .bottom-nav { 
-      position: fixed; 
-      bottom: 0; 
-      left: 0; 
-      right: 0; 
-      background: #0d1322; 
-      border-top: 1px solid var(--card-border); 
-      display: flex; 
-      justify-content: space-between; 
-      align-items: center; 
-      padding: 10px 0; 
-      max-width: 480px; 
-      margin: 0 auto; 
-      z-index: 1000; 
+    body {
+      background-color: #0d1117;
+      color: #c9d1d9;
+      padding-bottom: 70px;
     }
-    .nav-item { 
-      display: flex; 
-      flex-direction: column; 
-      align-items: center; 
-      justify-content: center; 
-      color: var(--text-sub); 
-      font-size: 11px; 
-      text-decoration: none; 
-      cursor: pointer; 
-      flex: 1; 
-      gap: 4px; 
+    header {
+      background-color: #161b22;
+      padding: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #30363d;
     }
-    .nav-item i { 
-      font-size: 20px; 
+    .profile-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    .nav-item span { 
-      font-size: 11px; 
-      white-space: nowrap; 
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0088cc, #005588);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: white;
+      font-size: 18px;
     }
-    .nav-item.active { 
-      color: var(--accent-blue); 
-      font-weight: bold; 
+    .user-details h3 {
+      font-size: 16px;
+      color: #f0f6fc;
     }
-
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-
-    .method-selector { display: flex; gap: 10px; margin-bottom: 15px; }
-    .method-btn { flex: 1; padding: 12px; background: #0c101d; border: 1px solid var(--card-border); border-radius: 10px; color: var(--text-sub); text-align: center; cursor: pointer; font-size: 13px; }
-    .method-btn.active { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(0, 210, 255, 0.1); }
+    .badge {
+      font-size: 10px;
+      background: #238636;
+      color: white;
+      padding: 2px 6px;
+      border-radius: 10px;
+      text-transform: uppercase;
+    }
+    .container {
+      padding: 15px;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .card {
+      background-color: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    .balance-card {
+      text-align: center;
+      background: linear-gradient(135deg, #1f6feb, #114193);
+      color: white;
+    }
+    .balance-card h2 {
+      font-size: 32px;
+      margin: 10px 0;
+    }
+    .task-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .task-title {
+      font-weight: bold;
+      font-size: 16px;
+      color: #58a6ff;
+    }
+    .reward-info {
+      font-size: 12px;
+      color: #8b949e;
+    }
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 15px;
+      cursor: pointer;
+      color: white;
+      transition: background 0.3s;
+    }
+    .btn-blue { background-color: #1f6feb; }
+    .btn-green { background-color: #238636; }
+    .btn-adsgram { background-color: #0088cc; }
+    .btn:disabled {
+      background-color: #30363d;
+      color: #8b949e;
+      cursor: not-allowed;
+    }
+    .nav-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background-color: #161b22;
+      display: flex;
+      justify-content: space-around;
+      padding: 10px 0;
+      border-top: 1px solid #30363d;
+    }
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #8b949e;
+      font-size: 11px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .nav-item.active {
+      color: #58a6ff;
+    }
+    .input-field {
+      width: 100%;
+      padding: 10px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: white;
+      margin-top: 5px;
+      margin-bottom: 15px;
+    }
+    .method-selector {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .method-btn {
+      flex: 1;
+      padding: 10px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .method-btn.active {
+      border-color: #1f6feb;
+      background: #1f6feb33;
+    }
   </style>
 </head>
 <body>
 
+  <header>
+    <div class="profile-info">
+      <div class="avatar" id="avatar">U</div>
+      <div class="user-details">
+        <h3 id="username">ইউজার</h3>
+        <span class="badge">BRONZE</span>
+      </div>
+    </div>
+  </header>
+
   <div class="container">
     
-    <!-- User Profile Header -->
-    <div class="user-bar">
-      <div class="profile-info">
-        <div class="avatar" id="avatar">U</div>
-        <div>
-          <div id="username" style="font-weight: bold; font-size: 15px;">ইউজার</div>
-          <span class="badge">BRONZE</span>
-        </div>
-      </div>
-      <div class="bell-btn"><i class="fa-regular fa-bell"></i></div>
-    </div>
-
-    <!-- TAB 1: HOME -->
+    <!-- HOME TAB -->
     <div id="tab-home" class="tab-content active">
-      <div class="card wallet-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 12px; color: var(--text-sub);">বর্তমান মোট ব্যালেন্স</span>
-          <span style="font-size: 11px; background: rgba(0,230,118,0.2); color: var(--accent-green); padding: 3px 8px; border-radius: 12px;">● লাইভ ওয়ালেট</span>
-        </div>
-        <div style="font-size: 32px; font-weight: bold; color: #fff; margin-bottom: 15px;">TK <span id="home-balance">0.00</span></div>
-        <button class="btn" onclick="switchTab('wallet')"><i class="fa-solid fa-wallet"></i> টাকা উত্তোলন করুন</button>
+      <div class="card balance-card">
+        <p>বর্তমান ব্যালেন্স</p>
+        <h2>৳ <span id="home-balance">0.00</span></h2>
+        <button class="btn btn-green" onclick="switchTab('wallet')">উইথড্র করুন</button>
       </div>
 
-      <div class="grid-2">
-        <div class="stat-card" onclick="switchTab('task')" style="cursor: pointer;">
-          <i class="fa-solid fa-bolt" style="color: var(--accent-blue); font-size: 20px; margin-bottom: 8px;"></i>
-          <div style="font-weight: bold; font-size: 14px;">দৈনিক টাস্ক</div>
-          <div style="font-size: 11px; color: var(--text-sub);">বিজ্ঞাপন দেখে আয়</div>
-        </div>
-        <div class="stat-card" onclick="switchTab('refer')" style="cursor: pointer;">
-          <i class="fa-solid fa-gift" style="color: var(--accent-purple); font-size: 20px; margin-bottom: 8px;"></i>
-          <div style="font-weight: bold; font-size: 14px;">রেফারেল বোনাস</div>
-          <div style="font-size: 11px; color: var(--text-sub);">বন্ধুদের ইনভাইট করুন</div>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="stat-card">
-          <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 4px;">আজকের টাস্ক</div>
-          <div style="font-size: 20px; font-weight: bold;" id="total-tasks-done">0</div>
-        </div>
-        <div class="stat-card">
-          <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 4px;">মোট রেফার</div>
-          <div style="font-size: 20px; font-weight: bold;" id="total-ref-count">0</div>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="stat-card">
-          <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 4px;">মোট ইনকাম</div>
-          <div style="font-size: 18px; font-weight: bold; color: var(--accent-green);">TK <span id="total-earned">0.00</span></div>
-        </div>
-        <div class="stat-card">
-          <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 4px;">ইউজার লেভেল</div>
-          <div style="font-size: 14px; font-weight: bold; color: #ffb74d;">BRONZE</div>
-        </div>
+      <div class="card">
+        <h3>📊 কাজের পরিসংখ্যান</h3>
+        <p style="margin-top: 8px;">মোট কাজ সম্পন্ন: <strong id="total-tasks-done">0</strong></p>
       </div>
     </div>
 
-    <!-- TAB 2: TASK -->
+    <!-- TASK TAB -->
     <div id="tab-task" class="tab-content">
       
-      <!-- Monetag -->
-      <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <!-- Adsgram Task Card -->
+      <div class="card task-card">
+        <div class="task-header">
           <div>
-            <h4 style="color: var(--accent-blue);">🚀 Monetag Task</h4>
-            <div style="font-size: 11px; color: var(--text-sub);">রিওয়ার্ড: TK 1.00 per ad</div>
+            <div class="task-title">🎬 Adsgram Video Task</div>
+            <div class="reward-info">রিওয়ার্ড: TK 0.20 per video</div>
           </div>
-          <span style="font-size: 12px; color: var(--accent-green); font-weight: bold;" id="monetag-count">0/10</span>
+          <span id="adsgram-count">0/10</span>
         </div>
-        <button class="btn" id="monetag-btn" onclick="runTask('monetag')"><i class="fa-solid fa-play"></i> অ্যাড দেখুন</button>
+        <button id="adsgram-btn" class="btn btn-adsgram" onclick="runAdsgramTask()">ভিডিও অ্যাড দেখুন</button>
       </div>
 
-      <!-- Adsterra -->
-      <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <!-- Monetag Card -->
+      <div class="card task-card">
+        <div class="task-header">
           <div>
-            <h4 style="color: var(--accent-green);">📺 Adsterra Task</h4>
-            <div style="font-size: 11px; color: var(--text-sub);">রিওয়ার্ড: TK 0.50 per ad</div>
+            <div class="task-title">🚀 Monetag Task</div>
+            <div class="reward-info">রিওয়ার্ড: TK 0.10 per ad</div>
           </div>
-          <span style="font-size: 12px; color: var(--accent-green); font-weight: bold;" id="adsterra-count">0/10</span>
+          <span id="monetag-count">0/10</span>
         </div>
-        <button class="btn" style="background: linear-gradient(90deg, #11998e, #38ef7d);" id="adsterra-btn" onclick="runTask('adsterra')"><i class="fa-solid fa-play"></i> অ্যাড দেখুন</button>
+        <button id="monetag-btn" class="btn btn-blue" onclick="runTask('monetag')">কাজ করুন (1/10)</button>
       </div>
 
-      <!-- Shrinkme -->
-      <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <!-- Adsterra Card -->
+      <div class="card task-card">
+        <div class="task-header">
           <div>
-            <h4 style="color: var(--accent-amber);">🔗 Shrinkme Task</h4>
-            <div style="font-size: 11px; color: var(--text-sub);">রিওয়ার্ড: TK 2.00 per link</div>
+            <div class="task-title">📺 Adsterra Task</div>
+            <div class="reward-info">রিওয়ার্ড: TK 0.10 per ad</div>
           </div>
-          <span style="font-size: 12px; color: var(--accent-green); font-weight: bold;" id="shrinkme-count">0/15</span>
+          <span id="adsterra-count">0/10</span>
         </div>
-        <button class="btn" style="background: linear-gradient(90deg, #ff9966, #ff5e62);" id="shrinkme-btn" onclick="runTask('shrinkme')"><i class="fa-solid fa-link"></i> লিঙ্ক ভিজিট করুন</button>
-      </div>
-
-      <!-- Exe.io -->
-      <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <div>
-            <h4 style="color: var(--accent-purple);">🌐 Exe.io Task</h4>
-            <div style="font-size: 11px; color: var(--text-sub);">রিওয়ার্ড: TK 2.00 per link</div>
-          </div>
-          <span style="font-size: 12px; color: var(--accent-green); font-weight: bold;" id="exeio-count">0/15</span>
-        </div>
-        <button class="btn" style="background: linear-gradient(90deg, #8e2de2, #4a00e0);" id="exeio-btn" onclick="runTask('exeio')"><i class="fa-solid fa-globe"></i> লিঙ্ক ভিজিট করুন</button>
+        <button id="adsterra-btn" class="btn btn-green" onclick="runTask('adsterra')">কাজ করুন (1/10)</button>
       </div>
 
     </div>
 
-    <!-- TAB 3: SUPPORT -->
+    <!-- SUPPORT TAB -->
     <div id="tab-support" class="tab-content">
-      <div class="card" style="text-align: center; padding: 25px;">
-        <i class="fa-solid fa-tv" style="color: var(--accent-blue); font-size: 35px; margin-bottom: 12px;"></i>
-        <h3>কিভাবে সঠিক নিয়মে কাজ করবেন?</h3>
-        <p style="font-size: 12px; color: var(--text-sub); margin: 8px 0 15px 0;">কাজ করার নিয়মাবলী এবং উইথড্র পাওয়ার সম্পূর্ণ ভিডিও টিউটোরিয়াল দেখে নিন।</p>
-        <button class="btn btn-outline" onclick="window.open('https://youtube.com', '_blank')"><i class="fa-solid fa-desktop"></i> টিউটোরিয়াল ভিডিও</button>
-      </div>
-
-      <div class="card" style="text-align: center; padding: 25px;">
-        <i class="fa-solid fa-headset" style="color: var(--accent-purple); font-size: 35px; margin-bottom: 12px;"></i>
-        <h3>সাপোর্ট সেন্টার</h3>
-        <p style="font-size: 12px; color: var(--text-sub); margin: 8px 0 15px 0;">যেকোনো পেমেন্ট সমস্যা বা প্রশ্নের জন্য এডমিনের সাথে যোগাযোগ করুন</p>
-        <button class="btn" style="background: linear-gradient(90deg, #8e2de2, #4a00e0);" onclick="window.open('https://t.me/your_telegram_channel', '_blank')"><i class="fa-brands fa-telegram"></i> টেলিগ্রাম সাপোর্টে মেসেজ দিন</button>
+      <div class="card">
+        <h3>🎧 সাপোর্ট সেকশন</h3>
+        <p style="margin: 10px 0; color: #8b949e;">আপনার কোনো সমস্যা বা প্রশ্ন থাকলে আমাদের টেলিগ্রাম চ্যানেলে যুক্ত হন।</p>
+        <button class="btn btn-blue" onclick="tg.openTelegramLink('https://t.me/your_support_channel')">টেলিগ্রাম চ্যানেলে যোগ দিন</button>
       </div>
     </div>
 
-    <!-- TAB 4: REFER -->
+    <!-- REFER TAB -->
     <div id="tab-refer" class="tab-content">
-      <div class="card" style="text-align: center; padding: 25px;">
-        <i class="fa-solid fa-users-gear" style="color: var(--accent-blue); font-size: 40px; margin-bottom: 15px;"></i>
-        <h3>রেফার করুন ও আনলিমিটেড আয় করুন</h3>
-        <p style="font-size: 12px; color: var(--text-sub); margin: 8px 0 15px 0;">আপনার রেফার লিঙ্ক বন্ধুদের শেয়ার করুন। প্রতি সফল রেফারে পাবেন নিশ্চিত ক্যাশ বোনাস!</p>
-        <div style="background: rgba(0,210,255,0.1); color: var(--accent-blue); padding: 8px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-bottom: 15px;">
-          🎁 প্রতি রেফারে বোনাস TK 5.00
-        </div>
-        <input type="text" id="ref-link" class="input-box" value="https://t.me/your_bot?start=12345" readonly style="text-align: center; font-size: 12px;">
-        <div style="display: flex; gap: 10px;">
-          <button class="btn btn-outline" onclick="copyReferLink()"><i class="fa-solid fa-copy"></i> লিঙ্ক কপি</button>
-          <button class="btn" onclick="shareReferLink()"><i class="fa-solid fa-share-nodes"></i> শেয়ার করুন</button>
-        </div>
+      <div class="card">
+        <h3>🎁 রেফার করে আয় করুন</h3>
+        <p style="margin: 10px 0; color: #8b949e;">বন্ধুদের রেফার করুন এবং রেফার বোনাস পান!</p>
+        <input type="text" id="ref-link" class="input-field" readonly value="https://t.me/your_bot?start=12345">
+        <button class="btn btn-blue" style="margin-bottom: 8px;" onclick="copyReferLink()">লিঙ্ক কপি করুন</button>
+        <button class="btn btn-green" onclick="shareReferLink()">শেয়ার করুন</button>
       </div>
     </div>
 
-    <!-- TAB 5: WALLET -->
+    <!-- WALLET TAB -->
     <div id="tab-wallet" class="tab-content">
-      <div class="card" style="text-align: center;">
-        <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 4px;">উত্তোলনযোগ্য মেইন ব্যালেন্স</div>
-        <div style="font-size: 28px; font-weight: bold; color: var(--accent-blue); margin-bottom: 15px;">TK <span id="wallet-balance">0.00</span></div>
-        
-        <div style="text-align: left; font-size: 12px; color: var(--text-sub); margin-bottom: 8px;">পেমেন্ট মেথড সিলেক্ট করুন</div>
-        <div class="method-selector">
-          <div class="method-btn active" onclick="selectMethod(this)">● বিকাশ (bKash)</div>
-          <div class="method-btn" onclick="selectMethod(this)">● নগদ (Nagad)</div>
+      <div class="card">
+        <h3>💼 উইথড্র টাকা</h3>
+        <p style="margin: 10px 0;">মোট অর্জিত ব্যালেন্স: ৳ <span id="wallet-balance">0.00</span></p>
+
+        <label>পেমেন্ট মেথড সিলেক্ট করুন:</label>
+        <div class="method-selector" style="margin-top: 8px;">
+          <div class="method-btn active" onclick="selectMethod(this)">বিকাশ</div>
+          <div class="method-btn" onclick="selectMethod(this)">নগদ</div>
+          <div class="method-btn" onclick="selectMethod(this)">রকেট</div>
         </div>
 
-        <input type="number" class="input-box" placeholder="টাকার পরিমাণ (মিনিমাম ৫০ টাকা)">
-        <input type="text" class="input-box" placeholder="একাউন্ট নাম্বার / অ্যাড্রেস">
-        <button class="btn" onclick="alert('উইথড্র রিকুয়েস্ট সফল হয়েছে!')">উইথড্র রিকোয়েস্ট পাঠান</button>
-      </div>
+        <label>আপনার অ্যাকাউন্ট নম্বর:</label>
+        <input type="number" class="input-field" placeholder="017XXXXXXXX">
 
-      <div style="font-size: 13px; font-weight: bold; margin: 15px 0 10px 4px; color: var(--text-sub);">আপনার রিয়েল উইথড্র হিস্ট্রি</div>
-      <div class="card" style="display: flex; justify-content: space-between; align-items: center; padding: 14px;">
-        <div style="text-align: left;">
-          <div style="font-size: 13px; font-weight: bold;">নগদ • 01788888880</div>
-          <span style="font-size: 10px; background: rgba(255,183,77,0.2); color: #ffb74d; padding: 2px 6px; border-radius: 4px;">পেন্ডিং</span>
-        </div>
-        <div style="font-weight: bold; color: var(--accent-blue);">TK 200</div>
+        <label>উইথড্র পরিমাণ (টাকা):</label>
+        <input type="number" class="input-field" placeholder="সর্বনিম্ন ৫০ টাকা">
+
+        <button class="btn btn-green" onclick="alert('উইথড্র রিকোয়েস্ট সফলভাবে জমা হয়েছে!')">উইথড্র সাবমিট করুন</button>
       </div>
     </div>
 
   </div>
 
-  <!-- Bottom Navigation Bar -->
-  <div class="bottom-nav">
+  <!-- NAVIGATION BAR -->
+  <div class="nav-bar">
     <div class="nav-item active" onclick="switchTab('home', this)">
-      <i class="fa-solid fa-house"></i>
+      <span>🏠</span>
       <span>হোম</span>
     </div>
     <div class="nav-item" onclick="switchTab('task', this)">
-      <i class="fa-solid fa-bolt"></i>
+      <span>⚡</span>
       <span>টাস্ক</span>
     </div>
     <div class="nav-item" onclick="switchTab('support', this)">
-      <i class="fa-solid fa-headset"></i>
+      <span>🎧</span>
       <span>সাপোর্ট</span>
     </div>
     <div class="nav-item" onclick="switchTab('refer', this)">
-      <i class="fa-solid fa-gift"></i>
+      <span>🎁</span>
       <span>রেফার</span>
     </div>
     <div class="nav-item" onclick="switchTab('wallet', this)">
-      <i class="fa-solid fa-wallet"></i>
+      <span>💼</span>
       <span>ওয়ালেট</span>
     </div>
   </div>
@@ -296,6 +314,9 @@
   <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
+
+    // Adsgram Block ID Integration
+    const adsgramBlockId = "45793";
 
     function getDeviceId() {
       let deviceId = localStorage.getItem('app_device_uuid');
@@ -331,7 +352,8 @@
 
     const taskConfig = {
       monetag: {
-        reward: 1.00,
+        reward: 0.10,
+        timer: 20,
         links: [
           'https://omg10.com/4/11522087',
           'https://omg10.com/4/11522086',
@@ -346,7 +368,8 @@
         ]
       },
       adsterra: {
-        reward: 0.50,
+        reward: 0.10,
+        timer: 20,
         links: [
           'https://www.effectivecpmnetwork.com/nx2nqegj3p?key=8fb4f6d68a89919faeee5ec3846d4292',
           'https://www.effectivecpmnetwork.com/bbjq6k48?key=4707c2aa3827755848d5332b72a9c955',
@@ -358,46 +381,6 @@
           'https://www.effectivecpmnetwork.com/jwsp4r2rtr?key=63a26410a1f920c6de29b0e73bf69055',
           'https://www.effectivecpmnetwork.com/dwja24niv?key=6a9552e41b528897598e4eec709d5115',
           'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
-        ]
-      },
-      shrinkme: {
-        reward: 2.00,
-        links: [
-          'https://shrinkme.click/g2qGUb',
-          'https://shrinkme.click/8Uar',
-          'https://shrinkme.click/ptEvVdG',
-          'https://shrinkme.click/ndirPw',
-          'https://shrinkme.click/LwsLmzvi',
-          'https://shrinkme.click/p4MaWq3R',
-          'https://shrinkme.click/0jOAuZOk',
-          'https://shrinkme.click/EIZYof',
-          'https://shrinkme.click/ALuVs5',
-          'https://shrinkme.click/9SB8',
-          'https://shrinkme.click/UYMQ',
-          'https://shrinkme.click/ven3VA7p',
-          'https://shrinkme.click/xTRge',
-          'https://shrinkme.click/MjwBLrK',
-          'https://shrinkme.click/U9Tetn2'
-        ]
-      },
-      exeio: {
-        reward: 2.00,
-        links: [
-          'https://exe.io/0gptze35',
-          'https://exe.io/ry8Ka',
-          'https://exe.io/7nLiu',
-          'https://exe.io/57NKwlj',
-          'https://exe.io/2qeCFj',
-          'https://exe.io/Bo0QN',
-          'https://exe.io/QcaC1jjV',
-          'https://exe.io/uJ8x4v',
-          'https://exe.io/4CMD9lc',
-          'https://exe.io/7t5U3dg',
-          'https://exe.io/h3s7q',
-          'https://exe.io/vp05amHW',
-          'https://exe.io/4VgpGc',
-          'https://exe.io/FhwbU5QN',
-          'https://exe.io/gCczg6'
         ]
       }
     };
@@ -420,17 +403,72 @@
       localStorage.setItem(`net_${network}`, JSON.stringify(state));
     }
 
+    function runAdsgramTask() {
+      const btn = document.getElementById("adsgram-btn");
+      const state = getState('adsgram');
+
+      if (state.count >= 10) {
+        alert("আজকের ভিডিও অ্যাড দেখার লিমিট শেষ!");
+        return;
+      }
+
+      if (window.Adsgram) {
+        btn.disabled = true;
+        btn.innerText = "অ্যাড লোড হচ্ছে...";
+
+        window.Adsgram.init({ blockId: adsgramBlockId }).show()
+          .then((result) => {
+            if (state.count === 0) {
+              state.lastReset = new Date().getTime();
+            }
+
+            state.count++;
+            userBalance += 0.20; // 0.20 TK Reward
+
+            saveState('adsgram', state);
+            localStorage.setItem('user_balance', userBalance.toString());
+
+            updateAllUI();
+            alert("🎉 অভিনন্দন! ভিডিও দেখার জন্য +0.20 TK যোগ হয়েছে।");
+          })
+          .catch((result) => {
+            alert("অ্যাড সম্পন্ন করতে পারেননি বা কোনো সমস্যা হয়েছে!");
+            updateAllUI();
+          });
+      } else {
+        alert("Adsgram SDK নেটওয়ার্ক সংক্রান্ত সমস্যার কারণে লোড হয়নি। দয়া করে আবার চেষ্টা করুন।");
+      }
+    }
+
     function updateAllUI() {
       document.getElementById('home-balance').innerText = userBalance.toFixed(2);
       document.getElementById('wallet-balance').innerText = userBalance.toFixed(2);
-      document.getElementById('total-earned').innerText = userBalance.toFixed(2);
 
       let grandTotalDone = 0;
 
-      ['monetag', 'adsterra', 'shrinkme', 'exeio'].forEach(net => {
+      // Adsgram UI Update
+      const adsgramState = getState('adsgram');
+      const currentTime = new Date().getTime();
+
+      if (currentTime - adsgramState.lastReset >= 86400000) {
+        adsgramState.count = 0;
+        saveState('adsgram', adsgramState);
+      }
+
+      grandTotalDone += adsgramState.count;
+      document.getElementById('adsgram-count').innerText = `${adsgramState.count}/10`;
+      const adsBtn = document.getElementById('adsgram-btn');
+      if (adsgramState.count >= 10) {
+        adsBtn.disabled = true;
+        adsBtn.innerText = "আজকের কাজ শেষ";
+      } else {
+        adsBtn.disabled = false;
+        adsBtn.innerText = `ভিডিও অ্যাড দেখুন (${adsgramState.count + 1}/10)`;
+      }
+
+      ['monetag', 'adsterra'].forEach(net => {
         const config = taskConfig[net];
         const state = getState(net);
-        const currentTime = new Date().getTime();
 
         if (currentTime - state.lastReset >= 86400000) {
           state.count = 0;
@@ -456,26 +494,37 @@
     function runTask(net) {
       const config = taskConfig[net];
       const state = getState(net);
+      const btn = document.getElementById(`${net}-btn`);
 
       if (state.count >= config.links.length) return;
 
       const linkToOpen = config.links[state.count];
       tg.openLink(linkToOpen);
 
-      setTimeout(() => {
-        if (state.count === 0) {
-          state.lastReset = new Date().getTime();
+      let timeLeft = config.timer;
+      btn.disabled = true;
+
+      const countdown = setInterval(() => {
+        btn.innerText = `অপেক্ষা করুন (${timeLeft}s)...`;
+        timeLeft--;
+
+        if (timeLeft < 0) {
+          clearInterval(countdown);
+          
+          if (state.count === 0) {
+            state.lastReset = new Date().getTime();
+          }
+
+          state.count++;
+          userBalance += config.reward;
+
+          saveState(net, state);
+          localStorage.setItem('user_balance', userBalance.toString());
+
+          updateAllUI();
+          alert(`শুভেচ্ছা! সময় সম্পন্ন করায় +${config.reward.toFixed(2)} TK যোগ হয়েছে।`);
         }
-
-        state.count++;
-        userBalance += config.reward;
-
-        saveState(net, state);
-        localStorage.setItem('user_balance', userBalance.toString());
-
-        updateAllUI();
-        alert(`শুভেচ্ছা! কাজ সফলভাবে সম্পন্ন করায় +${config.reward.toFixed(2)} TK যোগ হয়েছে।`);
-      }, 3000);
+      }, 1000);
     }
 
     function switchTab(tabId, el) {
