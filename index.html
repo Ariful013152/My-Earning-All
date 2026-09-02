@@ -415,30 +415,52 @@
 
         const adsgramBlockId = "45802";
 
+        // ২০টি Monetag লিংক
         const MONETAG_LINKS = [
-            'https://omg10.com/4/11522087',
-            'https://omg10.com/4/11522086',
-            'https://omg10.com/4/11522081',
             'https://omg10.com/4/11522080',
-            'https://omg10.com/4/11522079',
-            'https://omg10.com/4/11522078',
-            'https://omg10.com/4/11522077',
+            'https://omg10.com/4/11522086',
+            'https://omg10.com/4/11711366',
             'https://omg10.com/4/11522076',
+            'https://omg10.com/4/11711367',
             'https://omg10.com/4/11522074',
-            'https://omg10.com/4/11516146'
+            'https://omg10.com/4/11711365',
+            'https://omg10.com/4/11522078',
+            'https://omg10.com/4/11711369',
+            'https://omg10.com/4/11711363',
+            'https://omg10.com/4/11522077',
+            'https://omg10.com/4/11711362',
+            'https://omg10.com/4/11522081',
+            'https://omg10.com/4/11516146',
+            'https://omg10.com/4/11522087',
+            'https://omg10.com/4/11711364',
+            'https://omg10.com/4/11522079',
+            'https://omg10.com/4/11711368',
+            'https://omg10.com/4/11711370',
+            'https://omg10.com/4/11711361'
         ];
 
+        // ২০টি Adsterra লিংক
         const ADSTERRA_LINKS = [
-            'https://www.effectivecpmnetwork.com/nx2nqegj3p?key=8fb4f6d68a89919faeee5ec3846d4292',
-            'https://www.effectivecpmnetwork.com/bbjq6k48?key=4707c2aa3827755848d5332b72a9c955',
-            'https://www.effectivecpmnetwork.com/hqrjr5jzm?key=fe9a5012689a62a78d579d93d0864575',
-            'https://www.effectivecpmnetwork.com/nqch6m5jc?key=3eecd9428d8b55066d6cfdcadeda271c',
-            'https://www.effectivecpmnetwork.com/ie1pgkmbcc?key=1298a27dc3477c9aef05ead4c6778088',
-            'https://www.effectivecpmnetwork.com/wg9r001v7?key=4f2213d1fb414c2e0c9ac7dde1c72402',
-            'https://www.effectivecpmnetwork.com/m36r7xvy?key=e8b267b7b19cae2daee8f96118e5326e',
-            'https://www.effectivecpmnetwork.com/jwsp4r2rtr?key=63a26410a1f920c6de29b0e73bf69055',
-            'https://www.effectivecpmnetwork.com/dwja24niv?key=6a9552e41b528897598e4eec709d5115',
-            'https://www.effectivecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724'
+            'https://www.profitableratecpmnetwork.com/aqap5tdu?key=292364b4c9161a24064eaf503e245724',
+            'https://www.profitableratecpmnetwork.com/dwja24niv?key=6a9552e41b528897598e4eec709d5115',
+            'https://www.profitableratecpmnetwork.com/jwsp4r2rtr?key=63a26410a1f920c6de29b0e73bf69055',
+            'https://www.profitableratecpmnetwork.com/m36r7xvy?key=e8b267b7b19cae2daee8f96118e5326e',
+            'https://www.profitableratecpmnetwork.com/wg9r001v7?key=4f2213d1fb414c2e0c9ac7dde1c72402',
+            'https://www.profitableratecpmnetwork.com/ie1pgkmbcc?key=1298a27dc3477c9aef05ead4c6778088',
+            'https://www.profitableratecpmnetwork.com/nqch6m5jc?key=3eecd9428d8b55066d6cfdcadeda271c',
+            'https://www.profitableratecpmnetwork.com/hqrjr5jzm?key=fe9a5012689a62a78d579d93d0864575',
+            'https://www.profitableratecpmnetwork.com/bbjq6k48?key=4707c2aa3827755848d5332b72a9c955',
+            'https://www.profitableratecpmnetwork.com/nx2nqegj3p?key=8fb4f6d68a89919faeee5ec3846d4292',
+            'https://www.profitableratecpmnetwork.com/xd4s75pe?key=a75ca3195865ff3446ca193b32b50026',
+            'https://www.profitableratecpmnetwork.com/dmnw3uf83?key=288026789244462b3c0695fd504d0b37',
+            'https://www.profitableratecpmnetwork.com/zy3d6ku7qv?key=4b14a673e5b9b1bcfa5ac2bd679cc5a2',
+            'https://www.profitableratecpmnetwork.com/ffjnwj5gvx?key=22d32718d8b99f6701aaf8ca6be6728a',
+            'https://www.profitableratecpmnetwork.com/d70ykk4zw?key=b5793a15a49b93dfcdb6f2a1489bbb38',
+            'https://www.profitableratecpmnetwork.com/t0qx5hwwn0?key=5bd94e010302b85148669d4243a31d6a',
+            'https://www.profitableratecpmnetwork.com/czikx63uz?key=028fe53f0676a42d611c1bf9a1d3eaed',
+            'https://www.profitableratecpmnetwork.com/kwawrk7jz?key=7f5c9a6683b21f967e31c49d31f2d59a',
+            'https://www.profitableratecpmnetwork.com/e6hn6t57?key=777114dae9fa3c489d96d0d07a999128',
+            'https://www.profitableratecpmnetwork.com/h82v9vra2?key=6c1198ef2dbbdea0bd97274d1ce36024'
         ];
 
         let balance = parseFloat(localStorage.getItem('balance')) || 0.00;
@@ -446,6 +468,7 @@
         let adsterraCount = parseInt(localStorage.getItem('adsterraCount')) || 0;
         let lastResetTime = localStorage.getItem('lastResetTime') || Date.now();
 
+        // ২৪ ঘণ্টা পর টাস্ক সংখ্যা রিসেট করার ব্যবস্থা
         if (Date.now() - lastResetTime > 24 * 60 * 60 * 1000) {
             monetagCount = 0;
             adsterraCount = 0;
@@ -495,11 +518,15 @@
             alert(`অভিনন্দন! আপনি TK ${amount.toFixed(2)} অর্জন করেছেন।`);
         }
 
+        // ক্যাশ বাইপাস এবং ফ্রেস অ্যাড লোড করার ওপেনার ফাংশন
         function openExternalLink(url) {
+            const cacheBuster = (url.indexOf('?') >= 0 ? '&' : '?') + 'cb=' + new Date().getTime() + '_' + Math.floor(Math.random() * 10000);
+            const finalUrl = url + cacheBuster;
+
             if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openLink) {
-                window.Telegram.WebApp.openLink(url);
+                window.Telegram.WebApp.openLink(finalUrl, { try_instant_view: false });
             } else {
-                window.open(url, '_blank');
+                window.open(finalUrl, '_blank');
             }
         }
 
@@ -517,6 +544,7 @@
             const btn = document.getElementById('monetagBtn');
             btn.disabled = true;
             
+            // টাস্কের সংখ্যা অনুযায়ী পর্যায়ক্রমে ২০টি লিংক ওপেন করা
             const targetUrl = MONETAG_LINKS[monetagCount % MONETAG_LINKS.length];
             openExternalLink(targetUrl);
 
@@ -544,6 +572,7 @@
             const btn = document.getElementById('adsterraBtn');
             btn.disabled = true;
             
+            // টাস্কের সংখ্যা অনুযায়ী পর্যায়ক্রমে ২০টি লিংক ওপেন করা
             const targetUrl = ADSTERRA_LINKS[adsterraCount % ADSTERRA_LINKS.length];
             openExternalLink(targetUrl);
 
