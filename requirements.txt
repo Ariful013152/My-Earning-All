@@ -4,3 +4,4 @@ flask-cors
 requests
 gunicorn
 pymongo
+dnspython
