@@ -246,10 +246,6 @@
         .nav-item.active {
             color: var(--accent-cyan);
         }
-
-        .nav-item.active i {
-            text-shadow: 0 0 10px var(--accent-cyan);
-        }
     </style>
 </head>
 <body>
@@ -266,7 +262,6 @@
     </div>
 
     <div class="container">
-        
         <!-- HOME TAB -->
         <div id="home" class="tab-content active">
             <div class="balance-gradient-card">
@@ -316,11 +311,8 @@
         <div id="tasks" class="tab-content">
             <div class="card" style="margin-bottom: 15px;">
                 <div class="icon-box"><i class="fas fa-play"></i></div>
-                <h2 style="margin: 5px 0;">বিজ্ঞাপন দেখুন ও আয় করুন</h2>
+                <h2 style="margin: 5px 0;">Adsgram অ্যাড</h2>
                 <p style="font-size: 12px; color: var(--text-sub);">প্রতিটি বিজ্ঞাপনের জন্য পাবেন TK 0.10</p>
-                <div style="background: rgba(0,210,255,0.1); display: inline-block; padding: 6px 15px; border-radius: 20px; color: var(--accent-cyan); font-size: 12px; font-weight: bold; margin: 8px 0;">
-                    রিওয়ার্ড: TK 0.10
-                </div>
                 <button class="gradient-btn" style="margin-top: 10px;" onclick="watchAdsgram()"><i class="fas fa-play"></i> অ্যাড চালু করুন (Adsgram)</button>
             </div>
 
@@ -343,18 +335,11 @@
 
         <!-- SUPPORT TAB -->
         <div id="support" class="tab-content">
-            <div class="card" style="margin-bottom: 15px;">
-                <div class="icon-box"><i class="fas fa-play-circle"></i></div>
-                <h3>কিভাবে সঠিক নিয়মে কাজ করবেন?</h3>
-                <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 15px;">কাজ করার নিয়মাবলী এবং উইথড্র পাওয়ার সম্পূর্ণ ভিডিও টিউটোরিয়াল দেখে নিন।</p>
-                <button class="gradient-btn" style="background: transparent; border: 1px solid var(--accent-cyan);" onclick="openExternalLink('https://youtube.com')"><i class="fas fa-tv"></i> টিউটোরিয়াল ভিডিও</button>
-            </div>
-
             <div class="card">
                 <div class="icon-box"><i class="fas fa-headset"></i></div>
                 <h3>সাপোর্ট সেন্টার</h3>
                 <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 15px;">যেকোনো পেমেন্ট সমস্যা বা প্রশ্নের জন্য এডমিনের সাথে যোগাযোগ করুন</p>
-                <button class="gradient-btn" onclick="openExternalLink('https://t.me/akadmin02')"><i class="fab fa-telegram"></i> টেলিগ্রাম সাপোর্টে মেসেজ দিন (@akadmin02)</button>
+                <button class="gradient-btn" onclick="openExternalLink('https://t.me/akadmin02')"><i class="fab fa-telegram"></i> টেলিগ্রাম সাপোর্ট (@akadmin02)</button>
             </div>
         </div>
 
@@ -363,7 +348,7 @@
             <div class="card">
                 <div class="icon-box"><i class="fas fa-users"></i></div>
                 <h3>রেফার করুন ও আনলিমিটেড আয় করুন</h3>
-                <p style="font-size: 12px; color: var(--text-sub);">আপনার রেফার লিংক বন্ধুদের শেয়ার করুন। নতুন ইউজার আপনার লিংকে যোগ দিলে পাবেন নিশ্চিত <b>TK 0.50</b> বোনাস!</p>
+                <p style="font-size: 12px; color: var(--text-sub);">আপনার রেফার লিংক বন্ধুদের শেয়ার করুন। নতুন ইউজার যোগ দিলে পাবেন নিশ্চিত <b>TK 0.50</b> বোনাস!</p>
                 
                 <input type="text" class="input-box" id="referLinkInput" value="Loading..." readonly style="text-align: center; margin-top: 10px;">
                 
@@ -380,22 +365,17 @@
                 <div style="font-size: 12px; color: var(--text-sub);">উত্তোলনযোগ্য মেইন ব্যালেন্স</div>
                 <h1 style="margin: 10px 0; color: var(--accent-cyan);">TK <span id="walletBalance">0.00</span></h1>
 
-                <div style="text-align: left; font-size: 12px; color: var(--text-sub); margin-top: 15px;">পেমেন্ট মেথড সিলেক্ট করুন</div>
                 <div class="method-selector">
                     <button class="method-btn active" id="bKashBtn" onclick="selectMethod('bKash', this)">● বিকাশ (bKash)</button>
                     <button class="method-btn" id="NagadBtn" onclick="selectMethod('Nagad', this)">● নগদ (Nagad)</button>
                 </div>
 
-                <div style="text-align: left; font-size: 12px; color: var(--text-sub);">টাকার পরিমাণ (TK)</div>
                 <input type="number" class="input-box" placeholder="মিনিমাম ২০০ টাকা" id="withdrawAmount">
-
-                <div style="text-align: left; font-size: 12px; color: var(--text-sub);">অ্যাকাউন্ট নাম্বার / অ্যাড্রেস</div>
                 <input type="text" class="input-box" placeholder="01XXXXXXXXX" id="withdrawAccount">
 
                 <button class="gradient-btn" onclick="submitWithdraw()">উইথড্র রিকোয়েস্ট পাঠান</button>
             </div>
         </div>
-
     </div>
 
     <div class="bottom-nav">
@@ -410,69 +390,20 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        const BOT_USERNAME = "myearningall01_bot";
+        let botUsername = "myearningall01_bot";
         const adsgramBlockId = "45802";
-
         let selectedMethod = "bKash";
 
         const user = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-        const userId = user ? user.id.toString() : "guest_user";
+        let userId = user ? user.id.toString() : localStorage.getItem('temp_user_id');
+
+        if (!userId) {
+            userId = "user_" + Math.floor(100000 + Math.random() * 900000);
+            localStorage.setItem('temp_user_id', userId);
+        }
+
         const firstName = user ? user.first_name : "User";
         const username = user ? (user.username || "No Username") : "No Username";
-
-        function getDeviceId() {
-            let devId = localStorage.getItem('device_fingerprint_id');
-            if (!devId) {
-                devId = 'dev_' + Math.random().toString(36).substring(2, 12) + Date.now().toString(36);
-                localStorage.setItem('device_fingerprint_id', devId);
-            }
-            return devId;
-        }
-
-        function verifyDeviceOnServer() {
-            if (!user) return;
-            const deviceId = getDeviceId();
-            
-            fetch('/check-device', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    device_id: deviceId,
-                    user_id: userId,
-                    first_name: firstName,
-                    username: username
-                })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'banned') {
-                    document.body.innerHTML = "<h2 style='color:#ef4444; text-align:center; margin-top:50%;'>❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h2>";
-                }
-            })
-            .catch(err => console.error("Device check error:", err));
-        }
-
-        let balance = 0.00;
-        let totalRefers = 0;
-
-        function fetchUserDataFromServer() {
-            if (!user) return;
-
-            fetch(`/get-user-data?user_id=${userId}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.status === 'banned') {
-                        document.body.innerHTML = "<h2 style='color:#ef4444; text-align:center; margin-top:50%;'>❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h2>";
-                        return;
-                    }
-                    if (data.status === 'success') {
-                        balance = parseFloat(data.balance);
-                        totalRefers = parseInt(data.total_refers);
-                        updateUI();
-                    }
-                })
-                .catch(err => console.error("Error fetching user data:", err));
-        }
 
         const MONETAG_LINKS = [
             'https://omg10.com/4/11522080', 'https://omg10.com/4/11522086', 'https://omg10.com/4/11711366',
@@ -510,6 +441,71 @@
         let monetagCount = parseInt(localStorage.getItem(`${userId}_monetagCount`) || '0');
         let adsterraCount = parseInt(localStorage.getItem(`${userId}_adsterraCount`) || '0');
 
+        function getDeviceId() {
+            let devId = localStorage.getItem('device_fingerprint_id');
+            if (!devId) {
+                devId = 'dev_' + navigator.userAgent.replace(/[^a-zA-Z0-9]/g, "").substring(0, 15) + '_' + Math.random().toString(36).substring(2, 8);
+                localStorage.setItem('device_fingerprint_id', devId);
+            }
+            return devId;
+        }
+
+        function setupReferralAndBotInfo() {
+            fetch('/get-bot-info')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        botUsername = data.username;
+                    }
+                    document.getElementById('referLinkInput').value = `https://t.me/${botUsername}?start=${userId}`;
+                })
+                .catch(() => {
+                    document.getElementById('referLinkInput').value = `https://t.me/${botUsername}?start=${userId}`;
+                });
+        }
+
+        function verifyDeviceOnServer() {
+            const deviceId = getDeviceId();
+            
+            fetch('/check-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    device_id: deviceId,
+                    user_id: userId,
+                    first_name: firstName,
+                    username: username
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'banned') {
+                    document.body.innerHTML = "<h2 style='color:#ef4444; text-align:center; margin-top:50%;'>❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h2>";
+                }
+            })
+            .catch(err => console.error("Device check error:", err));
+        }
+
+        let balance = 0.00;
+        let totalRefers = 0;
+
+        function fetchUserDataFromServer() {
+            fetch(`/get-user-data?user_id=${userId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'banned') {
+                        document.body.innerHTML = "<h2 style='color:#ef4444; text-align:center; margin-top:50%;'>❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h2>";
+                        return;
+                    }
+                    if (data.status === 'success') {
+                        balance = parseFloat(data.balance);
+                        totalRefers = parseInt(data.total_refers);
+                        updateUI();
+                    }
+                })
+                .catch(err => console.error("Error fetching user data:", err));
+        }
+
         function updateUI() {
             document.getElementById('homeBalance').innerText = balance.toFixed(2);
             document.getElementById('walletBalance').innerText = balance.toFixed(2);
@@ -518,11 +514,7 @@
             document.getElementById('adsterraCount').innerText = adsterraCount;
             document.getElementById('refCount').innerText = totalRefers;
             document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount;
-
-            if (user) {
-                document.getElementById('userName').innerText = firstName;
-                document.getElementById('referLinkInput').value = `https://t.me/${BOT_USERNAME}?start=${userId}`;
-            }
+            document.getElementById('userName').innerText = firstName;
         }
 
         function switchTab(tabId, index) {
@@ -566,7 +558,10 @@
         }
 
         function startMonetagTask() {
-            if (monetagCount >= 20) return;
+            if (monetagCount >= 20) {
+                alert("আজকের Monetag টাস্ক শেষ হয়ে গেছে!");
+                return;
+            }
             const btn = document.getElementById('monetagBtn');
             btn.disabled = true;
             
@@ -589,7 +584,10 @@
         }
 
         function startAdsterraTask() {
-            if (adsterraCount >= 20) return;
+            if (adsterraCount >= 20) {
+                alert("আজকের Adsterra টাস্ক শেষ হয়ে গেছে!");
+                return;
+            }
             const btn = document.getElementById('adsterraBtn');
             btn.disabled = true;
             
@@ -618,7 +616,8 @@
         }
 
         function copyReferLink() {
-            navigator.clipboard.writeText(document.getElementById('referLinkInput').value);
+            const input = document.getElementById('referLinkInput');
+            navigator.clipboard.writeText(input.value);
             alert("রেফার লিংক কপি হয়েছে!");
         }
 
@@ -667,14 +666,11 @@
                 } else {
                     alert(data.message || "উইথড্র রিকোয়েস্ট ব্যর্থ হয়েছে।");
                 }
-            })
-            .catch(err => {
-                console.error("Withdraw Error:", err);
-                alert("সার্ভার কানেকশনে সমস্যা হয়েছে!");
             });
         }
 
         window.onload = function() {
+            setupReferralAndBotInfo();
             verifyDeviceOnServer();
             fetchUserDataFromServer();
         };
