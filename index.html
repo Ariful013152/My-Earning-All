@@ -383,7 +383,7 @@
                 <div style="font-size: 12px; color: var(--text-sub);">উত্তোলনযোগ্য মেইন ব্যালেন্স</div>
                 <h1 style="margin: 10px 0; color: var(--accent-cyan);">TK <span id="walletBalance">0.00</span></h1>
 
-                <div style="text-align: left; font-size: 12px; color: var(--text-sub); margin-top: 15px;">পেমент মেথড সিলেক্ট করুন</div>
+                <div style="text-align: left; font-size: 12px; color: var(--text-sub); margin-top: 15px;">পেমেন্ট মেথড সিলেক্ট করুন</div>
                 <div class="method-selector">
                     <button class="method-btn active" id="bKashBtn" onclick="selectMethod('bKash', this)">● বিকাশ (bKash)</button>
                     <button class="method-btn" id="NagadBtn" onclick="selectMethod('Nagad', this)">● নগদ (Nagad)</button>
@@ -415,18 +415,16 @@
 
         const BOT_TOKEN = "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k";  
         const CHANNEL_ID = "@myearningall";
-        const BOT_USERNAME = "myearningall01_bot"; // সঠিক ইউজারনেম
+        const BOT_USERNAME = "myearningall01_bot";
 
         const adsgramBlockId = "45802";
         let selectedMethod = "bKash";
 
-        // ইউজার আইডি নির্ণয়
         const user = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
         const userId = user ? user.id : "guest_user";
         const firstName = user ? user.first_name : "User";
         const username = user ? (user.username || "No Username") : "No Username";
 
-        // ডিভাইস ফিঙ্গারপ্রিন্ট আইডি তৈরি
         function getDeviceId() {
             let devId = localStorage.getItem('device_fingerprint_id');
             if (!devId) {
@@ -436,7 +434,6 @@
             return devId;
         }
 
-        // সার্ভারে ডিভাইস চেক করা
         function verifyDeviceOnServer() {
             const deviceId = getDeviceId();
             fetch('/check-device', {
@@ -456,6 +453,24 @@
                 }
             })
             .catch(err => console.error("Device check error:", err));
+        }
+
+        // ডাটাবেস থেকে রিয়েল-টাইম ডাটা আনবে
+        function fetchUserDataFromServer() {
+            if (!userId || userId === "guest_user") return;
+
+            fetch(`/get-user-data?user_id=${userId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        balance = parseFloat(data.balance);
+                        totalRefers = parseInt(data.total_refers);
+                        setStorage('balance', balance);
+                        setStorage('totalRefers', totalRefers);
+                        updateUI();
+                    }
+                })
+                .catch(err => console.error("Error fetching user data:", err));
         }
 
         const MONETAG_LINKS = [
@@ -695,6 +710,7 @@
 
         window.onload = function() {
             verifyDeviceOnServer();
+            fetchUserDataFromServer();
             updateUI();
         };
     </script>
