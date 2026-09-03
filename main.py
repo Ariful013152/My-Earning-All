@@ -12,6 +12,8 @@ from pymongo import MongoClient
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
 
+PAYMENT_IMAGE_URL = "https://i.ibb.co/L8y2pNz/payment-banner.jpg"
+
 ADMIN_IDS_RAW = os.environ.get("ADMIN_CHAT_IDS", "8414665404,5034445579")
 ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",") if admin_id.strip()]
 
@@ -58,13 +60,15 @@ def send_fake_withdraw_loop():
                 f"👛 <b>{fake_acc}</b>"
             )
 
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            payload = {
-                "chat_id": CHANNEL_ID,
-                "text": msg,
-                "parse_mode": "HTML"
-            }
-            requests.post(url, json=payload, timeout=10)
+            markup = InlineKeyboardMarkup()
+            bot_username = bot.get_me().username
+            markup.add(InlineKeyboardButton("🤖 Open App & Earn", url=f"https://t.me/{bot_username}"))
+
+            try:
+                bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
+            except Exception:
+                bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
+
         except Exception as e:
             print(f"⚠️ Fake withdraw error: {e}")
             
@@ -91,7 +95,6 @@ def send_welcome(message):
         bot.reply_to(message, "❌ <b>আপনি এই বট থেকে ব্যান হয়েছেন!</b>", parse_mode="HTML")
         return
 
-    # ইউজারের প্রোফাইল ডাটাবেসে সেভ করা
     if users_collection is not None:
         users_collection.update_one(
             {"user_id": user_id},
@@ -99,7 +102,6 @@ def send_welcome(message):
             upsert=True
         )
 
-    # রেফার কোড ট্র্যাকিং ও পয়েন্ট যোগ
     args = message.text.split()
     referrer_id = args[1] if len(args) > 1 else None
 
@@ -124,7 +126,6 @@ def send_welcome(message):
     welcome_text = "👋 <b>স্বাগতম!</b>\n\nআমাদের অ্যাপ থেকে আয় করতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
     bot.reply_to(message, welcome_text, parse_mode="HTML")
 
-# -------- BAN / UNBAN CALLBACK HANDLER --------
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('ban_', 'unban_')))
 def handle_ban_callback(call):
     action, target_user_id = call.data.split('_')
@@ -134,7 +135,7 @@ def handle_ban_callback(call):
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
         bot.answer_callback_query(call.id, f"User {target_user_id} Banned!")
-        bot.edit_message_text(f"🚫 <b>ইউজার ID: {target_user_id} সফলভাবে ব্যান করা হয়েছে!</b>", 
+        bot.edit_message_text(f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", 
                               chat_id=call.message.chat.id, 
                               message_id=call.message.message_id, parse_mode="HTML")
     elif action == 'unban':
@@ -160,7 +161,14 @@ def run_bot():
 def home():
     return render_template('index.html')
 
-# রিয়েল-টাইম ব্যালেন্স ও রেফার কাউন্ট রিটার্ন
+@app.route('/get-bot-info', methods=['GET'])
+def get_bot_info():
+    try:
+        bot_username = bot.get_me().username
+        return jsonify({"status": "success", "username": bot_username}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/get-user-data', methods=['GET'])
 def get_user_data():
     user_id = request.args.get('user_id')
@@ -180,7 +188,6 @@ def get_user_data():
 
     return jsonify({"status": "success", "balance": 0.00, "total_refers": 0}), 200
 
-# ইউজার ব্যালেন্স আপডেট
 @app.route('/update-balance', methods=['POST'])
 def update_balance():
     data = request.json
@@ -196,7 +203,6 @@ def update_balance():
         return jsonify({"status": "success"}), 200
     return jsonify({"status": "error"}), 400
 
-# সেফ উইথড্র প্রসেসিং
 @app.route('/request-withdraw', methods=['POST'])
 def request_withdraw():
     data = request.json
@@ -223,15 +229,19 @@ def request_withdraw():
             f"🌐 <b>{method}</b>\n"
             f"👛 <b>{hidden_acc}</b>"
         )
+        
+        markup = InlineKeyboardMarkup()
+        bot_username = bot.get_me().username
+        markup.add(InlineKeyboardButton("🤖 Open App & Earn", url=f"https://t.me/{bot_username}"))
+
         try:
-            bot.send_message(CHANNEL_ID, msg, parse_mode="HTML")
-        except Exception as e:
-            print(f"Error sending withdraw message: {e}")
+            bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
+        except Exception:
+            bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
 
         return jsonify({"status": "success"}), 200
     return jsonify({"status": "error"}), 500
 
-# মাল্টি-অ্যাকাউন্ট চেক ও নোটিফিকেশন
 @app.route('/check-device', methods=['POST'])
 def check_device():
     data = request.json
