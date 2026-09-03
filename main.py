@@ -4,13 +4,14 @@ import random
 import requests
 import threading
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from pymongo import MongoClient
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
+REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1"]  # জয়েন করার জন্য বাধ্যতামূলক চ্যানেলসমূহ
 
 PAYMENT_IMAGE_URL = os.environ.get("PAYMENT_IMAGE_URL", "https://i.ibb.co/L8y2pNz/payment-banner.jpg")
 
@@ -18,7 +19,7 @@ ADMIN_IDS_RAW = os.environ.get("ADMIN_CHAT_IDS", "8414665404,5034445579")
 ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",") if admin_id.strip()]
 
 MONGO_URI = os.environ.get("MONGO_URI")
-RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
+RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-app.onrender.com")
 
 app = Flask(__name__, template_folder='templates', static_folder='templates')
 CORS(app)
@@ -39,6 +40,18 @@ if MONGO_URI:
         print(f"❌ MongoDB Connection Error: {e}")
 
 banned_users = set()
+
+# -------- FORCE JOIN CHECKER --------
+def check_user_joined_channels(user_id):
+    for ch in REQUIRED_CHANNELS:
+        try:
+            member = bot.get_chat_member(ch, user_id)
+            if member.status in ['left', 'kicked']:
+                return False
+        except Exception as e:
+            print(f"Channel check error for {ch}: {e}")
+            return False
+    return True
 
 # -------- FAKE WITHDRAW AUTO SENDER --------
 def send_fake_withdraw_loop():
@@ -68,7 +81,6 @@ def send_fake_withdraw_loop():
             try:
                 bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
             except Exception as e:
-                print(f"Photo send failed, sending message: {e}")
                 bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
 
         except Exception as e:
@@ -97,6 +109,21 @@ def send_welcome(message):
         bot.reply_to(message, "❌ <b>আপনি এই বট থেকে ব্যান হয়েছেন!</b>", parse_mode="HTML")
         return
 
+    # ১. ইউজার চ্যানেল ২টিতে জয়েন করেছে কিনা চেক করা
+    if not check_user_joined_channels(message.from_user.id):
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("📢 Channel 1", url="https://t.me/myearningall"))
+        markup.add(InlineKeyboardButton("📢 Channel 2", url="https://t.me/allinoneg1"))
+        markup.add(InlineKeyboardButton("✅ Check Verification", callback_data="check_join"))
+        
+        join_msg = (
+            "⚠️ <b>বট ব্যবহার করতে আপনাকে অবশ্যই আমাদের চ্যানেল ২টি-তে জয়েন করতে হবে!</b>\n\n"
+            "নিচের ২টি চ্যানেলে জয়েন করে <b>Check Verification</b> বাটনে ক্লিক করুন।"
+        )
+        bot.reply_to(message, join_msg, parse_mode="HTML", reply_markup=markup)
+        return
+
+    # চ্যানেল জয়েন থাকলে ডাটাবেজ আপডেট
     if users_collection is not None:
         users_collection.update_one(
             {"user_id": user_id},
@@ -105,6 +132,7 @@ def send_welcome(message):
             upsert=True
         )
 
+    # রেফারেল প্রসেসিং
     args = message.text.split()
     referrer_id = args[1] if len(args) > 1 else None
 
@@ -126,8 +154,26 @@ def send_welcome(message):
             except Exception as e:
                 print(f"Referral update error: {e}")
 
-    welcome_text = "👋 <b>স্বাগতম!</b>\n\nআমাদের অ্যাপ থেকে আয় করতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
-    bot.reply_to(message, welcome_text, parse_mode="HTML")
+    # ভেরিফিকেশন সফল হলে আসল Open App বাটন দেখানো
+    welcome_text = "👋 <b>স্বাগতম!</b>\n\nআপনি সফলভাবে চ্যানেল ভেরিফাই করেছেন। আমাদের অ্যাপে ঢুকতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
+    
+    markup = InlineKeyboardMarkup()
+    web_app_btn = InlineKeyboardButton("🚀 Open App 🚀", web_app=WebAppInfo(url=RENDER_EXTERNAL_URL))
+    markup.add(web_app_btn)
+
+    bot.reply_to(message, welcome_text, parse_mode="HTML", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "check_join")
+def handle_check_join(call):
+    user_id = call.from_user.id
+    if check_user_joined_channels(user_id):
+        bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে!")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        
+        # পুনরায় start হ্যান্ডলার কল করা
+        send_welcome(call.message)
+    else:
+        bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('ban_', 'unban_')))
 def handle_ban_callback(call):
@@ -207,7 +253,6 @@ def update_balance():
         return jsonify({"status": "success"}), 200
     return jsonify({"status": "error"}), 400
 
-# -------- REAL USER WITHDRAWAL HANDLER WITH PHOTO --------
 @app.route('/request-withdraw', methods=['POST'])
 def request_withdraw():
     data = request.json
@@ -242,13 +287,11 @@ def request_withdraw():
         try:
             bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
         except Exception as e:
-            print(f"Real withdraw photo error: {e}")
             bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
 
         return jsonify({"status": "success"}), 200
     return jsonify({"status": "error"}), 500
 
-# -------- FIXED MULTI-ACCOUNT CHECK (Database Driven) --------
 @app.route('/check-device', methods=['POST'])
 def check_device():
     data = request.json
