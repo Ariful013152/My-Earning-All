@@ -6,6 +6,8 @@
     <title>My Earning All</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+    <!-- FingerprintJS CDN (মাল্টি-অ্যাকাউন্ট নিখুঁতভাবে ধরার জন্য) -->
+    <script src="https://openfpcdn.io/fingerprintjs/v3"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -388,22 +390,24 @@
 
     <script>
         const tg = window.Telegram.WebApp;
+        tg.ready();
         tg.expand();
 
         let botUsername = "myearningall01_bot";
         const adsgramBlockId = "45802";
         let selectedMethod = "bKash";
 
-        const user = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-        let userId = user ? user.id.toString() : localStorage.getItem('temp_user_id');
+        // Fetch Telegram Info directly
+        const tgUser = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+        let userId = tgUser ? tgUser.id.toString() : localStorage.getItem('temp_user_id');
 
         if (!userId) {
             userId = "user_" + Math.floor(100000 + Math.random() * 900000);
             localStorage.setItem('temp_user_id', userId);
         }
 
-        const firstName = user ? user.first_name : "User";
-        const username = user ? (user.username || "No Username") : "No Username";
+        let firstName = tgUser ? tgUser.first_name : "User";
+        let username = tgUser ? (tgUser.username || "No Username") : "No Username";
 
         const MONETAG_LINKS = [
             'https://omg10.com/4/11522080', 'https://omg10.com/4/11522086', 'https://omg10.com/4/11711366',
@@ -441,10 +445,17 @@
         let monetagCount = parseInt(localStorage.getItem(`${userId}_monetagCount`) || '0');
         let adsterraCount = parseInt(localStorage.getItem(`${userId}_adsterraCount`) || '0');
 
-        function getDeviceId() {
+        // FingerprintJS ব্যবহার করে উন্নত ডিভাইস আইডি জেনারেটর
+        async function getDeviceId() {
             let devId = localStorage.getItem('device_fingerprint_id');
             if (!devId) {
-                devId = 'dev_' + navigator.userAgent.replace(/[^a-zA-Z0-9]/g, "").substring(0, 15) + '_' + Math.random().toString(36).substring(2, 8);
+                try {
+                    const fp = await FingerprintJS.load();
+                    const result = await fp.get();
+                    devId = result.visitorId;
+                } catch (e) {
+                    devId = 'dev_' + navigator.userAgent.replace(/[^a-zA-Z0-9]/g, "").substring(0, 15) + '_' + Math.random().toString(36).substring(2, 8);
+                }
                 localStorage.setItem('device_fingerprint_id', devId);
             }
             return devId;
@@ -464,8 +475,8 @@
                 });
         }
 
-        function verifyDeviceOnServer() {
-            const deviceId = getDeviceId();
+        async function verifyDeviceOnServer() {
+            const deviceId = await getDeviceId();
             
             fetch('/check-device', {
                 method: 'POST',
@@ -500,6 +511,9 @@
                     if (data.status === 'success') {
                         balance = parseFloat(data.balance);
                         totalRefers = parseInt(data.total_refers);
+                        if (data.first_name && data.first_name !== "User") {
+                            firstName = data.first_name;
+                        }
                         updateUI();
                     }
                 })
