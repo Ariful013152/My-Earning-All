@@ -12,7 +12,6 @@ from pymongo import MongoClient
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
 
-# 👇 আপনার চ্যানেলে উইথড্র পোস্টে যে ছবি দেখাবে সেটার Direct URL এখানে দিন
 PAYMENT_IMAGE_URL = os.environ.get("PAYMENT_IMAGE_URL", "https://i.ibb.co/L8y2pNz/payment-banner.jpg")
 
 ADMIN_IDS_RAW = os.environ.get("ADMIN_CHAT_IDS", "8414665404,5034445579")
@@ -21,7 +20,7 @@ ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",")
 MONGO_URI = os.environ.get("MONGO_URI")
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
 
-app = Flask(__name__, template_folder='.', static_folder='.')
+app = Flask(__name__, template_folder='templates', static_folder='templates')
 CORS(app)
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -34,7 +33,7 @@ if MONGO_URI:
         mongo_client = MongoClient(MONGO_URI)
         db = mongo_client.get_database()
         users_collection = db["users"]
-        devices_collection = db["devices"] # মাল্টি অ্যাকাউন্ট ট্র্যাকিংয়ের জন্য ডাটাবেজ
+        devices_collection = db["devices"]
         print("✅ MongoDB Connected Successfully")
     except Exception as e:
         print(f"❌ MongoDB Connection Error: {e}")
@@ -271,18 +270,15 @@ def check_device():
             return jsonify({"status": "banned"}), 200
 
     if devices_collection is not None:
-        # ডাটাবেজে আগে থেকে এই ডিভাইস ট্র্যাকিং আছে কিনা দেখা
         device_doc = devices_collection.find_one({"device_id": device_id})
 
         if not device_doc:
-            # প্রথমবার ডিভাইস রেজিস্টার
             devices_collection.insert_one({"device_id": device_id, "users": [user_id]})
             return jsonify({"status": "success"}), 200
         else:
             associated_users = device_doc.get("users", [])
             
             if user_id not in associated_users:
-                # নতুন ইউজার ওই ডিভাইসে লগইন করার চেষ্টা করছে (মাল্টি-অ্যাকাউন্ট ধরা পড়লো)
                 associated_users.append(user_id)
                 devices_collection.update_one({"device_id": device_id}, {"$set": {"users": associated_users}})
                 
