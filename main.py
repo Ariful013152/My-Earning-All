@@ -12,7 +12,8 @@ from pymongo import MongoClient
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
 
-PAYMENT_IMAGE_URL = "https://i.ibb.co/L8y2pNz/payment-banner.jpg"
+# 👇 আপনার চ্যানেলে উইথড্র পোস্টে যে ছবি দেখাবে সেটার Direct URL এখানে দিন
+PAYMENT_IMAGE_URL = os.environ.get("PAYMENT_IMAGE_URL", "https://i.ibb.co/L8y2pNz/payment-banner.jpg")
 
 ADMIN_IDS_RAW = os.environ.get("ADMIN_CHAT_IDS", "8414665404,5034445579")
 ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",") if admin_id.strip()]
@@ -26,17 +27,18 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 db = None
 users_collection = None
+devices_collection = None
 
 if MONGO_URI:
     try:
         mongo_client = MongoClient(MONGO_URI)
         db = mongo_client.get_database()
         users_collection = db["users"]
+        devices_collection = db["devices"] # মাল্টি অ্যাকাউন্ট ট্র্যাকিংয়ের জন্য ডাটাবেজ
         print("✅ MongoDB Connected Successfully")
     except Exception as e:
         print(f"❌ MongoDB Connection Error: {e}")
 
-device_db = {}
 banned_users = set()
 
 # -------- FAKE WITHDRAW AUTO SENDER --------
@@ -62,11 +64,12 @@ def send_fake_withdraw_loop():
 
             markup = InlineKeyboardMarkup()
             bot_username = bot.get_me().username
-            markup.add(InlineKeyboardButton("🤖 Open App & Earn", url=f"https://t.me/{bot_username}"))
+            markup.add(InlineKeyboardButton("🎂 Open App & Earn", url=f"https://t.me/{bot_username}"))
 
             try:
                 bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
-            except Exception:
+            except Exception as e:
+                print(f"Photo send failed, sending message: {e}")
                 bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
 
         except Exception as e:
@@ -88,7 +91,7 @@ def keep_alive():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = str(message.from_user.id)
-    first_name = message.from_user.first_name
+    first_name = message.from_user.first_name or "User"
     username = message.from_user.username or "No Username"
 
     if user_id in banned_users:
@@ -98,7 +101,8 @@ def send_welcome(message):
     if users_collection is not None:
         users_collection.update_one(
             {"user_id": user_id},
-            {"$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0, "first_name": first_name, "username": username}},
+            {"$set": {"first_name": first_name, "username": username},
+             "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0}},
             upsert=True
         )
 
@@ -183,10 +187,11 @@ def get_user_data():
             return jsonify({
                 "status": "success",
                 "balance": float(user_data.get("balance", 0.00)),
-                "total_refers": int(user_data.get("total_refers", 0))
+                "total_refers": int(user_data.get("total_refers", 0)),
+                "first_name": user_data.get("first_name", "User")
             }), 200
 
-    return jsonify({"status": "success", "balance": 0.00, "total_refers": 0}), 200
+    return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "first_name": "User"}), 200
 
 @app.route('/update-balance', methods=['POST'])
 def update_balance():
@@ -203,6 +208,7 @@ def update_balance():
         return jsonify({"status": "success"}), 200
     return jsonify({"status": "error"}), 400
 
+# -------- REAL USER WITHDRAWAL HANDLER WITH PHOTO --------
 @app.route('/request-withdraw', methods=['POST'])
 def request_withdraw():
     data = request.json
@@ -232,16 +238,18 @@ def request_withdraw():
         
         markup = InlineKeyboardMarkup()
         bot_username = bot.get_me().username
-        markup.add(InlineKeyboardButton("🤖 Open App & Earn", url=f"https://t.me/{bot_username}"))
+        markup.add(InlineKeyboardButton("🎂 Open App & Earn", url=f"https://t.me/{bot_username}"))
 
         try:
             bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
-        except Exception:
+        except Exception as e:
+            print(f"Real withdraw photo error: {e}")
             bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
 
         return jsonify({"status": "success"}), 200
     return jsonify({"status": "error"}), 500
 
+# -------- FIXED MULTI-ACCOUNT CHECK (Database Driven) --------
 @app.route('/check-device', methods=['POST'])
 def check_device():
     data = request.json
@@ -262,37 +270,46 @@ def check_device():
             banned_users.add(user_id)
             return jsonify({"status": "banned"}), 200
 
-    if device_id not in device_db:
-        device_db[device_id] = [user_id]
-        return jsonify({"status": "success"}), 200
+    if devices_collection is not None:
+        # ডাটাবেজে আগে থেকে এই ডিভাইস ট্র্যাকিং আছে কিনা দেখা
+        device_doc = devices_collection.find_one({"device_id": device_id})
 
-    if user_id in device_db[device_id]:
-        return jsonify({"status": "success"}), 200
+        if not device_doc:
+            # প্রথমবার ডিভাইস রেজিস্টার
+            devices_collection.insert_one({"device_id": device_id, "users": [user_id]})
+            return jsonify({"status": "success"}), 200
+        else:
+            associated_users = device_doc.get("users", [])
+            
+            if user_id not in associated_users:
+                # নতুন ইউজার ওই ডিভাইসে লগইন করার চেষ্টা করছে (মাল্টি-অ্যাকাউন্ট ধরা পড়লো)
+                associated_users.append(user_id)
+                devices_collection.update_one({"device_id": device_id}, {"$set": {"users": associated_users}})
+                
+                all_users_str = ", ".join(associated_users)
+                alert_msg = (
+                    f"<b>⚠️ মাল্টিপল অ্যাকাউন্ট সতর্কবার্তা!</b>\n\n"
+                    f"<b>ডিভাইস ID:</b> <code>{device_id}</code>\n"
+                    f"<b>নতুন ইউজার:</b> {first_name} (@{username})\n"
+                    f"<b>ইউজার ID:</b> <code>{user_id}</code>\n"
+                    f"<b>এই ডিভাইসের সকল ID:</b> <code>{all_users_str}</code>"
+                )
 
-    device_db[device_id].append(user_id)
-    all_users = ", ".join(device_db[device_id])
+                markup = InlineKeyboardMarkup()
+                markup.row(
+                    InlineKeyboardButton("🚫 Ban User", callback_data=f"ban_{user_id}"),
+                    InlineKeyboardButton("✅ Unban User", callback_data=f"unban_{user_id}")
+                )
 
-    alert_msg = (
-        f"<b>⚠️ মাল্টিপল অ্যাকাউন্ট সতর্কবার্তা!</b>\n\n"
-        f"<b>ডিভাইস ID:</b> <code>{device_id}</code>\n"
-        f"<b>নতুন ইউজার:</b> {first_name} (@{username})\n"
-        f"<b>ইউজার ID:</b> <code>{user_id}</code>\n"
-        f"<b>এই ডিভাইসের সকল ID:</b> <code>{all_users}</code>"
-    )
+                for admin_id in ADMIN_CHAT_IDS:
+                    try:
+                        bot.send_message(admin_id, alert_msg, parse_mode="HTML", reply_markup=markup)
+                    except Exception as e:
+                        print(f"Error sending admin alert: {e}")
 
-    markup = InlineKeyboardMarkup()
-    markup.row(
-        InlineKeyboardButton("🚫 Ban User", callback_data=f"ban_{user_id}"),
-        InlineKeyboardButton("✅ Unban User", callback_data=f"unban_{user_id}")
-    )
+                return jsonify({"status": "multi_account_detected"}), 200
 
-    for admin_id in ADMIN_CHAT_IDS:
-        try:
-            bot.send_message(admin_id, alert_msg, parse_mode="HTML", reply_markup=markup)
-        except Exception as e:
-            print(f"Error sending admin alert: {e}")
-
-    return jsonify({"status": "multi_account_detected"}), 200
+    return jsonify({"status": "success"}), 200
 
 if __name__ == '__main__':
     threading.Thread(target=run_bot, daemon=True).start()
