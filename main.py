@@ -11,7 +11,7 @@ from pymongo import MongoClient
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
-REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1"]  # জয়েন করার জন্য বাধ্যতামূলক চ্যানেলসমূহ
+REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1"]
 
 PAYMENT_IMAGE_URL = os.environ.get("PAYMENT_IMAGE_URL", "https://i.ibb.co/L8y2pNz/payment-banner.jpg")
 
@@ -21,7 +21,8 @@ ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",")
 MONGO_URI = os.environ.get("MONGO_URI")
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-app.onrender.com")
 
-app = Flask(__name__, template_folder='templates', static_folder='templates')
+# index.html ফাইলটি একই ফোল্ডারে থাকায় template_folder='.' দেওয়া হয়েছে
+app = Flask(__name__, template_folder='.', static_folder='.')
 CORS(app)
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -109,7 +110,7 @@ def send_welcome(message):
         bot.reply_to(message, "❌ <b>আপনি এই বট থেকে ব্যান হয়েছেন!</b>", parse_mode="HTML")
         return
 
-    # ১. ইউজার চ্যানেল ২টিতে জয়েন করেছে কিনা চেক করা
+    # ১. ইউজার চ্যানেল ২টি-তে জয়েন করেছে কিনা চেক
     if not check_user_joined_channels(message.from_user.id):
         markup = InlineKeyboardMarkup()
         markup.add(InlineKeyboardButton("📢 Channel 1", url="https://t.me/myearningall"))
@@ -154,7 +155,7 @@ def send_welcome(message):
             except Exception as e:
                 print(f"Referral update error: {e}")
 
-    # ভেরিফিকেশন সফল হলে আসল Open App বাটন দেখানো
+    # ভেরিফিকেশন সফল হলে Open App বাটন দেখানো
     welcome_text = "👋 <b>স্বাগতম!</b>\n\nআপনি সফলভাবে চ্যানেল ভেরিফাই করেছেন। আমাদের অ্যাপে ঢুকতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
     
     markup = InlineKeyboardMarkup()
@@ -169,8 +170,6 @@ def handle_check_join(call):
     if check_user_joined_channels(user_id):
         bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে!")
         bot.delete_message(call.message.chat.id, call.message.message_id)
-        
-        # পুনরায় start হ্যান্ডলার কল করা
         send_welcome(call.message)
     else:
         bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
