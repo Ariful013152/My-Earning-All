@@ -87,7 +87,7 @@ def keep_alive():
             except Exception as e:
                 print(f"⚠️ Ping Error: {e}")
 
-# -------- TELEGRAM BOT HANDLERS --------
+# -------- TELEGRAM BOT HANDLERS & REFERRAL --------
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = str(message.from_user.id)
@@ -97,6 +97,22 @@ def send_welcome(message):
     if user_id in banned_users:
         bot.reply_to(message, "❌ **আপনি এই বট থেকে ব্যান হয়েছেন!**", parse_mode="Markdown")
         return
+
+    # রেফার কোড ট্র্যাকিং ও পয়েন্ট যোগ
+    args = message.text.split()
+    referrer_id = args[1] if len(args) > 1 else None
+
+    if referrer_id and referrer_id != user_id:
+        if users_collection is not None:
+            try:
+                users_collection.update_one(
+                    {"user_id": str(referrer_id)},
+                    {"$inc": {"balance": 0.50, "total_refers": 1}},
+                    upsert=True
+                )
+                bot.send_message(referrer_id, f"🎉 আপনার রেফার লিংকে নতুন একজন জয়েন করায় আপনি <b>TK 0.50</b> বোনাস পেয়েছেন!", parse_mode="HTML")
+            except Exception as e:
+                print(f"Referral update error: {e}")
 
     welcome_text = "👋 **স্বাগতম!**\n\nআমাদের অ্যাপ থেকে আয় করতে নিচে থাকা **Open App** বাটনে চাপ দিন।"
     bot.reply_to(message, welcome_text, parse_mode="Markdown")
