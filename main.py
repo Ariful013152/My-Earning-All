@@ -149,6 +149,23 @@ def run_bot():
 def home():
     return render_template('index.html')
 
+@app.route('/get-user-data', methods=['GET'])
+def get_user_data():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({"status": "error", "message": "User ID required"}), 400
+
+    if users_collection is not None:
+        user_data = users_collection.find_one({"user_id": str(user_id)})
+        if user_data:
+            return jsonify({
+                "status": "success",
+                "balance": user_data.get("balance", 0.00),
+                "total_refers": user_data.get("total_refers", 0)
+            }), 200
+
+    return jsonify({"status": "success", "balance": 0.00, "total_refers": 0}), 200
+
 @app.route('/check-device', methods=['POST'])
 def check_device():
     data = request.json
@@ -159,6 +176,9 @@ def check_device():
     user_id = str(data.get('user_id'))
     first_name = data.get('first_name', 'Unknown')
     username = data.get('username', 'No Username')
+
+    if user_id in banned_users:
+        return jsonify({"status": "banned"}), 200
 
     if users_collection is not None:
         try:
@@ -177,9 +197,6 @@ def check_device():
         except Exception as e:
             print(f"Database save error: {e}")
 
-    if user_id in banned_users:
-        return jsonify({"status": "banned"}), 200
-
     if device_id not in device_db:
         device_db[device_id] = [user_id]
         return jsonify({"status": "success"}), 200
@@ -187,7 +204,7 @@ def check_device():
     if user_id in device_db[device_id]:
         return jsonify({"status": "success"}), 200
 
-    # একাধিক অ্যাকাউন্ট শনাক্ত হলে এডমিনকে ব্যান/আনব্যান বাটনসহ নোটিফিকেশন পাঠাবে
+    # একাধিক অ্যাকাউন্ট শনাক্ত হলে এডমিনকে নোটিফিকেশন পাঠাবে
     device_db[device_id].append(user_id)
     all_users = ", ".join(device_db[device_id])
 
