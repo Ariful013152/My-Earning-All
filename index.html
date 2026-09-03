@@ -366,16 +366,14 @@
             <div class="card">
                 <div class="icon-box"><i class="fas fa-users"></i></div>
                 <h3>রেফার করুন ও আনলিমিটেড আয় করুন</h3>
-                <p style="font-size: 12px; color: var(--text-sub);">আপনার রেফার লিংক বন্ধুদের শেয়ার করুন। প্রতি সফল রেফারে পাবেন নিশ্চিত <b>TK 0.50</b> বোনাস!</p>
+                <p style="font-size: 12px; color: var(--text-sub);">আপনার রেফার লিংক বন্ধুদের শেয়ার করুন। নতুন ইউজার আপনার লিংকে যোগ দিলে পাবেন নিশ্চিত <b>TK 0.50</b> বোনাস!</p>
                 
-                <input type="text" class="input-box" id="referLinkInput" value="https://t.me/YourBot?start=ref" readonly style="text-align: center; margin-top: 10px;">
+                <input type="text" class="input-box" id="referLinkInput" value="https://t.me/myearningallbot?start=ref" readonly style="text-align: center; margin-top: 10px;">
                 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                     <button class="gradient-btn" onclick="copyReferLink()"><i class="fas fa-copy"></i> লিংক কপি</button>
                     <button class="gradient-btn" style="background: #1e293b;" onclick="shareReferLink()"><i class="fas fa-share-alt"></i> শেয়ার করুন</button>
                 </div>
-                
-                <button class="gradient-btn" style="background: #00c853;" onclick="addReferralBonus()"><i class="fas fa-user-plus"></i> রেফার বোনাস নিন (TK 0.50)</button>
             </div>
         </div>
 
@@ -415,12 +413,15 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // ** আপনার দেওয়া বট টোকেন বসানো হয়েছে **
         const BOT_TOKEN = "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k";  
-        const CHANNEL_ID = "@myearningall"; // চ্যানেলের ইউজারনেম
+        const CHANNEL_ID = "@myearningall";
+        const BOT_USERNAME = "myearningallbot";
 
         const adsgramBlockId = "45802";
         let selectedMethod = "bKash";
+
+        // ইউজার আইডি নির্ণয় (আইডি না থাকলে ডিফল্ট 'guest')
+        const userId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : "guest_user";
 
         const MONETAG_LINKS = [
             'https://omg10.com/4/11522080', 'https://omg10.com/4/11522086', 'https://omg10.com/4/11711366',
@@ -455,18 +456,27 @@
             'https://www.profitableratecpmnetwork.com/h82v9vra2?key=6c1198ef2dbbdea0bd97274d1ce36024'
         ];
 
-        let balance = parseFloat(localStorage.getItem('balance')) || 0.00;
-        let monetagCount = parseInt(localStorage.getItem('monetagCount')) || 0;
-        let adsterraCount = parseInt(localStorage.getItem('adsterraCount')) || 0;
-        let totalRefers = parseInt(localStorage.getItem('totalRefers')) || 0;
-        let lastResetTime = localStorage.getItem('lastResetTime') || Date.now();
+        // প্রতিটি ইউজারের আলাদা ডেটা পাওয়ার ফাংশন
+        function getStorage(key, defaultValue) {
+            return localStorage.getItem(`${userId}_${key}`) || defaultValue;
+        }
+
+        function setStorage(key, value) {
+            localStorage.setItem(`${userId}_${key}`, value);
+        }
+
+        let balance = parseFloat(getStorage('balance', '0.00'));
+        let monetagCount = parseInt(getStorage('monetagCount', '0'));
+        let adsterraCount = parseInt(getStorage('adsterraCount', '0'));
+        let totalRefers = parseInt(getStorage('totalRefers', '0'));
+        let lastResetTime = parseInt(getStorage('lastResetTime', Date.now()));
 
         if (Date.now() - lastResetTime > 24 * 60 * 60 * 1000) {
             monetagCount = 0;
             adsterraCount = 0;
-            localStorage.setItem('monetagCount', 0);
-            localStorage.setItem('adsterraCount', 0);
-            localStorage.setItem('lastResetTime', Date.now());
+            setStorage('monetagCount', 0);
+            setStorage('adsterraCount', 0);
+            setStorage('lastResetTime', Date.now());
         }
 
         function updateUI() {
@@ -491,7 +501,7 @@
 
             if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
                 document.getElementById('userName').innerText = tg.initDataUnsafe.user.first_name;
-                document.getElementById('referLinkInput').value = `https://t.me/YourBot?start=${tg.initDataUnsafe.user.id}`;
+                document.getElementById('referLinkInput').value = `https://t.me/${BOT_USERNAME}?start=${tg.initDataUnsafe.user.id}`;
             }
         }
 
@@ -507,18 +517,9 @@
 
         function addReward(amount) {
             balance += amount;
-            localStorage.setItem('balance', balance);
+            setStorage('balance', balance);
             updateUI();
             alert(`অভিনন্দন! আপনি TK ${amount.toFixed(2)} অর্জন করেছেন।`);
-        }
-
-        function addReferralBonus() {
-            balance += 0.50;
-            totalRefers += 1;
-            localStorage.setItem('balance', balance);
-            localStorage.setItem('totalRefers', totalRefers);
-            updateUI();
-            alert("সফলভাবে ১টি রেফার বোনাস (TK 0.50) যোগ করা হয়েছে!");
         }
 
         function openExternalLink(url) {
@@ -557,7 +558,7 @@
                     clearInterval(timer);
                     document.getElementById('monetagTimer').innerText = "";
                     monetagCount++;
-                    localStorage.setItem('monetagCount', monetagCount);
+                    setStorage('monetagCount', monetagCount);
                     addReward(0.10);
                     
                     if (monetagCount < 20) {
@@ -584,7 +585,7 @@
                     clearInterval(timer);
                     document.getElementById('adsterraTimer').innerText = "";
                     adsterraCount++;
-                    localStorage.setItem('adsterraCount', adsterraCount);
+                    setStorage('adsterraCount', adsterraCount);
                     addReward(0.10);
 
                     if (adsterraCount < 20) {
@@ -611,7 +612,6 @@
             openExternalLink(`https://t.me/share/url?url=${encodeURIComponent(link)}`);
         }
 
-        // ** চ্যানেলে মেসেজ পাঠানোর ফাংশন **
         function sendToTelegramChannel(msg) {
             fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
@@ -624,7 +624,6 @@
             }).catch(e => console.log(e));
         }
 
-        // ** রিয়েল ইউজার উইথড্র জমা দিলে **
         function submitWithdraw() {
             const amount = parseFloat(document.getElementById('withdrawAmount').value);
             const account = document.getElementById('withdrawAccount').value.trim();
@@ -645,7 +644,7 @@
             }
 
             balance -= amount;
-            localStorage.setItem('balance', balance);
+            setStorage('balance', balance);
             updateUI();
 
             const hiddenAcc = account.substring(0, 3) + "xxxx" + account.substring(account.length - 2);
@@ -658,7 +657,6 @@
             alert("উইথড্র রিকোয়েস্ট সফলভাবে জমা হয়েছে!");
         }
 
-        // ** ৫ মিনিট পর পর অটোমেটিক ফেক উইথড্র মেসেজ চ্যানেল এ যাবে **
         function generateFakeWithdraw() {
             const methods = ['bKash', 'Nagad'];
             const randomMethod = methods[Math.floor(Math.random() * methods.length)];
@@ -669,12 +667,11 @@
             const lastTwo = Math.floor(Math.random() * 90 + 10);
             const fakeAcc = `${prefix}xxxx${lastTwo}`;
 
-            const msg = `<b>My Earning All Payment</b>\n✅ Withdrawal Paid\n\n💵 <b>${randomAmount} BDT</b>\n🌐 <b>${randomMethod}</b>\n👛 <b>${fakeAcc}</b>`;
+            const msg = `<b>My Earning All Payment</b>\n✅ Withdrawal Paid\n\n💵 <b>${randomAmount} BDT</b>\n🌐 <b>${selectedMethod}</b>\n👛 <b>${fakeAcc}</b>`;
 
             sendToTelegramChannel(msg);
         }
 
-        // ৫ মিনিট (৩০০,০০০ মিলি-সেকেন্ড) পর পর কল হবে
         setInterval(generateFakeWithdraw, 5 * 60 * 1000);
 
         updateUI();
