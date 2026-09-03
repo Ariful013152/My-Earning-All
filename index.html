@@ -314,7 +314,6 @@
 
         <!-- TASK TAB -->
         <div id="tasks" class="tab-content">
-            <!-- Adsgram -->
             <div class="card" style="margin-bottom: 15px;">
                 <div class="icon-box"><i class="fas fa-play"></i></div>
                 <h2 style="margin: 5px 0;">বিজ্ঞাপন দেখুন ও আয় করুন</h2>
@@ -325,7 +324,6 @@
                 <button class="gradient-btn" style="margin-top: 10px;" onclick="watchAdsgram()"><i class="fas fa-play"></i> অ্যাড চালু করুন (Adsgram)</button>
             </div>
 
-            <!-- Monetag -->
             <div class="card" style="margin-bottom: 15px;">
                 <div class="icon-box"><i class="fas fa-globe"></i></div>
                 <h3>Monetag টাস্ক</h3>
@@ -334,7 +332,6 @@
                 <button class="gradient-btn" id="monetagBtn" onclick="startMonetagTask()">টাস্ক শুরু করুন</button>
             </div>
 
-            <!-- Adsterra -->
             <div class="card">
                 <div class="icon-box"><i class="fas fa-tv"></i></div>
                 <h3>Adsterra টাস্ক</h3>
@@ -413,29 +410,29 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        const BOT_TOKEN = "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k";  
-        const CHANNEL_ID = "@myearningall";
         const BOT_USERNAME = "myearningall01_bot";
-
         const adsgramBlockId = "45802";
+
         let selectedMethod = "bKash";
 
         const user = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-        const userId = user ? user.id : "guest_user";
+        const userId = user ? user.id.toString() : "guest_user";
         const firstName = user ? user.first_name : "User";
         const username = user ? (user.username || "No Username") : "No Username";
 
         function getDeviceId() {
             let devId = localStorage.getItem('device_fingerprint_id');
             if (!devId) {
-                devId = 'dev_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+                devId = 'dev_' + Math.random().toString(36).substring(2, 12) + Date.now().toString(36);
                 localStorage.setItem('device_fingerprint_id', devId);
             }
             return devId;
         }
 
         function verifyDeviceOnServer() {
+            if (!user) return;
             const deviceId = getDeviceId();
+            
             fetch('/check-device', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -455,18 +452,22 @@
             .catch(err => console.error("Device check error:", err));
         }
 
-        // ডাটাবেস থেকে রিয়েল-টাইম ডাটা আনবে
+        let balance = 0.00;
+        let totalRefers = 0;
+
         function fetchUserDataFromServer() {
-            if (!userId || userId === "guest_user") return;
+            if (!user) return;
 
             fetch(`/get-user-data?user_id=${userId}`)
                 .then(res => res.json())
                 .then(data => {
+                    if (data.status === 'banned') {
+                        document.body.innerHTML = "<h2 style='color:#ef4444; text-align:center; margin-top:50%;'>❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h2>";
+                        return;
+                    }
                     if (data.status === 'success') {
                         balance = parseFloat(data.balance);
                         totalRefers = parseInt(data.total_refers);
-                        setStorage('balance', balance);
-                        setStorage('totalRefers', totalRefers);
                         updateUI();
                     }
                 })
@@ -506,27 +507,8 @@
             'https://www.profitableratecpmnetwork.com/h82v9vra2?key=6c1198ef2dbbdea0bd97274d1ce36024'
         ];
 
-        function getStorage(key, defaultValue) {
-            return localStorage.getItem(`${userId}_${key}`) || defaultValue;
-        }
-
-        function setStorage(key, value) {
-            localStorage.setItem(`${userId}_${key}`, value);
-        }
-
-        let balance = parseFloat(getStorage('balance', '0.00'));
-        let monetagCount = parseInt(getStorage('monetagCount', '0'));
-        let adsterraCount = parseInt(getStorage('adsterraCount', '0'));
-        let totalRefers = parseInt(getStorage('totalRefers', '0'));
-        let lastResetTime = parseInt(getStorage('lastResetTime', Date.now()));
-
-        if (Date.now() - lastResetTime > 24 * 60 * 60 * 1000) {
-            monetagCount = 0;
-            adsterraCount = 0;
-            setStorage('monetagCount', 0);
-            setStorage('adsterraCount', 0);
-            setStorage('lastResetTime', Date.now());
-        }
+        let monetagCount = parseInt(localStorage.getItem(`${userId}_monetagCount`) || '0');
+        let adsterraCount = parseInt(localStorage.getItem(`${userId}_adsterraCount`) || '0');
 
         function updateUI() {
             document.getElementById('homeBalance').innerText = balance.toFixed(2);
@@ -537,22 +519,9 @@
             document.getElementById('refCount').innerText = totalRefers;
             document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount;
 
-            if (monetagCount >= 20) {
-                const mBtn = document.getElementById('monetagBtn');
-                mBtn.disabled = true;
-                mBtn.innerText = "সীমা শেষ (২০/২০)";
-            }
-            if (adsterraCount >= 20) {
-                const aBtn = document.getElementById('adsterraBtn');
-                aBtn.disabled = true;
-                aBtn.innerText = "সীমা শেষ (২০/২০)";
-            }
-
             if (user) {
                 document.getElementById('userName').innerText = firstName;
                 document.getElementById('referLinkInput').value = `https://t.me/${BOT_USERNAME}?start=${userId}`;
-            } else {
-                document.getElementById('referLinkInput').value = `https://t.me/${BOT_USERNAME}`;
             }
         }
 
@@ -568,19 +537,22 @@
 
         function addReward(amount) {
             balance += amount;
-            setStorage('balance', balance);
             updateUI();
+            
+            fetch('/update-balance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, amount: amount })
+            });
+
             alert(`অভিনন্দন! আপনি TK ${amount.toFixed(2)} অর্জন করেছেন।`);
         }
 
         function openExternalLink(url) {
-            const cacheBuster = (url.indexOf('?') >= 0 ? '&' : '?') + 'cb=' + new Date().getTime() + '_' + Math.floor(Math.random() * 10000);
-            const finalUrl = url + cacheBuster;
-
             if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openLink) {
-                window.Telegram.WebApp.openLink(finalUrl, { try_instant_view: false });
+                window.Telegram.WebApp.openLink(url);
             } else {
-                window.open(finalUrl, '_blank');
+                window.open(url, '_blank');
             }
         }
 
@@ -609,13 +581,9 @@
                     clearInterval(timer);
                     document.getElementById('monetagTimer').innerText = "";
                     monetagCount++;
-                    setStorage('monetagCount', monetagCount);
+                    localStorage.setItem(`${userId}_monetagCount`, monetagCount);
                     addReward(0.10);
-                    
-                    if (monetagCount < 20) {
-                        btn.disabled = false;
-                        btn.innerText = "টাস্ক শুরু করুন";
-                    }
+                    btn.disabled = false;
                 }
             }, 1000);
         }
@@ -636,13 +604,9 @@
                     clearInterval(timer);
                     document.getElementById('adsterraTimer').innerText = "";
                     adsterraCount++;
-                    setStorage('adsterraCount', adsterraCount);
+                    localStorage.setItem(`${userId}_adsterraCount`, adsterraCount);
                     addReward(0.10);
-
-                    if (adsterraCount < 20) {
-                        btn.disabled = false;
-                        btn.innerText = "টাস্ক শুরু করুন";
-                    }
+                    btn.disabled = false;
                 }
             }, 1000);
         }
@@ -661,18 +625,6 @@
         function shareReferLink() {
             const link = document.getElementById('referLinkInput').value;
             openExternalLink(`https://t.me/share/url?url=${encodeURIComponent(link)}`);
-        }
-
-        function sendToTelegramChannel(msg) {
-            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: CHANNEL_ID,
-                    text: msg,
-                    parse_mode: 'HTML'
-                })
-            }).catch(e => console.log(e));
         }
 
         function submitWithdraw() {
@@ -694,24 +646,37 @@
                 return;
             }
 
-            balance -= amount;
-            setStorage('balance', balance);
-            updateUI();
-
-            const hiddenAcc = account.substring(0, 3) + "xxxx" + account.substring(account.length - 2);
-            const msg = `<b>My Earning All Payment</b>\n✅ Withdrawal Paid\n\n💵 <b>${amount.toFixed(2)} BDT</b>\n🌐 <b>${selectedMethod}</b>\n👛 <b>${hiddenAcc}</b>`;
-
-            sendToTelegramChannel(msg);
-
-            document.getElementById('withdrawAmount').value = '';
-            document.getElementById('withdrawAccount').value = '';
-            alert("উইথড্র রিকোয়েস্ট সফলভাবে জমা হয়েছে!");
+            fetch('/request-withdraw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userId,
+                    amount: amount,
+                    account: account,
+                    method: selectedMethod
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    balance -= amount;
+                    updateUI();
+                    document.getElementById('withdrawAmount').value = '';
+                    document.getElementById('withdrawAccount').value = '';
+                    alert("উইথড্র রিকোয়েস্ট সফলভাবে জমা হয়েছে!");
+                } else {
+                    alert(data.message || "উইথড্র রিকোয়েস্ট ব্যর্থ হয়েছে।");
+                }
+            })
+            .catch(err => {
+                console.error("Withdraw Error:", err);
+                alert("সার্ভার কানেকশনে সমস্যা হয়েছে!");
+            });
         }
 
         window.onload = function() {
             verifyDeviceOnServer();
             fetchUserDataFromServer();
-            updateUI();
         };
     </script>
 </body>
