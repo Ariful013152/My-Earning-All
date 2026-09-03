@@ -6,7 +6,6 @@
     <title>My Earning All</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
-    <!-- FingerprintJS CDN (মাল্টি-অ্যাকাউন্ট নিখুঁতভাবে ধরার জন্য) -->
     <script src="https://openfpcdn.io/fingerprintjs/v3"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -397,7 +396,6 @@
         const adsgramBlockId = "45802";
         let selectedMethod = "bKash";
 
-        // Fetch Telegram Info directly
         const tgUser = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
         let userId = tgUser ? tgUser.id.toString() : localStorage.getItem('temp_user_id');
 
@@ -445,7 +443,6 @@
         let monetagCount = parseInt(localStorage.getItem(`${userId}_monetagCount`) || '0');
         let adsterraCount = parseInt(localStorage.getItem(`${userId}_adsterraCount`) || '0');
 
-        // FingerprintJS ব্যবহার করে উন্নত ডিভাইস আইডি জেনারেটর
         async function getDeviceId() {
             let devId = localStorage.getItem('device_fingerprint_id');
             if (!devId) {
