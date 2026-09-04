@@ -5,7 +5,7 @@ import datetime
 import requests
 import threading
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ForceReply
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from pymongo import MongoClient
@@ -145,7 +145,6 @@ if bot:
         if users_collection is not None:
             existing_user = users_collection.find_one({"user_id": user_id})
             
-            # ইউজার ডাটাবেজে না থাকলে সে নতুন
             if not existing_user:
                 try:
                     new_user_msg = (
@@ -225,7 +224,7 @@ if bot:
                                   chat_id=call.message.chat.id, 
                                   message_id=call.message.message_id, parse_mode="HTML")
 
-    # -------- ADMIN PANEL & COMMAND HANDLERS --------
+    # -------- ADMIN PANEL & FORCE REPLY HANDLERS --------
     @bot.message_handler(commands=['admin'])
     def handle_admin_panel(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
@@ -243,7 +242,7 @@ if bot:
         
         bot.send_message(
             message.chat.id, 
-            "<b>⚙️ অ্যাডমিন কন্ট্রোল প্যানেল</b>\n\nনিচের বাটনগুলো চাপুন অথবা নির্দিষ্ট কমান্ড টাইপ করুন:", 
+            "<b>⚙️ অ্যাডমিন কন্ট্রোল প্যানেল</b>\n\nনিচের যেকোনো বাটনে ক্লিক করে সরাসরি কাজ সম্পন্ন করুন:", 
             parse_mode="HTML", 
             reply_markup=markup
         )
@@ -255,13 +254,31 @@ if bot:
             return
 
         if call.data == "admin_ban_prompt":
-            bot.send_message(call.message.chat.id, "🚫 ইউজার ব্যান করতে টাইপ করুন:\n<code>/ban USER_ID</code>", parse_mode="HTML")
+            msg = bot.send_message(
+                call.message.chat.id, 
+                "🚫 <b>যাকে ব্যান করতে চান তার USER ID লিখে এই মেসেজে রিপ্লাই দিন:</b>", 
+                parse_mode="HTML", 
+                reply_markup=ForceReply(selective=True)
+            )
+            bot.register_next_step_handler(msg, process_ban_input)
         
         elif call.data == "admin_unban_prompt":
-            bot.send_message(call.message.chat.id, "✅ ইউজার আনব্যান করতে টাইপ করুন:\n<code>/unban USER_ID</code>", parse_mode="HTML")
+            msg = bot.send_message(
+                call.message.chat.id, 
+                "✅ <b>যাকে আনব্যান করতে চান তার USER ID লিখে এই মেসেজে রিপ্লাই দিন:</b>", 
+                parse_mode="HTML", 
+                reply_markup=ForceReply(selective=True)
+            )
+            bot.register_next_step_handler(msg, process_unban_input)
 
         elif call.data == "admin_addbal_prompt":
-            bot.send_message(call.message.chat.id, "➕ ব্যালেন্স যোগ করতে টাইপ করুন:\n<code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+            msg = bot.send_message(
+                call.message.chat.id, 
+                "➕ <b>USER_ID এবং AMOUNT স্পেস দিয়ে লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 50</code>)", 
+                parse_mode="HTML", 
+                reply_markup=ForceReply(selective=True)
+            )
+            bot.register_next_step_handler(msg, process_addbal_input)
             
         elif call.data == "admin_stats":
             total_banned = len(banned_users)
@@ -274,56 +291,120 @@ if bot:
             bot.send_message(call.message.chat.id, msg, parse_mode="HTML")
             
         elif call.data == "admin_broadcast_prompt":
-            bot.send_message(call.message.chat.id, "📢 সকল ইউজারকে নোটিফিকেশন পাঠাতে টাইপ করুন:\n<code>/broadcast আপনার মেসেজ</code>", parse_mode="HTML")
+            msg = bot.send_message(
+                call.message.chat.id, 
+                "📢 <b>সকল ইউজারের কাছে যে মেসেজটি পাঠাতে চান তা লিখে রিপ্লাই দিন:</b>", 
+                parse_mode="HTML", 
+                reply_markup=ForceReply(selective=True)
+            )
+            bot.register_next_step_handler(msg, process_broadcast_input)
             
         bot.answer_callback_query(call.id)
 
+    # -------- INCOMING REPLY PROCESSORS --------
+    def process_ban_input(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        target_user_id = message.text.strip()
+        banned_users.add(target_user_id)
+        if users_collection is not None:
+            users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
+        bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
+
+    def process_unban_input(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        target_user_id = message.text.strip()
+        banned_users.discard(target_user_id)
+        if users_collection is not None:
+            users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
+        bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
+
+    def process_addbal_input(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
+            return
+        target_user_id = args[0].strip()
+        try:
+            amount = float(args[1].strip())
+        except ValueError:
+            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
+            return
+
+        if users_collection is not None:
+            users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": amount}}, upsert=True)
+            bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর অ্যাকাউন্টে ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
+            try:
+                bot.send_message(target_user_id, f"🎉 অ্যাডমিন আপনার ওয়ালেটে <b>৳{amount:.2f}</b> যুক্ত করেছেন!", parse_mode="HTML")
+            except Exception:
+                pass
+
+    def process_broadcast_input(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        text_to_send = message.text.strip()
+        if not text_to_send:
+            bot.reply_to(message, "⚠️ খালি মেসেজ পাঠানো যাবে না।")
+            return
+        
+        if users_collection is not None:
+            all_users = list(users_collection.find({}, {"user_id": 1}))
+            success_count = 0
+            
+            status_msg = bot.reply_to(message, "⏳ ব্রডকাস্ট মেসেজ পাঠানো শুরু হয়েছে...")
+            
+            for user in all_users:
+                u_id = user.get("user_id")
+                if u_id:
+                    try:
+                        bot.send_message(u_id, f"📢 <b>অ্যাডমিন নোটিশ:</b>\n\n{text_to_send}", parse_mode="HTML")
+                        success_count += 1
+                        time.sleep(0.05)
+                    except Exception:
+                        pass
+            
+            bot.edit_message_text(f"✅ <b>ব্রডকাস্ট সম্পন্ন!</b>\n\nমোট <b>{success_count}</b> জন ইউজারের কাছে মেসেজ পৌঁছেছে।", chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="HTML")
+
+    # -------- DIRECT BACKWARD COMPATIBLE COMMAND HANDLERS --------
     @bot.message_handler(commands=['unban'])
     def handle_unban_command(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
-        
         args = message.text.split()
         if len(args) < 2:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/unban USER_ID</code>", parse_mode="HTML")
             return
-        
         target_user_id = args[1].strip()
         banned_users.discard(target_user_id)
-        
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
-            
         bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
 
     @bot.message_handler(commands=['ban'])
     def handle_ban_command(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
-        
         args = message.text.split()
         if len(args) < 2:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/ban USER_ID</code>", parse_mode="HTML")
             return
-        
         target_user_id = args[1].strip()
         banned_users.add(target_user_id)
-        
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
-            
         bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
 
     @bot.message_handler(commands=['addbalance'])
     def handle_addbalance_command(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
-        
         args = message.text.split()
         if len(args) < 3:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
             return
-        
         target_user_id = args[1].strip()
         try:
             amount = float(args[2].strip())
@@ -343,28 +424,23 @@ if bot:
     def handle_broadcast_command(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
-        
         text_to_send = message.text.replace("/broadcast", "").strip()
         if not text_to_send:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/broadcast আপনার মেসেজ</code>", parse_mode="HTML")
             return
-        
         if users_collection is not None:
             all_users = list(users_collection.find({}, {"user_id": 1}))
             success_count = 0
-            
             status_msg = bot.reply_to(message, "⏳ ব্রডকাস্ট মেসেজ পাঠানো শুরু হয়েছে...")
-            
             for user in all_users:
                 u_id = user.get("user_id")
                 if u_id:
                     try:
                         bot.send_message(u_id, f"📢 <b>অ্যাডমিন নোটিশ:</b>\n\n{text_to_send}", parse_mode="HTML")
                         success_count += 1
-                        time.sleep(0.05) # Rate limit handler
+                        time.sleep(0.05)
                     except Exception:
                         pass
-            
             bot.edit_message_text(f"✅ <b>ব্রডকাস্ট সম্পন্ন!</b>\n\nমোট <b>{success_count}</b> জন ইউজারের কাছে মেসেজ পৌঁছেছে।", chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="HTML")
 
 def run_bot():
@@ -409,7 +485,6 @@ def get_user_data():
             if user_data.get("banned", False):
                 return jsonify({"status": "banned"}), 200
             
-            # Daily reset verification
             today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
             if user_data.get("last_reset_date") != today_str:
                 users_collection.update_one(
@@ -439,7 +514,7 @@ def verify_channel_task():
     data = request.json
     user_id = data.get('user_id')
     channel = data.get('channel')
-    reward = 0.50  # Fixed server side amount
+    reward = 0.50
 
     if not user_id or not channel:
         return jsonify({"status": "error", "message": "Invalid parameters"}), 400
@@ -471,12 +546,11 @@ def verify_channel_task():
 
     return jsonify({"status": "error", "message": "Database connection error"}), 500
 
-# Secure Ad Task Reward Verification Endpoint
 @app.route('/verify-ad-task', methods=['POST'])
 def verify_ad_task():
     data = request.json or {}
     user_id = str(data.get('user_id'))
-    task_type = str(data.get('task_type'))  # 'monetag' or 'adsterra'
+    task_type = str(data.get('task_type'))
 
     if not user_id or task_type not in ['monetag', 'adsterra']:
         return jsonify({"status": "error", "message": "Invalid task parameters"}), 400
@@ -500,7 +574,7 @@ def verify_ad_task():
         monetag_count = user_data.get("monetag_count", 0)
         adsterra_count = user_data.get("adsterra_count", 0)
 
-    reward = 0.10  # Server side fixed reward rate
+    reward = 0.10
 
     if task_type == 'monetag':
         if monetag_count >= 20:
