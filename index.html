@@ -310,6 +310,23 @@
             align-items: center;
             gap: 4px;
         }
+
+        /* Withdraw History Styling */
+        .history-card {
+            background: #090d16;
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-top: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            text-align: left;
+        }
+        .status-pending { color: #f59e0b; font-weight: bold; }
+        .status-completed { color: #10b981; font-weight: bold; }
+        .status-rejected { color: #ef4444; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -482,6 +499,14 @@
 
                 <button class="gradient-btn" onclick="submitWithdraw()">উইথড্র রিকোয়েস্ট পাঠান</button>
             </div>
+
+            <!-- WITHDRAW HISTORY SECTION -->
+            <div style="margin-top: 16px;">
+                <h4 style="margin: 0 0 8px; font-size: 13px; color: var(--text-sub);">📋 উইথড্র হিস্ট্রি</h4>
+                <div id="withdrawHistoryContainer">
+                    <div style="font-size: 12px; color: var(--text-sub); text-align: center;">কোনো রেকর্ড পাওয়া যায়নি।</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -551,6 +576,7 @@
         let adsterraCount = 0;
         let balance = 0.00;
         let totalRefers = 0;
+        let withdrawsHistory = [];
 
         async function getDeviceId() {
             let devId = localStorage.getItem('device_fingerprint_id');
@@ -623,6 +649,7 @@
                         totalRefers = parseInt(data.total_refers);
                         monetagCount = parseInt(data.monetag_count || 0);
                         adsterraCount = parseInt(data.adsterra_count || 0);
+                        withdrawsHistory = data.withdraws || [];
 
                         if (data.first_name && data.first_name !== "User") {
                             firstName = data.first_name;
@@ -634,6 +661,7 @@
                         if (completedTasks.includes('@allinoneg2')) markTaskCompleted('action-ch-3');
 
                         updateUI();
+                        renderWithdrawHistory();
                     }
                 })
                 .catch(err => console.error("Error fetching user data:", err));
@@ -655,6 +683,40 @@
             document.getElementById('refCount').innerText = totalRefers;
             document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount;
             document.getElementById('userName').innerText = firstName;
+        }
+
+        function renderWithdrawHistory() {
+            const container = document.getElementById('withdrawHistoryContainer');
+            if (!withdrawsHistory || withdrawsHistory.length === 0) {
+                container.innerHTML = `<div style="font-size: 12px; color: var(--text-sub); text-align: center;">কোনো রেকর্ড পাওয়া যায়নি।</div>`;
+                return;
+            }
+
+            let html = '';
+            withdrawsHistory.reverse().forEach(item => {
+                let statusBadge = '';
+                if (item.status === 'pending') {
+                    statusBadge = `<span class="status-pending">Pending ⏳</span>`;
+                } else if (item.status === 'completed') {
+                    statusBadge = `<span class="status-completed">Completed ✅</span>`;
+                } else if (item.status === 'rejected') {
+                    statusBadge = `<span class="status-rejected">Rejected ❌</span>`;
+                }
+
+                html += `
+                    <div class="history-card">
+                        <div>
+                            <b>${item.method} (${item.account})</b><br>
+                            <small style="color:var(--text-sub);">${item.date || ''}</small>
+                        </div>
+                        <div style="text-align: right;">
+                            <b>৳${parseFloat(item.amount).toFixed(2)}</b><br>
+                            ${statusBadge}
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
         }
 
         function switchTab(tabId, index) {
@@ -831,11 +893,10 @@
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'success') {
-                    balance -= amount;
-                    updateUI();
                     document.getElementById('withdrawAmount').value = '';
                     document.getElementById('withdrawAccount').value = '';
-                    alert("উইথড্র রিকোয়েস্ট সফলভাবে জমা হয়েছে!");
+                    alert("আপনার উইথড্র রিকোয়েস্ট পেন্ডিং রয়েছে ⏳। অ্যাডমিন অ্যাপ্রুভ করলে পেমেন্ট পেয়ে যাবেন!");
+                    fetchUserDataFromServer();
                 } else {
                     alert(data.message || "উইথড্র রিকোয়েস্ট ব্যর্থ হয়েছে।");
                 }
