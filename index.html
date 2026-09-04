@@ -247,6 +247,17 @@
         .nav-item.active {
             color: var(--accent-cyan);
         }
+
+        .ch-task-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #090d16;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
@@ -310,6 +321,46 @@
 
         <!-- TASK TAB -->
         <div id="tasks" class="tab-content">
+            <!-- Telegram Channel Tasks -->
+            <div class="card" style="margin-bottom: 15px;">
+                <div class="icon-box"><i class="fab fa-telegram"></i></div>
+                <h3 style="margin: 5px 0;">Telegram Channel Tasks</h3>
+                <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 15px;">চ্যানেলে জয়েন করে Confirm করুন, প্রতিটির জন্য পাবেন ৳০.৫০</p>
+                
+                <div class="ch-task-item">
+                    <div>
+                        <b>My Earning All Payment</b><br>
+                        <small style="color:#22c55e;">+ TK 0.50</small>
+                    </div>
+                    <div>
+                        <a href="https://t.me/myearningall" target="_blank" style="background:#3b82f6; color:#fff; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; margin-right:5px;">Join</a>
+                        <button onclick="claimChannelReward('@myearningall')" style="background:#22c55e; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">Confirm</button>
+                    </div>
+                </div>
+
+                <div class="ch-task-item">
+                    <div>
+                        <b>ALL IN ONE 100</b><br>
+                        <small style="color:#22c55e;">+ TK 0.50</small>
+                    </div>
+                    <div>
+                        <a href="https://t.me/allinoneg1" target="_blank" style="background:#3b82f6; color:#fff; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; margin-right:5px;">Join</a>
+                        <button onclick="claimChannelReward('@allinoneg1')" style="background:#22c55e; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">Confirm</button>
+                    </div>
+                </div>
+
+                <div class="ch-task-item" style="margin-bottom: 0;">
+                    <div>
+                        <b>All In One G2</b><br>
+                        <small style="color:#22c55e;">+ TK 0.50</small>
+                    </div>
+                    <div>
+                        <a href="https://t.me/allinoneg2" target="_blank" style="background:#3b82f6; color:#fff; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; margin-right:5px;">Join</a>
+                        <button onclick="claimChannelReward('@allinoneg2')" style="background:#22c55e; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">Confirm</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="card" style="margin-bottom: 15px;">
                 <div class="icon-box"><i class="fas fa-play"></i></div>
                 <h2 style="margin: 5px 0;">Adsgram অ্যাড</h2>
@@ -505,6 +556,13 @@
                         document.body.innerHTML = "<h2 style='color:#ef4444; text-align:center; margin-top:50%;'>❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h2>";
                         return;
                     }
+                    if (data.status === 'not_joined') {
+                        alert("⚠️ আপনি আমাদের চ্যানেল থেকে বের হয়ে গেছেন! অনুগ্রহ করে টেলিগ্রাম বটের মাধ্যমে আবার ভেরিফাই করুন।");
+                        if (window.Telegram && window.Telegram.WebApp) {
+                            window.Telegram.WebApp.close();
+                        }
+                        return;
+                    }
                     if (data.status === 'success') {
                         balance = parseFloat(data.balance);
                         totalRefers = parseInt(data.total_refers);
@@ -549,6 +607,29 @@
             });
 
             alert(`অভিনন্দন! আপনি TK ${amount.toFixed(2)} অর্জন করেছেন।`);
+        }
+
+        async function claimChannelReward(channelHandle) {
+            try {
+                const response = await fetch('/verify-channel-task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        channel: channelHandle,
+                        reward: 0.50
+                    })
+                });
+
+                const data = await response.json();
+                alert(data.message);
+                
+                if (data.status === 'success') {
+                    fetchUserDataFromServer();
+                }
+            } catch (error) {
+                alert("ভেরিফিকেশনে ত্রুটি হয়েছে, অনুগ্রহ করে পুনরায় চেষ্টা করুন!");
+            }
         }
 
         function openExternalLink(url) {
