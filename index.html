@@ -77,18 +77,6 @@
             font-weight: bold;
         }
 
-        .notif-btn {
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--accent-cyan);
-        }
-
         .container {
             padding: 10px 18px 90px;
             flex: 1;
@@ -270,7 +258,6 @@
                 <span class="badge">BRONZE</span>
             </div>
         </div>
-        <div class="notif-btn"><i class="fas fa-bell"></i></div>
     </div>
 
     <div class="container">
@@ -321,7 +308,6 @@
 
         <!-- TASK TAB -->
         <div id="tasks" class="tab-content">
-            <!-- Telegram Channel Tasks -->
             <div class="card" style="margin-bottom: 15px;">
                 <div class="icon-box"><i class="fab fa-telegram"></i></div>
                 <h3 style="margin: 5px 0;">Telegram Channel Tasks</h3>
@@ -439,15 +425,17 @@
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
+        const tg = window.Telegram ? window.Telegram.WebApp : null;
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
 
         let botUsername = "myearningall01_bot";
         const adsgramBlockId = "45802";
         let selectedMethod = "bKash";
 
-        const tgUser = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+        const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
         let userId = tgUser ? tgUser.id.toString() : localStorage.getItem('temp_user_id');
 
         if (!userId) {
