@@ -11,7 +11,9 @@ from pymongo import MongoClient
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
-REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1"]
+
+# ৩টি চ্যানেল বাধ্যতামূলক করা হলো
+REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 
 PAYMENT_IMAGE_URL = os.environ.get("PAYMENT_IMAGE_URL", "https://i.ibb.co/L8y2pNz/payment-banner.jpg")
 
@@ -21,7 +23,6 @@ ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",")
 MONGO_URI = os.environ.get("MONGO_URI")
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-app.onrender.com")
 
-# index.html ফাইলটি একই ফোল্ডারে থাকায় template_folder='.' দেওয়া হয়েছে
 app = Flask(__name__, template_folder='.', static_folder='.')
 CORS(app)
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -110,21 +111,22 @@ def send_welcome(message):
         bot.reply_to(message, "❌ <b>আপনি এই বট থেকে ব্যান হয়েছেন!</b>", parse_mode="HTML")
         return
 
-    # ১. ইউজার চ্যানেল ২টি-তে জয়েন করেছে কিনা চেক
+    # ১. ইউজার ৩টি চ্যানেলে জয়েন আছে কিনা চেক
     if not check_user_joined_channels(message.from_user.id):
         markup = InlineKeyboardMarkup()
         markup.add(InlineKeyboardButton("📢 Channel 1", url="https://t.me/myearningall"))
         markup.add(InlineKeyboardButton("📢 Channel 2", url="https://t.me/allinoneg1"))
+        markup.add(InlineKeyboardButton("📢 Channel 3", url="https://t.me/allinoneg2"))
         markup.add(InlineKeyboardButton("✅ Check Verification", callback_data="check_join"))
         
         join_msg = (
-            "⚠️ <b>বট ব্যবহার করতে আপনাকে অবশ্যই আমাদের চ্যানেল ২টি-তে জয়েন করতে হবে!</b>\n\n"
-            "নিচের ২টি চ্যানেলে জয়েন করে <b>Check Verification</b> বাটনে ক্লিক করুন।"
+            "⚠️ <b>বট ব্যবহার করতে আপনাকে অবশ্যই আমাদের ৩টি চ্যানেলেই জয়েন করতে হবে!</b>\n\n"
+            "নিচের ৩টি চ্যানেলে জয়েন করে <b>Check Verification</b> বাটনে ক্লিক করুন।"
         )
         bot.reply_to(message, join_msg, parse_mode="HTML", reply_markup=markup)
         return
 
-    # চ্যানেল জয়েন থাকলে ডাটাবেজ আপডেট
+    # ডাটাবেজ আপডেট
     if users_collection is not None:
         users_collection.update_one(
             {"user_id": user_id},
@@ -156,7 +158,7 @@ def send_welcome(message):
                 print(f"Referral update error: {e}")
 
     # ভেরিফিকেশন সফল হলে Open App বাটন দেখানো
-    welcome_text = "👋 <b>স্বাগতম!</b>\n\nআপনি সফলভাবে চ্যানেল ভেরিফাই করেছেন। আমাদের অ্যাপে ঢুকতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
+    welcome_text = "👋 <b>স্বাগতম!</b>\n\nআপনি সকল চ্যানেলে জয়েন করেছেন। আমাদের অ্যাপে ঢুকতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
     
     markup = InlineKeyboardMarkup()
     web_app_btn = InlineKeyboardButton("🚀 Open App 🚀", web_app=WebAppInfo(url=RENDER_EXTERNAL_URL))
@@ -223,6 +225,13 @@ def get_user_data():
     if not user_id:
         return jsonify({"status": "error", "message": "User ID required"}), 400
 
+    # ইউজারের চ্যানেল স্ট্যাটাস চেক করা
+    try:
+        if not check_user_joined_channels(int(user_id)):
+            return jsonify({"status": "not_joined", "message": "আপনি সকল চ্যানেলে জয়েন নেই!"}), 200
+    except Exception:
+        pass
+
     if users_collection is not None:
         user_data = users_collection.find_one({"user_id": str(user_id)})
         if user_data:
@@ -236,6 +245,43 @@ def get_user_data():
             }), 200
 
     return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "first_name": "User"}), 200
+
+@app.route('/verify-channel-task', methods=['POST'])
+def verify_channel_task():
+    data = request.json
+    user_id = data.get('user_id')
+    channel = data.get('channel')
+    reward = float(data.get('reward', 0.50))
+
+    if not user_id or not channel:
+        return jsonify({"status": "error", "message": "Invalid parameters"}), 400
+
+    if users_collection is not None:
+        user = users_collection.find_one({"user_id": str(user_id)})
+        completed_tasks = user.get("completed_channel_tasks", []) if user else []
+
+        if channel in completed_tasks:
+            return jsonify({"status": "already_completed", "message": "আপনি এই টাস্কটি আগেই সম্পূর্ণ করেছেন!"}), 200
+
+        try:
+            member = bot.get_chat_member(channel, int(user_id))
+            if member.status in ['left', 'kicked']:
+                return jsonify({"status": "not_joined", "message": "আপনি এখনো চ্যানেলে জয়েন করেননি!"}), 200
+        except Exception as e:
+            print(f"Task verification error: {e}")
+            return jsonify({"status": "error", "message": "ভেরিফিকেশনে সমস্যা হয়েছে! বটকে অ্যাডমিন করা আছে কিনা যাচাই করুন।"}), 500
+
+        users_collection.update_one(
+            {"user_id": str(user_id)},
+            {
+                "$inc": {"balance": reward},
+                "$push": {"completed_channel_tasks": channel}
+            },
+            upsert=True
+        )
+        return jsonify({"status": "success", "message": f"🎉 সফল হয়েছে! ৳{reward:.2f} ব্যালেন্সে যোগ করা হয়েছে।"}), 200
+
+    return jsonify({"status": "error", "message": "Database connection error"}), 500
 
 @app.route('/update-balance', methods=['POST'])
 def update_balance():
