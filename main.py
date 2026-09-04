@@ -18,7 +18,7 @@ REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 PAYMENT_IMAGE_URL = os.environ.get("PAYMENT_IMAGE_URL", "https://i.ibb.co/L8y2pNz/payment-banner.jpg")
 
 ADMIN_IDS_RAW = os.environ.get("ADMIN_CHAT_IDS", "8414665404,5034445579")
-ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",") if admin_id.strip()]
+ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",") if admin_id.strip().isdigit()]
 
 MONGO_URI = os.environ.get("MONGO_URI")
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-app.onrender.com")
@@ -76,18 +76,19 @@ def send_fake_withdraw_loop():
             msg = (
                 f"<b>My Earning All Payment</b>\n"
                 f"✅ Withdrawal Paid\n\n"
-                f"💵 <b>{random_amount} BDT</b>\n"
+                f"💵 <b>{random_amount:.2f} BDT</b>\n"
                 f"🌐 <b>{selected_method}</b>\n"
                 f"👛 <b>{fake_acc}</b>"
             )
 
             markup = InlineKeyboardMarkup()
-            bot_username = bot.get_me().username
+            bot_info = bot.get_me()
+            bot_username = bot_info.username if bot_info else "myearningall01_bot"
             markup.add(InlineKeyboardButton("Open App & Earn", url=f"https://t.me/{bot_username}"))
 
             try:
                 bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
-            except Exception as e:
+            except Exception:
                 bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
 
         except Exception as e:
@@ -136,7 +137,7 @@ def send_welcome(message):
         users_collection.update_one(
             {"user_id": user_id},
             {"$set": {"first_name": first_name, "username": username},
-             "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0}},
+             "$setOnInsert": {"balance": 0.0, "total_refers": 0}},
             upsert=True
         )
 
@@ -158,7 +159,10 @@ def send_welcome(message):
                         {"user_id": user_id},
                         {"$set": {"referred_by": str(referrer_id)}}
                     )
-                    bot.send_message(referrer_id, f"🎉 আপনার রেফার লিংকে নতুন একজন জয়েন করায় আপনি <b>TK 0.50</b> বোনাস পেয়েছেন!", parse_mode="HTML")
+                    try:
+                        bot.send_message(referrer_id, f"🎉 আপনার রেফার লিংকে নতুন একজন জয়েন করায় আপনি <b>TK 0.50</b> বোনাস পেয়েছেন!", parse_mode="HTML")
+                    except Exception:
+                        pass
             except Exception as e:
                 print(f"Referral update error: {e}")
 
@@ -176,7 +180,10 @@ def handle_check_join(call):
     user_id = call.from_user.id
     if check_user_joined_channels(user_id):
         bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে!")
-        bot.delete_message(call.message.chat.id, call.message.message_id)
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except Exception:
+            pass
         send_welcome(call.message)
     else:
         bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
@@ -219,8 +226,8 @@ def home():
 @app.route('/get-bot-info', methods=['GET'])
 def get_bot_info():
     try:
-        bot_username = bot.get_me().username
-        return jsonify({"status": "success", "username": bot_username}), 200
+        bot_info = bot.get_me()
+        return jsonify({"status": "success", "username": bot_info.username}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -253,7 +260,7 @@ def get_user_data():
 
 @app.route('/verify-channel-task', methods=['POST'])
 def verify_channel_task():
-    data = request.json
+    data = request.json or {}
     user_id = data.get('user_id')
     channel = data.get('channel')
     reward = float(data.get('reward', 0.50))
@@ -290,9 +297,12 @@ def verify_channel_task():
 
 @app.route('/update-balance', methods=['POST'])
 def update_balance():
-    data = request.json
-    user_id = str(data.get('user_id'))
-    amount = float(data.get('amount', 0.0))
+    data = request.json or {}
+    user_id = str(data.get('user_id', ''))
+    try:
+        amount = float(data.get('amount', 0.0))
+    except (ValueError, TypeError):
+        amount = 0.0
 
     if users_collection is not None and user_id:
         users_collection.update_one(
@@ -305,9 +315,13 @@ def update_balance():
 
 @app.route('/request-withdraw', methods=['POST'])
 def request_withdraw():
-    data = request.json
-    user_id = str(data.get('user_id'))
-    amount = float(data.get('amount', 0.0))
+    data = request.json or {}
+    user_id = str(data.get('user_id', ''))
+    try:
+        amount = float(data.get('amount', 0.0))
+    except (ValueError, TypeError):
+        amount = 0.0
+
     account = str(data.get('account', ''))
     method = str(data.get('method', 'bKash'))
 
@@ -331,12 +345,13 @@ def request_withdraw():
         )
         
         markup = InlineKeyboardMarkup()
-        bot_username = bot.get_me().username
+        bot_info = bot.get_me()
+        bot_username = bot_info.username if bot_info else "myearningall01_bot"
         markup.add(InlineKeyboardButton("Open App & Earn", url=f"https://t.me/{bot_username}"))
 
         try:
             bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
-        except Exception as e:
+        except Exception:
             bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
 
         return jsonify({"status": "success"}), 200
@@ -344,7 +359,7 @@ def request_withdraw():
 
 @app.route('/check-device', methods=['POST'])
 def check_device():
-    data = request.json
+    data = request.json or {}
     if not data:
         return jsonify({"status": "error", "message": "No data"}), 400
 
