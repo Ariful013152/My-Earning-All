@@ -501,7 +501,7 @@
             fetch('/get-bot-info')
                 .then(res => res.json())
                 .then(data => {
-                    if (data.status === 'success') {
+                    if (data.status === 'success' && data.username) {
                         botUsername = data.username;
                     }
                     document.getElementById('referLinkInput').value = `https://t.me/${botUsername}?start=${userId}`;
@@ -552,8 +552,8 @@
                         return;
                     }
                     if (data.status === 'success') {
-                        balance = parseFloat(data.balance);
-                        totalRefers = parseInt(data.total_refers);
+                        balance = parseFloat(data.balance) || 0;
+                        totalRefers = parseInt(data.total_refers) || 0;
                         if (data.first_name && data.first_name !== "User") {
                             firstName = data.first_name;
                         }
@@ -746,7 +746,8 @@
                 } else {
                     alert(data.message || "উইথড্র রিকোয়েস্ট ব্যর্থ হয়েছে।");
                 }
-            });
+            })
+            .catch(() => alert("উইথড্র প্রসেসিংয়ে সমস্যা হয়েছে।"));
         }
 
         window.onload = function() {
