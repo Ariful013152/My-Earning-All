@@ -197,7 +197,21 @@
             font-size: 14px;
         }
 
-        .gradient-btn:disabled {
+        /* Compact Button Design */
+        .compact-btn {
+            background: linear-gradient(90deg, #00d2ff, #0072ff);
+            color: white;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 13px;
+            display: inline-block;
+            margin-top: 8px;
+        }
+
+        .compact-btn:disabled, .gradient-btn:disabled {
             background: #1e293b;
             color: #64748b;
             cursor: not-allowed;
@@ -245,6 +259,20 @@
             border-radius: 10px;
             margin-bottom: 10px;
             text-align: left;
+        }
+
+        /* Completed Badge Design */
+        .completed-badge {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+            border: 1px solid #22c55e;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
     </style>
 </head>
@@ -318,9 +346,9 @@
                         <b>My Earning All Payment</b><br>
                         <small style="color:#22c55e;">+ TK 0.50</small>
                     </div>
-                    <div>
+                    <div id="action-ch-1">
                         <a href="https://t.me/myearningall" target="_blank" style="background:#3b82f6; color:#fff; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; margin-right:5px;">Join</a>
-                        <button onclick="claimChannelReward('@myearningall')" style="background:#22c55e; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">Confirm</button>
+                        <button onclick="claimChannelReward('@myearningall', 'action-ch-1')" style="background:#22c55e; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">Confirm</button>
                     </div>
                 </div>
 
@@ -329,9 +357,9 @@
                         <b>ALL IN ONE 100</b><br>
                         <small style="color:#22c55e;">+ TK 0.50</small>
                     </div>
-                    <div>
+                    <div id="action-ch-2">
                         <a href="https://t.me/allinoneg1" target="_blank" style="background:#3b82f6; color:#fff; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; margin-right:5px;">Join</a>
-                        <button onclick="claimChannelReward('@allinoneg1')" style="background:#22c55e; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">Confirm</button>
+                        <button onclick="claimChannelReward('@allinoneg1', 'action-ch-2')" style="background:#22c55e; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">Confirm</button>
                     </div>
                 </div>
 
@@ -340,34 +368,35 @@
                         <b>All In One G2</b><br>
                         <small style="color:#22c55e;">+ TK 0.50</small>
                     </div>
-                    <div>
+                    <div id="action-ch-3">
                         <a href="https://t.me/allinoneg2" target="_blank" style="background:#3b82f6; color:#fff; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; margin-right:5px;">Join</a>
-                        <button onclick="claimChannelReward('@allinoneg2')" style="background:#22c55e; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">Confirm</button>
+                        <button onclick="claimChannelReward('@allinoneg2', 'action-ch-3')" style="background:#22c55e; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">Confirm</button>
                     </div>
                 </div>
             </div>
 
+            <!-- COMPACT BUTTONS -->
             <div class="card" style="margin-bottom: 15px;">
                 <div class="icon-box"><i class="fas fa-play"></i></div>
-                <h2 style="margin: 5px 0;">Adsgram অ্যাড</h2>
-                <p style="font-size: 12px; color: var(--text-sub);">প্রতিটি বিজ্ঞাপনের জন্য পাবেন TK 0.10</p>
-                <button class="gradient-btn" style="margin-top: 10px;" onclick="watchAdsgram()"><i class="fas fa-play"></i> অ্যাড চালু করুন (Adsgram)</button>
+                <h3 style="margin: 5px 0;">Adsgram অ্যাড</h3>
+                <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 5px;">প্রতিটি বিজ্ঞাপনের জন্য পাবেন TK 0.10</p>
+                <button class="compact-btn" onclick="watchAdsgram()"><i class="fas fa-play"></i> অ্যাড চালু করুন</button>
             </div>
 
             <div class="card" style="margin-bottom: 15px;">
                 <div class="icon-box"><i class="fas fa-globe"></i></div>
-                <h3>Monetag টাস্ক</h3>
-                <p style="font-size: 12px; color: var(--text-sub);">সীমা: <span id="monetagCount">0</span>/20</p>
-                <div id="monetagTimer" style="color: #e3b341; font-weight: bold; margin-bottom: 8px;"></div>
-                <button class="gradient-btn" id="monetagBtn" onclick="startMonetagTask()">টাস্ক শুরু করুন</button>
+                <h3 style="margin: 5px 0;">Monetag টাস্ক</h3>
+                <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 5px;">সীমা: <span id="monetagCount">0</span>/20</p>
+                <div id="monetagTimer" style="color: #e3b341; font-weight: bold; font-size: 12px;"></div>
+                <button class="compact-btn" id="monetagBtn" onclick="startMonetagTask()">টাস্ক শুরু করুন</button>
             </div>
 
             <div class="card">
                 <div class="icon-box"><i class="fas fa-tv"></i></div>
-                <h3>Adsterra টাস্ক</h3>
-                <p style="font-size: 12px; color: var(--text-sub);">সীমা: <span id="adsterraCount">0</span>/20</p>
-                <div id="adsterraTimer" style="color: #e3b341; font-weight: bold; margin-bottom: 8px;"></div>
-                <button class="gradient-btn" id="adsterraBtn" onclick="startAdsterraTask()">টাস্ক শুরু করুন</button>
+                <h3 style="margin: 5px 0;">Adsterra টাস্ক</h3>
+                <p style="font-size: 12px; color: var(--text-sub); margin-bottom: 5px;">সীমা: <span id="adsterraCount">0</span>/20</p>
+                <div id="adsterraTimer" style="color: #e3b341; font-weight: bold; font-size: 12px;"></div>
+                <button class="compact-btn" id="adsterraBtn" onclick="startAdsterraTask()">টাস্ক শুরু করুন</button>
             </div>
         </div>
 
@@ -501,7 +530,7 @@
             fetch('/get-bot-info')
                 .then(res => res.json())
                 .then(data => {
-                    if (data.status === 'success' && data.username) {
+                    if (data.status === 'success') {
                         botUsername = data.username;
                     }
                     document.getElementById('referLinkInput').value = `https://t.me/${botUsername}?start=${userId}`;
@@ -552,15 +581,29 @@
                         return;
                     }
                     if (data.status === 'success') {
-                        balance = parseFloat(data.balance) || 0;
-                        totalRefers = parseInt(data.total_refers) || 0;
+                        balance = parseFloat(data.balance);
+                        totalRefers = parseInt(data.total_refers);
                         if (data.first_name && data.first_name !== "User") {
                             firstName = data.first_name;
                         }
+                        
+                        // Render Completed Channel Badges from Database
+                        const completedTasks = data.completed_channel_tasks || [];
+                        if (completedTasks.includes('@myearningall')) markTaskCompleted('action-ch-1');
+                        if (completedTasks.includes('@allinoneg1')) markTaskCompleted('action-ch-2');
+                        if (completedTasks.includes('@allinoneg2')) markTaskCompleted('action-ch-3');
+
                         updateUI();
                     }
                 })
                 .catch(err => console.error("Error fetching user data:", err));
+        }
+
+        function markTaskCompleted(elementId) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.innerHTML = `<span class="completed-badge"><i class="fas fa-check-circle"></i> Completed</span>`;
+            }
         }
 
         function updateUI() {
@@ -597,7 +640,7 @@
             alert(`অভিনন্দন! আপনি TK ${amount.toFixed(2)} অর্জন করেছেন।`);
         }
 
-        async function claimChannelReward(channelHandle) {
+        async function claimChannelReward(channelHandle, elementId) {
             try {
                 const response = await fetch('/verify-channel-task', {
                     method: 'POST',
@@ -612,7 +655,8 @@
                 const data = await response.json();
                 alert(data.message);
                 
-                if (data.status === 'success') {
+                if (data.status === 'success' || data.status === 'already_completed') {
+                    markTaskCompleted(elementId);
                     fetchUserDataFromServer();
                 }
             } catch (error) {
@@ -746,8 +790,7 @@
                 } else {
                     alert(data.message || "উইথড্র রিকোয়েস্ট ব্যর্থ হয়েছে।");
                 }
-            })
-            .catch(() => alert("উইথড্র প্রসেসিংয়ে সমস্যা হয়েছে।"));
+            });
         }
 
         window.onload = function() {
