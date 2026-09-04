@@ -9,6 +9,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from pymongo import MongoClient
+from bson.objectid import ObjectId
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
@@ -37,6 +38,7 @@ bot = telebot.TeleBot(BOT_TOKEN) if BOT_TOKEN else None
 db = None
 users_collection = None
 devices_collection = None
+withdraws_collection = None
 
 if MONGO_URI:
     try:
@@ -44,6 +46,7 @@ if MONGO_URI:
         db = mongo_client.get_database()
         users_collection = db["users"]
         devices_collection = db["devices"]
+        withdraws_collection = db["withdraws"]
         print("✅ MongoDB Connected Successfully")
     except Exception as e:
         print(f"❌ MongoDB Connection Error: {e}")
@@ -203,6 +206,92 @@ if bot:
         else:
             bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
 
+    # -------- WITHDRAW ACTION HANDLER (ACCEPT/REJECT) --------
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(('wd_acc_', 'wd_rej_')))
+    def handle_withdraw_action(call):
+        if call.from_user.id not in ADMIN_CHAT_IDS:
+            bot.answer_callback_query(call.id, "❌ আপনি এই কাজের জন্য অনুমোদিত নন!", show_alert=True)
+            return
+
+        parts = call.data.split('_')
+        action = parts[1]
+        req_id = parts[2]
+
+        if withdraws_collection is None:
+            bot.answer_callback_query(call.id, "Database Error!", show_alert=True)
+            return
+
+        req = withdraws_collection.find_one({"_id": ObjectId(req_id)})
+        if not req:
+            bot.answer_callback_query(call.id, "উইথড্র রিকোয়েস্টটি পাওয়া যায়নি!", show_alert=True)
+            return
+
+        if req.get("status") != "pending":
+            bot.answer_callback_query(call.id, "এই রিকোয়েস্টটি আগেই প্রসেস করা হয়েছে!", show_alert=True)
+            return
+
+        user_id = req["user_id"]
+        amount = req["amount"]
+        account = req["account"]
+        method = req["method"]
+
+        if action == "acc":
+            withdraws_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "completed"}})
+            bot.answer_callback_query(call.id, "✅ Withdraw Approved!")
+
+            # Admin message update
+            bot.edit_message_text(
+                f"{call.message.text}\n\n<b>✅ স্ট্যাটাস: Approved by Admin</b>",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                parse_mode="HTML"
+            )
+
+            # Notify User
+            try:
+                bot.send_message(user_id, f"🎉 <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি অ্যাপ্রুভ হয়েছে এবং টাকা পাঠানো হয়েছে!</b>", parse_mode="HTML")
+            except Exception:
+                pass
+
+            # Channel Post
+            hidden_acc = account[:3] + "xxxx" + account[-2:]
+            msg = (
+                f"<b>My Earning All Payment</b>\n"
+                f"✅ Withdrawal Paid\n\n"
+                f"💵 <b>{amount:.2f} BDT</b>\n"
+                f"🌐 <b>{method}</b>\n"
+                f"👛 <b>{hidden_acc}</b>"
+            )
+            markup = InlineKeyboardMarkup()
+            bot_username = bot.get_me().username if bot else ""
+            markup.add(InlineKeyboardButton("Open App & Earn", url=f"https://t.me/{bot_username}"))
+            try:
+                bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
+            except Exception:
+                bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
+
+        elif action == "rej":
+            withdraws_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "rejected"}})
+            # Refund money back to user balance
+            if users_collection is not None:
+                users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
+
+            bot.answer_callback_query(call.id, "❌ Withdraw Rejected!")
+
+            # Admin message update
+            bot.edit_message_text(
+                f"{call.message.text}\n\n<b>❌ স্ট্যাটাস: Rejected & Refunded</b>",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                parse_mode="HTML"
+            )
+
+            # Notify User
+            try:
+                bot.send_message(user_id, f"❌ <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি রিজেক্ট করা হয়েছে এবং ব্যালেন্স ওয়ালেটে ফেরত দেওয়া হয়েছে।</b>", parse_mode="HTML")
+            except Exception:
+                pass
+
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('ban_', 'unban_')))
     def handle_ban_callback(call):
         action, target_user_id = call.data.split('_')
@@ -235,10 +324,11 @@ if bot:
         btn_ban = InlineKeyboardButton("🚫 Ban User", callback_data="admin_ban_prompt")
         btn_unban = InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_prompt")
         btn_add_bal = InlineKeyboardButton("➕ Add Balance", callback_data="admin_addbal_prompt")
+        btn_cut_bal = InlineKeyboardButton("➖ Cut Balance", callback_data="admin_cutbal_prompt")
         btn_stats = InlineKeyboardButton("📊 Total Users", callback_data="admin_stats")
         btn_broadcast = InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast_prompt")
         
-        markup.add(btn_ban, btn_unban, btn_add_bal, btn_stats, btn_broadcast)
+        markup.add(btn_ban, btn_unban, btn_add_bal, btn_cut_bal, btn_stats, btn_broadcast)
         
         bot.send_message(
             message.chat.id, 
@@ -279,6 +369,15 @@ if bot:
                 reply_markup=ForceReply(selective=True)
             )
             bot.register_next_step_handler(msg, process_addbal_input)
+
+        elif call.data == "admin_cutbal_prompt":
+            msg = bot.send_message(
+                call.message.chat.id, 
+                "➖ <b>USER_ID এবং AMOUNT স্পেস দিয়ে লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 20</code>)", 
+                parse_mode="HTML", 
+                reply_markup=ForceReply(selective=True)
+            )
+            bot.register_next_step_handler(msg, process_cutbal_input)
             
         elif call.data == "admin_stats":
             total_banned = len(banned_users)
@@ -339,6 +438,28 @@ if bot:
             bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর অ্যাকাউন্টে ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
             try:
                 bot.send_message(target_user_id, f"🎉 অ্যাডমিন আপনার ওয়ালেটে <b>৳{amount:.2f}</b> যুক্ত করেছেন!", parse_mode="HTML")
+            except Exception:
+                pass
+
+    def process_cutbal_input(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
+            return
+        target_user_id = args[0].strip()
+        try:
+            amount = float(args[1].strip())
+        except ValueError:
+            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
+            return
+
+        if users_collection is not None:
+            users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": -amount}}, upsert=True)
+            bot.reply_to(message, f"✂️ <b>ইউজার ID {target_user_id} এর অ্যাকাউন্ট থেকে ৳{amount:.2f} কেটে নেওয়া হয়েছে!</b>", parse_mode="HTML")
+            try:
+                bot.send_message(target_user_id, f"⚠️ অ্যাডমিন আপনার ওয়ালেট থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।", parse_mode="HTML")
             except Exception:
                 pass
 
@@ -420,6 +541,29 @@ if bot:
             except Exception:
                 pass
 
+    @bot.message_handler(commands=['cutbalance'])
+    def handle_cutbalance_command(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        args = message.text.split()
+        if len(args) < 3:
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/cutbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+            return
+        target_user_id = args[1].strip()
+        try:
+            amount = float(args[2].strip())
+        except ValueError:
+            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
+            return
+
+        if users_collection is not None:
+            users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": -amount}}, upsert=True)
+            bot.reply_to(message, f"✂️ <b>ইউজার ID {target_user_id} এর অ্যাকাউন্ট থেকে ৳{amount:.2f} কেটে নেওয়া হয়েছে!</b>", parse_mode="HTML")
+            try:
+                bot.send_message(target_user_id, f"⚠️ অ্যাডমিন আপনার ওয়ালেট থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।", parse_mode="HTML")
+            except Exception:
+                pass
+
     @bot.message_handler(commands=['broadcast'])
     def handle_broadcast_command(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
@@ -497,6 +641,19 @@ def get_user_data():
                 monetag_count = user_data.get("monetag_count", 0)
                 adsterra_count = user_data.get("adsterra_count", 0)
 
+            # Retrieve withdraw history
+            user_withdraws = []
+            if withdraws_collection is not None:
+                docs = withdraws_collection.find({"user_id": str(user_id)})
+                for d in docs:
+                    user_withdraws.append({
+                        "amount": d.get("amount"),
+                        "account": d.get("account"),
+                        "method": d.get("method"),
+                        "status": d.get("status"),
+                        "date": d.get("date")
+                    })
+
             return jsonify({
                 "status": "success",
                 "balance": float(user_data.get("balance", 0.00)),
@@ -504,10 +661,11 @@ def get_user_data():
                 "first_name": user_data.get("first_name", "User"),
                 "monetag_count": monetag_count,
                 "adsterra_count": adsterra_count,
-                "completed_channel_tasks": user_data.get("completed_channel_tasks", [])
+                "completed_channel_tasks": user_data.get("completed_channel_tasks", []),
+                "withdraws": user_withdraws
             }), 200
 
-    return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "first_name": "User", "monetag_count": 0, "adsterra_count": 0, "completed_channel_tasks": []}), 200
+    return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "first_name": "User", "monetag_count": 0, "adsterra_count": 0, "completed_channel_tasks": [], "withdraws": []}), 200
 
 @app.route('/verify-channel-task', methods=['POST'])
 def verify_channel_task():
@@ -607,34 +765,51 @@ def request_withdraw():
     if not user_id or amount < 200 or len(account) < 11:
         return jsonify({"status": "error", "message": "Invalid request parameters"}), 400
 
-    if users_collection is not None:
+    if users_collection is not None and withdraws_collection is not None:
         user_data = users_collection.find_one({"user_id": user_id})
         if not user_data or float(user_data.get("balance", 0)) < amount:
-            return jsonify({"status": "error", "message": "Insufficient balance"}), 400
+            return jsonify({"status": "error", "message": "পর্যাপ্ত ব্যালেন্স নেই!"}), 400
 
+        # Cut balance from user
         users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": -amount}})
 
-        hidden_acc = account[:3] + "xxxx" + account[-2:]
-        msg = (
-            f"<b>My Earning All Payment</b>\n"
-            f"✅ Withdrawal Paid\n\n"
-            f"💵 <b>{amount:.2f} BDT</b>\n"
-            f"🌐 <b>{method}</b>\n"
-            f"👛 <b>{hidden_acc}</b>"
+        # Save withdraw record with 'pending' status
+        req_doc = {
+            "user_id": user_id,
+            "amount": amount,
+            "account": account,
+            "method": method,
+            "status": "pending",
+            "date": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+        }
+        res = withdraws_collection.insert_one(req_doc)
+        req_id = str(res.inserted_id)
+
+        # Notify Admins with Accept/Reject inline buttons
+        admin_msg = (
+            f"📥 <b>নতুন উইথড্র রিকোয়েস্ট!</b>\n\n"
+            f"👤 <b>ইউজার:</b> {user_data.get('first_name', 'User')} (@{user_data.get('username', 'No Username')})\n"
+            f"🆔 <b>ইউজার ID:</b> <code>{user_id}</code>\n"
+            f"💵 <b>পরিমাণ:</b> ৳{amount:.2f}\n"
+            f"🌐 <b>মেথড:</b> {method}\n"
+            f"📱 <b>অ্যাকাউন্ট:</b> <code>{account}</code>"
         )
-        
+
         markup = InlineKeyboardMarkup()
-        bot_username = bot.get_me().username if bot else ""
-        markup.add(InlineKeyboardButton("Open App & Earn", url=f"https://t.me/{bot_username}"))
+        markup.row(
+            InlineKeyboardButton("✅ Accept", callback_data=f"wd_acc_{req_id}"),
+            InlineKeyboardButton("❌ Reject", callback_data=f"wd_rej_{req_id}")
+        )
 
         if bot:
-            try:
-                bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
-            except Exception as e:
-                bot.send_message(CHANNEL_ID, msg, parse_mode="HTML", reply_markup=markup)
+            for admin_id in ADMIN_CHAT_IDS:
+                try:
+                    bot.send_message(admin_id, admin_msg, parse_mode="HTML", reply_markup=markup)
+                except Exception as e:
+                    print(f"Error notifying admin {admin_id}: {e}")
 
         return jsonify({"status": "success"}), 200
-    return jsonify({"status": "error"}), 500
+    return jsonify({"status": "error", "message": "Database Connection Error"}), 500
 
 @app.route('/check-device', methods=['POST'])
 def check_device():
