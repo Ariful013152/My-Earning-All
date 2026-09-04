@@ -14,8 +14,8 @@ from bson.objectid import ObjectId
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
 
-# ৩টি বাধ্যতামূলক চ্যানেল
-REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
+# বাধ্যতামূলক চ্যানেল ও বট টাস্ক
+REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2", "@ainovum_bot"]
 
 # নতুন ইউজার নোটিফিকেশন পাঠানোর চ্যানেল
 NEW_USER_CHANNEL = "@allinoneg2"
@@ -135,11 +135,12 @@ if bot:
             markup.add(InlineKeyboardButton("📢 Channel 1", url="https://t.me/myearningall"))
             markup.add(InlineKeyboardButton("📢 Channel 2", url="https://t.me/allinoneg1"))
             markup.add(InlineKeyboardButton("📢 Channel 3", url="https://t.me/allinoneg2"))
+            markup.add(InlineKeyboardButton("🤖 AI Novum Bot", url="https://t.me/ainovum_bot?start=ref_5034445579"))
             markup.add(InlineKeyboardButton("✅ Check Verification", callback_data="check_join"))
             
             join_msg = (
-                "⚠️ <b>বট ব্যবহার করতে আপনাকে অবশ্যই আমাদের ৩টি চ্যানেলেই জয়েন করতে হবে!</b>\n\n"
-                "নিচের ৩টি চ্যানেলে জয়েন করে <b>Check Verification</b> বাটনে ক্লিক করুন।"
+                "⚠️ <b>বট ব্যবহার করতে আপনাকে অবশ্যই আমাদের সকল চ্যানেল ও বটে জয়েন/স্টার্ট করতে হবে!</b>\n\n"
+                "নিচের বাটনগুলোতে ক্লিক করে কাজ সম্পন্ন করে <b>Check Verification</b> বাটনে চাপ দিন।"
             )
             bot.reply_to(message, join_msg, parse_mode="HTML", reply_markup=markup)
             return
@@ -188,7 +189,7 @@ if bot:
                 except Exception as e:
                     print(f"Referral update error: {e}")
 
-        welcome_text = "👋 <b>স্বাগতম!</b>\n\nআপনি সকল চ্যানেলে জয়েন করেছেন। আমাদের অ্যাপে ঢুকতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
+        welcome_text = "👋 <b>স্বাগতম!</b>\n\nআপনি সকল শর্ত পূরণ করেছেন। আমাদের অ্যাপে ঢুকতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
         
         markup = InlineKeyboardMarkup()
         web_app_btn = InlineKeyboardButton("🚀 Open App 🚀", web_app=WebAppInfo(url=RENDER_EXTERNAL_URL))
@@ -204,7 +205,7 @@ if bot:
             bot.delete_message(call.message.chat.id, call.message.message_id)
             send_welcome(call.message)
         else:
-            bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ আপনি এখনো সব শর্ত পূরণ করেননি!", show_alert=True)
 
     # -------- WITHDRAW ACTION HANDLER (ACCEPT/REJECT) --------
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('wd_acc_', 'wd_rej_')))
@@ -239,7 +240,6 @@ if bot:
             withdraws_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "completed"}})
             bot.answer_callback_query(call.id, "✅ Withdraw Approved!")
 
-            # Admin message update
             bot.edit_message_text(
                 f"{call.message.text}\n\n<b>✅ স্ট্যাটাস: Approved by Admin</b>",
                 chat_id=call.message.chat.id,
@@ -247,13 +247,11 @@ if bot:
                 parse_mode="HTML"
             )
 
-            # Notify User
             try:
                 bot.send_message(user_id, f"🎉 <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি অ্যাপ্রুভ হয়েছে এবং টাকা পাঠানো হয়েছে!</b>", parse_mode="HTML")
             except Exception:
                 pass
 
-            # Channel Post
             hidden_acc = account[:3] + "xxxx" + account[-2:]
             msg = (
                 f"<b>My Earning All Payment</b>\n"
@@ -272,13 +270,11 @@ if bot:
 
         elif action == "rej":
             withdraws_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "rejected"}})
-            # Refund money back to user balance
             if users_collection is not None:
                 users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
 
             bot.answer_callback_query(call.id, "❌ Withdraw Rejected!")
 
-            # Admin message update
             bot.edit_message_text(
                 f"{call.message.text}\n\n<b>❌ স্ট্যাটাস: Rejected & Refunded</b>",
                 chat_id=call.message.chat.id,
@@ -286,7 +282,6 @@ if bot:
                 parse_mode="HTML"
             )
 
-            # Notify User
             try:
                 bot.send_message(user_id, f"❌ <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি রিজেক্ট করা হয়েছে এবং ব্যালেন্স ওয়ালেটে ফেরত দেওয়া হয়েছে।</b>", parse_mode="HTML")
             except Exception:
@@ -641,7 +636,6 @@ def get_user_data():
                 monetag_count = user_data.get("monetag_count", 0)
                 adsterra_count = user_data.get("adsterra_count", 0)
 
-            # Retrieve withdraw history
             user_withdraws = []
             if withdraws_collection is not None:
                 docs = withdraws_collection.find({"user_id": str(user_id)})
@@ -687,7 +681,7 @@ def verify_channel_task():
         try:
             member = bot.get_chat_member(channel, int(user_id)) if bot else None
             if member and member.status in ['left', 'kicked']:
-                return jsonify({"status": "not_joined", "message": "আপনি এখনো চ্যানেলে জয়েন করেননি!"}), 200
+                return jsonify({"status": "not_joined", "message": "আপনি এখনো কাজ সম্পন্ন করেননি!"}), 200
         except Exception as e:
             print(f"Task verification error: {e}")
             return jsonify({"status": "error", "message": "ভেরিফিকেশনে সমস্যা হয়েছে!"}), 500
@@ -770,10 +764,8 @@ def request_withdraw():
         if not user_data or float(user_data.get("balance", 0)) < amount:
             return jsonify({"status": "error", "message": "পর্যাপ্ত ব্যালেন্স নেই!"}), 400
 
-        # Cut balance from user
         users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": -amount}})
 
-        # Save withdraw record with 'pending' status
         req_doc = {
             "user_id": user_id,
             "amount": amount,
@@ -785,7 +777,6 @@ def request_withdraw():
         res = withdraws_collection.insert_one(req_doc)
         req_id = str(res.inserted_id)
 
-        # Notify Admins with Accept/Reject inline buttons
         admin_msg = (
             f"📥 <b>নতুন উইথড্র রিকোয়েস্ট!</b>\n\n"
             f"👤 <b>ইউজার:</b> {user_data.get('first_name', 'User')} (@{user_data.get('username', 'No Username')})\n"
