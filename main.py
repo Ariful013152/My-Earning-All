@@ -12,7 +12,7 @@ from pymongo import MongoClient
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8615856288:AAFhhFONNIB56invYKb00GfUxkExtuU0C3k")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
 
-# ৩টি চ্যানেল বাধ্যতামূলক করা হলো
+# ৩টি বাধ্যতামুুলক চ্যানেল
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 
 PAYMENT_IMAGE_URL = os.environ.get("PAYMENT_IMAGE_URL", "https://i.ibb.co/L8y2pNz/payment-banner.jpg")
@@ -45,9 +45,14 @@ banned_users = set()
 
 # -------- FORCE JOIN CHECKER --------
 def check_user_joined_channels(user_id):
+    try:
+        uid = int(user_id)
+    except Exception:
+        return False
+
     for ch in REQUIRED_CHANNELS:
         try:
-            member = bot.get_chat_member(ch, user_id)
+            member = bot.get_chat_member(ch, uid)
             if member.status in ['left', 'kicked']:
                 return False
         except Exception as e:
@@ -78,7 +83,7 @@ def send_fake_withdraw_loop():
 
             markup = InlineKeyboardMarkup()
             bot_username = bot.get_me().username
-            markup.add(InlineKeyboardButton("🎂 Open App & Earn", url=f"https://t.me/{bot_username}"))
+            markup.add(InlineKeyboardButton("Open App & Earn", url=f"https://t.me/{bot_username}"))
 
             try:
                 bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
@@ -227,7 +232,7 @@ def get_user_data():
 
     # ইউজারের চ্যানেল স্ট্যাটাস চেক করা
     try:
-        if not check_user_joined_channels(int(user_id)):
+        if not check_user_joined_channels(user_id):
             return jsonify({"status": "not_joined", "message": "আপনি সকল চ্যানেলে জয়েন নেই!"}), 200
     except Exception:
         pass
@@ -269,7 +274,7 @@ def verify_channel_task():
                 return jsonify({"status": "not_joined", "message": "আপনি এখনো চ্যানেলে জয়েন করেননি!"}), 200
         except Exception as e:
             print(f"Task verification error: {e}")
-            return jsonify({"status": "error", "message": "ভেরিফিকেশনে সমস্যা হয়েছে! বটকে অ্যাডমিন করা আছে কিনা যাচাই করুন।"}), 500
+            return jsonify({"status": "error", "message": "ভেরিফিকেশনে সমস্যা হয়েছে! বটকে চ্যানেলে অ্যাডমিন করা আছে কিনা নিশ্চিত করুন।"}), 500
 
         users_collection.update_one(
             {"user_id": str(user_id)},
@@ -327,7 +332,7 @@ def request_withdraw():
         
         markup = InlineKeyboardMarkup()
         bot_username = bot.get_me().username
-        markup.add(InlineKeyboardButton("🎂 Open App & Earn", url=f"https://t.me/{bot_username}"))
+        markup.add(InlineKeyboardButton("Open App & Earn", url=f"https://t.me/{bot_username}"))
 
         try:
             bot.send_photo(CHANNEL_ID, photo=PAYMENT_IMAGE_URL, caption=msg, parse_mode="HTML", reply_markup=markup)
