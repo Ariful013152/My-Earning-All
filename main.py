@@ -16,6 +16,9 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID", "@myearningall")
 # ৩টি বাধ্যতামূলক চ্যানেল
 REQUIRED_CHANNELS = ["@myearningall", "@allinoneg1", "@allinoneg2"]
 
+# নতুন ইউজার নোটিফিকেশন পাঠানোর চ্যানেল
+NEW_USER_CHANNEL = "@allinoneg2"
+
 PAYMENT_IMAGE_URL = os.environ.get("PAYMENT_IMAGE_URL", "https://i.ibb.co/L8y2pNz/payment-banner.jpg")
 
 ADMIN_IDS_RAW = os.environ.get("ADMIN_CHAT_IDS", "")
@@ -138,7 +141,23 @@ if bot:
             bot.reply_to(message, join_msg, parse_mode="HTML", reply_markup=markup)
             return
 
+        # নতুন ইউজার চেক করা এবং চ্যানেলে মেসেজ পাঠানো
         if users_collection is not None:
+            existing_user = users_collection.find_one({"user_id": user_id})
+            
+            # ইউজার ডাটাবেজে না থাকলে সে নতুন
+            if not existing_user:
+                try:
+                    new_user_msg = (
+                        f"🎉 <b>নতুন ইউজার জয়েন করেছেন!</b>\n\n"
+                        f"👤 <b>নাম:</b> {first_name}\n"
+                        f"🆔 <b>ইউজার ID:</b> <code>{user_id}</code>\n"
+                        f"🔗 <b>ইউজারনেম:</b> @{username}"
+                    )
+                    bot.send_message(NEW_USER_CHANNEL, new_user_msg, parse_mode="HTML")
+                except Exception as e:
+                    print(f"Channel notify error: {e}")
+
             users_collection.update_one(
                 {"user_id": user_id},
                 {"$set": {"first_name": first_name, "username": username},
@@ -205,6 +224,148 @@ if bot:
             bot.edit_message_text(f"✅ <b>ইউজার ID: {target_user_id} আনব্যান করা হয়েছে!</b>", 
                                   chat_id=call.message.chat.id, 
                                   message_id=call.message.message_id, parse_mode="HTML")
+
+    # -------- ADMIN PANEL & COMMAND HANDLERS --------
+    @bot.message_handler(commands=['admin'])
+    def handle_admin_panel(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            bot.reply_to(message, "❌ আপনি এই বটের অ্যাডমিন নন।")
+            return
+
+        markup = InlineKeyboardMarkup(row_width=2)
+        btn_ban = InlineKeyboardButton("🚫 Ban User", callback_data="admin_ban_prompt")
+        btn_unban = InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_prompt")
+        btn_add_bal = InlineKeyboardButton("➕ Add Balance", callback_data="admin_addbal_prompt")
+        btn_stats = InlineKeyboardButton("📊 Total Users", callback_data="admin_stats")
+        btn_broadcast = InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast_prompt")
+        
+        markup.add(btn_ban, btn_unban, btn_add_bal, btn_stats, btn_broadcast)
+        
+        bot.send_message(
+            message.chat.id, 
+            "<b>⚙️ অ্যাডমিন কন্ট্রোল প্যানেল</b>\n\nনিচের বাটনগুলো চাপুন অথবা নির্দিষ্ট কমান্ড টাইপ করুন:", 
+            parse_mode="HTML", 
+            reply_markup=markup
+        )
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('admin_'))
+    def handle_admin_callbacks(call):
+        if call.from_user.id not in ADMIN_CHAT_IDS:
+            bot.answer_callback_query(call.id, "অ্যাক্সেস নেই!", show_alert=True)
+            return
+
+        if call.data == "admin_ban_prompt":
+            bot.send_message(call.message.chat.id, "🚫 ইউজার ব্যান করতে টাইপ করুন:\n<code>/ban USER_ID</code>", parse_mode="HTML")
+        
+        elif call.data == "admin_unban_prompt":
+            bot.send_message(call.message.chat.id, "✅ ইউজার আনব্যান করতে টাইপ করুন:\n<code>/unban USER_ID</code>", parse_mode="HTML")
+
+        elif call.data == "admin_addbal_prompt":
+            bot.send_message(call.message.chat.id, "➕ ব্যালেন্স যোগ করতে টাইপ করুন:\n<code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+            
+        elif call.data == "admin_stats":
+            total_banned = len(banned_users)
+            total_db_users = users_collection.count_documents({}) if users_collection is not None else 0
+            
+            msg = f"<b>📊 ইউজার স্ট্যাটিস্টিক্স:</b>\n\n"
+            msg += f"👤 মোট রেজিস্টার্ড ইউজার: {total_db_users}\n"
+            msg += f"🚫 মোট ব্যানড ইউজার: {total_banned}"
+            
+            bot.send_message(call.message.chat.id, msg, parse_mode="HTML")
+            
+        elif call.data == "admin_broadcast_prompt":
+            bot.send_message(call.message.chat.id, "📢 সকল ইউজারকে নোটিফিকেশন পাঠাতে টাইপ করুন:\n<code>/broadcast আপনার মেসেজ</code>", parse_mode="HTML")
+            
+        bot.answer_callback_query(call.id)
+
+    @bot.message_handler(commands=['unban'])
+    def handle_unban_command(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/unban USER_ID</code>", parse_mode="HTML")
+            return
+        
+        target_user_id = args[1].strip()
+        banned_users.discard(target_user_id)
+        
+        if users_collection is not None:
+            users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
+            
+        bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
+
+    @bot.message_handler(commands=['ban'])
+    def handle_ban_command(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/ban USER_ID</code>", parse_mode="HTML")
+            return
+        
+        target_user_id = args[1].strip()
+        banned_users.add(target_user_id)
+        
+        if users_collection is not None:
+            users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
+            
+        bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
+
+    @bot.message_handler(commands=['addbalance'])
+    def handle_addbalance_command(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        
+        args = message.text.split()
+        if len(args) < 3:
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+            return
+        
+        target_user_id = args[1].strip()
+        try:
+            amount = float(args[2].strip())
+        except ValueError:
+            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
+            return
+
+        if users_collection is not None:
+            users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": amount}}, upsert=True)
+            bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর অ্যাকাউন্টে ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
+            try:
+                bot.send_message(target_user_id, f"🎉 অ্যাডমিন আপনার ওয়ালেটে <b>৳{amount:.2f}</b> যুক্ত করেছেন!", parse_mode="HTML")
+            except Exception:
+                pass
+
+    @bot.message_handler(commands=['broadcast'])
+    def handle_broadcast_command(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        
+        text_to_send = message.text.replace("/broadcast", "").strip()
+        if not text_to_send:
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/broadcast আপনার মেসেজ</code>", parse_mode="HTML")
+            return
+        
+        if users_collection is not None:
+            all_users = list(users_collection.find({}, {"user_id": 1}))
+            success_count = 0
+            
+            status_msg = bot.reply_to(message, "⏳ ব্রডকাস্ট মেসেজ পাঠানো শুরু হয়েছে...")
+            
+            for user in all_users:
+                u_id = user.get("user_id")
+                if u_id:
+                    try:
+                        bot.send_message(u_id, f"📢 <b>অ্যাডমিন নোটিশ:</b>\n\n{text_to_send}", parse_mode="HTML")
+                        success_count += 1
+                        time.sleep(0.05) # Rate limit handler
+                    except Exception:
+                        pass
+            
+            bot.edit_message_text(f"✅ <b>ব্রডকাস্ট সম্পন্ন!</b>\n\nমোট <b>{success_count}</b> জন ইউজারের কাছে মেসেজ পৌঁছেছে।", chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="HTML")
 
 def run_bot():
     if not bot:
