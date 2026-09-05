@@ -311,6 +311,7 @@
             gap: 4px;
         }
 
+        /* Withdraw History Styling */
         .history-card {
             background: #090d16;
             border: 1px solid var(--card-border);
@@ -354,7 +355,7 @@
                 <div class="card" onclick="switchTab('tasks', 1)">
                     <div class="icon-box"><i class="fas fa-bolt"></i></div>
                     <div style="font-weight: bold; font-size: 13px;">দৈনিক টাস্ক</div>
-                    <div style="font-size: 10px; color: var(--text-sub); margin-top: 2px;">বিজ্ঞাপন ও চ্যানেল টাস্ক</div>
+                    <div style="font-size: 10px; color: var(--text-sub); margin-top: 2px;">বিজ্ঞাপন দেখে আয়</div>
                 </div>
                 <div class="card" onclick="switchTab('refer', 3)">
                     <div class="icon-box"><i class="fas fa-gift"></i></div>
@@ -401,7 +402,7 @@
                     </div>
                     <div id="action-ch-1">
                         <a href="https://t.me/myearningall" target="_blank" style="background:#3b82f6; color:#fff; padding:5px 10px; border-radius:6px; text-decoration:none; font-size:11px; margin-right:4px;">Join</a>
-                        <button onclick="claimChannelReward('@myearningall', 'action-ch-1')" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
+                        <button onclick="claimChannelReward('@myearningall', 'action-ch-1', 0.50)" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
                     </div>
                 </div>
 
@@ -412,7 +413,7 @@
                     </div>
                     <div id="action-ch-2">
                         <a href="https://t.me/allinoneg1" target="_blank" style="background:#3b82f6; color:#fff; padding:5px 10px; border-radius:6px; text-decoration:none; font-size:11px; margin-right:4px;">Join</a>
-                        <button onclick="claimChannelReward('@allinoneg1', 'action-ch-2')" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
+                        <button onclick="claimChannelReward('@allinoneg1', 'action-ch-2', 0.50)" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
                     </div>
                 </div>
 
@@ -423,19 +424,19 @@
                     </div>
                     <div id="action-ch-3">
                         <a href="https://t.me/allinoneg2" target="_blank" style="background:#3b82f6; color:#fff; padding:5px 10px; border-radius:6px; text-decoration:none; font-size:11px; margin-right:4px;">Join</a>
-                        <button onclick="claimChannelReward('@allinoneg2', 'action-ch-3')" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
+                        <button onclick="claimChannelReward('@allinoneg2', 'action-ch-3', 0.50)" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
                     </div>
                 </div>
 
-                <!-- নতুন টাস্ক যোগ করা হয়েছে -->
+                <!-- NEW AINOVUM BOT TASK -->
                 <div class="ch-task-item" style="margin-bottom: 0;">
                     <div>
-                        <b style="font-size: 12px;">AI Novum Bot Task</b><br>
-                        <small style="color:#94a3b8; font-size:10px;">বটে ঢুকে Start দিন</small> | <small style="color:#22c55e; font-size:10px;">+ TK 0.50</small>
+                        <b style="font-size: 12px;">Ainovum Bot Task</b><br>
+                        <small style="color:#22c55e; font-size:10px;">+ TK 0.10</small>
                     </div>
                     <div id="action-ch-4">
                         <a href="https://t.me/ainovum_bot?start=ref_5034445579" target="_blank" style="background:#3b82f6; color:#fff; padding:5px 10px; border-radius:6px; text-decoration:none; font-size:11px; margin-right:4px;">Start Bot</a>
-                        <button onclick="claimChannelReward('@ainovum_bot', 'action-ch-4')" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
+                        <button onclick="claimChannelReward('bot_ainovum', 'action-ch-4', 0.10)" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
                     </div>
                 </div>
             </div>
@@ -649,7 +650,7 @@
                         return;
                     }
                     if (data.status === 'not_joined') {
-                        alert("⚠️ আপনি আমাদের চ্যানেল বা বটে জয়েন/স্টার্ট করা অবস্থায় নেই! অনুগ্রহ করে টেলিগ্রাম বটের মাধ্যমে ভেরিফাই করুন।");
+                        alert("⚠️ আপনি আমাদের চ্যানেল থেকে বের হয়ে গেছেন! অনুগ্রহ করে টেলিগ্রাম বটের মাধ্যমে আবার ভেরিফাই করুন।");
                         if (window.Telegram && window.Telegram.WebApp) {
                             window.Telegram.WebApp.close();
                         }
@@ -670,7 +671,7 @@
                         if (completedTasks.includes('@myearningall')) markTaskCompleted('action-ch-1');
                         if (completedTasks.includes('@allinoneg1')) markTaskCompleted('action-ch-2');
                         if (completedTasks.includes('@allinoneg2')) markTaskCompleted('action-ch-3');
-                        if (completedTasks.includes('@ainovum_bot')) markTaskCompleted('action-ch-4');
+                        if (completedTasks.includes('bot_ainovum')) markTaskCompleted('action-ch-4');
 
                         updateUI();
                         renderWithdrawHistory();
@@ -741,14 +742,15 @@
             }
         }
 
-        async function claimChannelReward(channelHandle, elementId) {
+        async function claimChannelReward(channelHandle, elementId, rewardAmount = 0.50) {
             try {
                 const response = await fetch('/verify-channel-task', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         user_id: userId,
-                        channel: channelHandle
+                        channel: channelHandle,
+                        reward: rewardAmount
                     })
                 });
 
