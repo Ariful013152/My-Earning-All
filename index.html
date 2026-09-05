@@ -312,7 +312,6 @@
             gap: 4px;
         }
 
-        /* Withdraw History Styling */
         .history-card {
             background: #090d16;
             border: 1px solid var(--card-border);
@@ -429,7 +428,6 @@
                     </div>
                 </div>
 
-                <!-- NEW AINOVUM BOT TASK -->
                 <div class="ch-task-item" style="margin-bottom: 0;">
                     <div>
                         <b style="font-size: 12px;">Ainovum Bot Task</b><br>
@@ -442,7 +440,6 @@
                 </div>
             </div>
 
-            <!-- Compact Monetag Task -->
             <div class="task-list-card">
                 <div class="task-info">
                     <div class="task-icon"><i class="fas fa-globe"></i></div>
@@ -454,7 +451,6 @@
                 <button class="compact-btn" id="monetagBtn" onclick="startMonetagTask()">শুরু করুন</button>
             </div>
 
-            <!-- Compact Adsterra Task -->
             <div class="task-list-card">
                 <div class="task-info">
                     <div class="task-icon"><i class="fas fa-tv"></i></div>
@@ -466,7 +462,6 @@
                 <button class="compact-btn" id="adsterraBtn" onclick="startAdsterraTask()">শুরু করুন</button>
             </div>
 
-            <!-- Compact Gigapub Task -->
             <div class="task-list-card">
                 <div class="task-info">
                     <div class="task-icon"><i class="fas fa-play-circle"></i></div>
@@ -525,7 +520,6 @@
                 <button class="gradient-btn" onclick="submitWithdraw()">উইথড্র রিকোয়েস্ট পাঠান</button>
             </div>
 
-            <!-- WITHDRAW HISTORY SECTION -->
             <div style="margin-top: 16px;">
                 <h4 style="margin: 0 0 8px; font-size: 13px; color: var(--text-sub);">📋 উইথড্র হিস্ট্রি</h4>
                 <div id="withdrawHistoryContainer">
@@ -771,6 +765,11 @@
                 });
 
                 const data = await response.json();
+                if (data.status === 'banned') {
+                    alert("❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!");
+                    location.reload();
+                    return;
+                }
                 alert(data.message);
                 
                 if (data.status === 'success' || data.status === 'already_completed') {
@@ -816,6 +815,11 @@
                     })
                     .then(res => res.json())
                     .then(resData => {
+                        if (resData.status === 'banned') {
+                            alert("❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!");
+                            location.reload();
+                            return;
+                        }
                         if (resData.status === 'success') {
                             monetagCount = resData.new_count;
                             balance += resData.reward;
@@ -858,6 +862,11 @@
                     })
                     .then(res => res.json())
                     .then(resData => {
+                        if (resData.status === 'banned') {
+                            alert("❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!");
+                            location.reload();
+                            return;
+                        }
                         if (resData.status === 'success') {
                             adsterraCount = resData.new_count;
                             balance += resData.reward;
@@ -886,7 +895,6 @@
 
             window.showGiga()
                 .then(() => {
-                    // এড সম্পূর্ণ দেখা হয়েছে, রিওয়ার্ড দেওয়া হবে
                     document.getElementById('gigapubTimer').innerText = "";
                     fetch('/verify-ad-task', {
                         method: 'POST',
@@ -895,6 +903,11 @@
                     })
                     .then(res => res.json())
                     .then(resData => {
+                        if (resData.status === 'banned') {
+                            alert("❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!");
+                            location.reload();
+                            return;
+                        }
                         if (resData.status === 'success') {
                             gigapubCount = resData.new_count;
                             balance += resData.reward;
@@ -912,7 +925,6 @@
                     });
                 })
                 .catch(() => {
-                    // এই মুহূর্তে দেখানোর মতো কোনো এড নেই
                     document.getElementById('gigapubTimer').innerText = "";
                     alert("⚠️ এই মুহূর্তে কোনো এড পাওয়া যায়নি, একটু পরে আবার চেষ্টা করুন!");
                     btn.disabled = false;
@@ -967,6 +979,11 @@
             })
             .then(res => res.json())
             .then(data => {
+                if (data.status === 'banned') {
+                    alert("❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!");
+                    location.reload();
+                    return;
+                }
                 if (data.status === 'success') {
                     document.getElementById('withdrawAmount').value = '';
                     document.getElementById('withdrawAccount').value = '';
