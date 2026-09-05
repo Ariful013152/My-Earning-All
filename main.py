@@ -42,6 +42,7 @@ db = None
 users_collection = None
 devices_collection = None
 withdraws_collection = None
+referrals_collection = None
 
 if MONGO_URI:
     try:
@@ -50,9 +51,11 @@ if MONGO_URI:
         users_collection = db["users"]
         devices_collection = db["devices"]
         withdraws_collection = db["withdraws"]
+        referrals_collection = db["referrals"]
         print("✅ MongoDB Connected Successfully")
     except Exception as e:
         print(f"❌ MongoDB Connection Error: {e}")
+
 
 # -------- TELEGRAM WEBAPP HASH VERIFICATION --------
 def verify_telegram_init_data(init_data):
@@ -208,15 +211,46 @@ if bot:
                     current_user = users_collection.find_one({"user_id": user_id})
                     if current_user and not current_user.get("referred_by"):
                         users_collection.update_one(
-                            {"user_id": str(referrer_id)},
-                            {"$inc": {"balance": 0.50, "total_refers": 1}},
-                            upsert=True
-                        )
-                        users_collection.update_one(
                             {"user_id": user_id},
                             {"$set": {"referred_by": str(referrer_id)}}
                         )
-                        bot.send_message(referrer_id, f"🎉 আপনার রেফার লিংকে নতুন একজন জয়েন করায় আপনি <b>TK 0.50</b> বোনাস পেয়েছেন!", parse_mode="HTML")
+
+                        if referrals_collection is not None:
+                            ref_doc = {
+                                "referrer_id": str(referrer_id),
+                                "referred_id": user_id,
+                                "referred_name": first_name,
+                                "referred_username": username,
+                                "status": "pending",
+                                "date": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+                            }
+                            res = referrals_collection.insert_one(ref_doc)
+                            ref_req_id = str(res.inserted_id)
+
+                            referrer_data = users_collection.find_one({"user_id": str(referrer_id)})
+                            referrer_name = referrer_data.get("first_name", "Unknown") if referrer_data else "Unknown"
+                            referrer_username = referrer_data.get("username", "No Username") if referrer_data else "No Username"
+
+                            admin_msg = (
+                                f"\U0001F465 <b>\u09a8\u09a4\u09c1\u09a8 \u09b0\u09c7\u09ab\u09be\u09b0 \u09b0\u09bf\u0995\u09cb\u09df\u09c7\u09b8\u09cd\u099f!</b>\n\n"
+                                f"\U0001F517 <b>\u09b0\u09c7\u09ab\u09be\u09b0\u09be\u09b0:</b> {referrer_name} (@{referrer_username})\n"
+                                f"\U0001F194 <b>\u09b0\u09c7\u09ab\u09be\u09b0\u09be\u09b0 ID:</b> <code>{referrer_id}</code>\n\n"
+                                f"\U0001F195 <b>\u09a8\u09a4\u09c1\u09a8 \u0987\u0989\u099c\u09be\u09b0:</b> {first_name} (@{username})\n"
+                                f"\U0001F194 <b>\u09a8\u09a4\u09c1\u09a8 \u0987\u0989\u099c\u09be\u09b0 ID:</b> <code>{user_id}</code>\n\n"
+                                f"\U0001F4B5 <b>\u09ac\u09cb\u09a8\u09be\u09b8:</b> \u09f30.50 (Accept \u0995\u09b0\u09b2\u09c7 \u09a6\u09c7\u0993\u09df\u09be \u09b9\u09ac\u09c7)"
+                            )
+
+                            ref_markup = InlineKeyboardMarkup()
+                            ref_markup.row(
+                                InlineKeyboardButton("\u2705 Accept", callback_data=f"ref_acc_{ref_req_id}"),
+                                InlineKeyboardButton("\u274c Reject", callback_data=f"ref_rej_{ref_req_id}")
+                            )
+
+                            for admin_id in ADMIN_CHAT_IDS:
+                                try:
+                                    bot.send_message(admin_id, admin_msg, parse_mode="HTML", reply_markup=ref_markup)
+                                except Exception as e:
+                                    print(f"Error notifying admin {admin_id} about referral: {e}")
                 except Exception as e:
                     print(f"Referral update error: {e}")
 
@@ -317,6 +351,63 @@ if bot:
                 bot.send_message(user_id, f"❌ <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি রিজেক্ট করা হয়েছে এবং ব্যালেন্স ওয়ালেটে ফেরত দেওয়া হয়েছে।</b>", parse_mode="HTML")
             except Exception:
                 pass
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(('ref_acc_', 'ref_rej_')))
+    def handle_referral_action(call):
+        if call.from_user.id not in ADMIN_CHAT_IDS:
+            bot.answer_callback_query(call.id, "\u274c \u0986\u09aa\u09a8\u09bf \u098f\u0987 \u0995\u09be\u099c\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u0985\u09a8\u09c1\u09ae\u09cb\u09a6\u09bf\u09a4 \u09a8\u09a8!", show_alert=True)
+            return
+
+        parts = call.data.split('_')
+        action = parts[1]
+        req_id = parts[2]
+
+        if referrals_collection is None:
+            bot.answer_callback_query(call.id, "Database Error!", show_alert=True)
+            return
+
+        req = referrals_collection.find_one({"_id": ObjectId(req_id)})
+        if not req:
+            bot.answer_callback_query(call.id, "\u09b0\u09c7\u09ab\u09be\u09b0 \u09b0\u09bf\u0995\u09cb\u09df\u09c7\u09b8\u09cd\u099f\u099f\u09bf \u09aa\u09be\u0993\u09df\u09be \u09af\u09be\u09df\u09a8\u09bf!", show_alert=True)
+            return
+
+        if req.get("status") != "pending":
+            bot.answer_callback_query(call.id, "\u098f\u0987 \u09b0\u09bf\u0995\u09cb\u09df\u09c7\u09b8\u09cd\u099f\u099f\u09bf \u0986\u0997\u09c7\u0987 \u09aa\u09cd\u09b0\u09b8\u09c7\u09b8 \u0995\u09b0\u09be \u09b9\u09df\u09c7\u099b\u09c7!", show_alert=True)
+            return
+
+        referrer_id = req["referrer_id"]
+
+        if action == "acc":
+            referrals_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "approved"}})
+            if users_collection is not None:
+                users_collection.update_one(
+                    {"user_id": referrer_id},
+                    {"$inc": {"balance": 0.50, "total_refers": 1}},
+                    upsert=True
+                )
+
+            bot.answer_callback_query(call.id, "\u2705 Referral Approved!")
+            bot.edit_message_text(
+                f"{call.message.text}\n\n<b>\u2705 \u09b8\u09cd\u099f\u09cd\u09af\u09be\u099f\u09be\u09b8: Approved by Admin</b>",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                parse_mode="HTML"
+            )
+
+            try:
+                bot.send_message(referrer_id, "\U0001F389 \u0986\u09aa\u09a8\u09be\u09b0 \u09b0\u09c7\u09ab\u09be\u09b0 \u09b2\u09bf\u0982\u0995\u09c7 \u09a8\u09a4\u09c1\u09a8 \u098f\u0995\u099c\u09a8 \u099c\u09df\u09c7\u09a8 \u0995\u09b0\u09be\u09df \u0986\u09aa\u09a8\u09bf <b>TK 0.50</b> \u09ac\u09cb\u09a8\u09be\u09b8 \u09aa\u09c7\u09df\u09c7\u099b\u09c7\u09a8!", parse_mode="HTML")
+            except Exception:
+                pass
+
+        elif action == "rej":
+            referrals_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "rejected"}})
+            bot.answer_callback_query(call.id, "\u274c Referral Rejected!")
+            bot.edit_message_text(
+                f"{call.message.text}\n\n<b>\u274c \u09b8\u09cd\u099f\u09cd\u09af\u09be\u099f\u09be\u09b8: Rejected by Admin</b>",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                parse_mode="HTML"
+            )
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('ban_', 'unban_')))
     def handle_ban_callback(call):
