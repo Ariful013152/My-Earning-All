@@ -514,7 +514,7 @@
                     <button class="method-btn" id="NagadBtn" onclick="selectMethod('Nagad', this)">● নগদ (Nagad)</button>
                 </div>
 
-                <input type="number" class="input-box" placeholder="মিনিমাম ২০০ টাকা" id="withdrawAmount">
+                <input type="number" class="input-box" placeholder="মিনিমাম ১০০ টাকা" id="withdrawAmount">
                 <input type="text" class="input-box" placeholder="01XXXXXXXXX" id="withdrawAccount">
 
                 <button class="gradient-btn" onclick="submitWithdraw()">উইথড্র রিকোয়েস্ট পাঠান</button>
@@ -952,8 +952,8 @@
             const amount = parseFloat(document.getElementById('withdrawAmount').value);
             const account = document.getElementById('withdrawAccount').value.trim();
 
-            if (!amount || amount < 200) {
-                alert("মিনিমাম ২০০ টাকা উইথড্র করতে পারবেন।");
+            if (!amount || amount < 100) {
+                alert("মিনিমাম ১০০ টাকা উইথড্র করতে পারবেন।");
                 return;
             }
 
