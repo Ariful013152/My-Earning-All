@@ -162,8 +162,31 @@ if bot:
         username = message.from_user.username or "No Username"
 
         if is_user_banned(user_id):
-            bot.reply_to(message, "❌ <b>আপনি এই বট থেকে ব্যান হয়েছেন!</b>", parse_mode="HTML")
+            bot.reply_to(message, "❌ <b>আপনি এই বট থেকে ব্যান হয়েছেন!</b>", parse_mode="HTML")
             return
+
+        # Save the referrer id (if present in the /start deep-link) to the DB right away,
+        # BEFORE the channel-join gate below. This is critical: when the user later taps
+        # "Check Verification", this same function runs again but with the bot's own
+        # message object (no "/start <referrer_id>" text), so without this early save the
+        # referrer id would be lost for anyone who has to join channels first.
+        if message.text and message.text.startswith('/start'):
+            start_args = message.text.split()
+            incoming_referrer = start_args[1] if len(start_args) > 1 else None
+            if incoming_referrer and str(incoming_referrer) != user_id and users_collection is not None:
+                users_collection.update_one(
+                    {"user_id": user_id, "referred_by": {"$exists": False}},
+                    {
+                        "$set": {"pending_referrer": str(incoming_referrer)},
+                        "$setOnInsert": {
+                            "user_id": user_id, "balance": 0.0, "total_refers": 0,
+                            "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0,
+                            "gigapub_first_view_at": None,
+                            "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d")
+                        }
+                    },
+                    upsert=True
+                )
 
         if not check_user_joined_channels(message.from_user.id):
             markup = InlineKeyboardMarkup()
@@ -173,8 +196,8 @@ if bot:
             markup.add(InlineKeyboardButton("✅ Check Verification", callback_data="check_join"))
             
             join_msg = (
-                "⚠️ <b>বট ব্যবহার করতে আপনাকে অবশ্যই আমাদের ৩টি চ্যানেলেই জয়েন করতে হবে!</b>\n\n"
-                "নিচের ৩টি চ্যানেলে জয়েন করে <b>Check Verification</b> বাটনে ক্লিক করুন।"
+                "⚠️ <b>বট ব্যবহার করতে আপনাকে অবশ্যই আমাদের ৩টি চ্যানেলেই জয়েন করতে হবে!</b>\n\n"
+                "নিচের ৩টি চ্যানেলে জয়েন করে <b>Check Verification</b> বাটনে ক্লিক করুন।"
             )
             bot.reply_to(message, join_msg, parse_mode="HTML", reply_markup=markup)
             return
@@ -186,7 +209,7 @@ if bot:
             if not existing_user:
                 try:
                     new_user_msg = (
-                        f"🎉 <b>নতুন ইউজার জয়েন করেছেন!</b>\n\n"
+                        f"🎉 <b>নতুন ইউজার জয়েন করেছেন!</b>\n\n"
                         f"👤 <b>নাম:</b> {first_name}\n"
                         f"🆔 <b>ইউজার ID:</b> <code>{user_id}</code>\n"
                         f"🔗 <b>ইউজারনেম:</b> @{username}"
@@ -202,17 +225,19 @@ if bot:
                 upsert=True
             )
 
-        args = message.text.split()
-        referrer_id = args[1] if len(args) > 1 else None
+        # Read the referrer id from the DB (saved earlier, before the channel-join gate)
+        # instead of re-parsing message.text, since this function can be re-entered via
+        # the "Check Verification" button with a message object that has no /start args.
+        current_user = users_collection.find_one({"user_id": user_id}) if users_collection is not None else None
+        referrer_id = current_user.get("pending_referrer") if current_user else None
 
         if referrer_id and str(referrer_id) != user_id:
             if users_collection is not None:
                 try:
-                    current_user = users_collection.find_one({"user_id": user_id})
                     if current_user and not current_user.get("referred_by"):
                         users_collection.update_one(
                             {"user_id": user_id},
-                            {"$set": {"referred_by": str(referrer_id)}}
+                            {"$set": {"referred_by": str(referrer_id)}, "$unset": {"pending_referrer": ""}}
                         )
 
                         if referrals_collection is not None:
@@ -254,7 +279,7 @@ if bot:
                 except Exception as e:
                     print(f"Referral update error: {e}")
 
-        welcome_text = "👋 <b>স্বাগতম!</b>\n\nআপনি সকল চ্যানেলে জয়েন করেছেন। আমাদের অ্যাপে ঢুকতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
+        welcome_text = "👋 <b>স্বাগতম!</b>\n\nআপনি সকল চ্যানেলে জয়েন করেছেন। আমাদের অ্যাপে ঢুকতে নিচে থাকা <b>Open App</b> বাটনে চাপ দিন।"
         
         markup = InlineKeyboardMarkup()
         web_app_btn = InlineKeyboardButton("🚀 Open App 🚀", web_app=WebAppInfo(url=RENDER_EXTERNAL_URL))
@@ -266,11 +291,11 @@ if bot:
     def handle_check_join(call):
         user_id = call.from_user.id
         if check_user_joined_channels(user_id):
-            bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে!")
+            bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে!")
             bot.delete_message(call.message.chat.id, call.message.message_id)
             send_welcome(call.message)
         else:
-            bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
 
     # -------- WITHDRAW ACTION HANDLER (ACCEPT/REJECT) --------
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('wd_acc_', 'wd_rej_')))
@@ -289,11 +314,11 @@ if bot:
 
         req = withdraws_collection.find_one({"_id": ObjectId(req_id)})
         if not req:
-            bot.answer_callback_query(call.id, "উইথড্র রিকোয়েস্টটি পাওয়া যায়নি!", show_alert=True)
+            bot.answer_callback_query(call.id, "উইথড্র রিকোয়েস্টটি পাওয়া যায়নি!", show_alert=True)
             return
 
         if req.get("status") != "pending":
-            bot.answer_callback_query(call.id, "এই রিকোয়েস্টটি আগেই প্রসেস করা হয়েছে!", show_alert=True)
+            bot.answer_callback_query(call.id, "এই রিকোয়েস্টটি আগেই প্রসেস করা হয়েছে!", show_alert=True)
             return
 
         user_id = req["user_id"]
@@ -313,7 +338,7 @@ if bot:
             )
 
             try:
-                bot.send_message(user_id, f"🎉 <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি অ্যাপ্রুভ হয়েছে এবং টাকা পাঠানো হয়েছে!</b>", parse_mode="HTML")
+                bot.send_message(user_id, f"🎉 <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি অ্যাপ্রুভ হয়েছে এবং টাকা পাঠানো হয়েছে!</b>", parse_mode="HTML")
             except Exception:
                 pass
 
@@ -348,7 +373,7 @@ if bot:
             )
 
             try:
-                bot.send_message(user_id, f"❌ <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি রিজেক্ট করা হয়েছে এবং ব্যালেন্স ওয়ালেটে ফেরত দেওয়া হয়েছে।</b>", parse_mode="HTML")
+                bot.send_message(user_id, f"❌ <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি রিজেক্ট করা হয়েছে এবং ব্যালেন্স ওয়ালেটে ফেরত দেওয়া হয়েছে।</b>", parse_mode="HTML")
             except Exception:
                 pass
 
@@ -417,14 +442,14 @@ if bot:
             if users_collection is not None:
                 users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
             bot.answer_callback_query(call.id, f"User {target_user_id} Banned!")
-            bot.edit_message_text(f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", 
+            bot.edit_message_text(f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", 
                                   chat_id=call.message.chat.id, 
                                   message_id=call.message.message_id, parse_mode="HTML")
         elif action == 'unban':
             if users_collection is not None:
                 users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
             bot.answer_callback_query(call.id, f"User {target_user_id} Unbanned!")
-            bot.edit_message_text(f"✅ <b>ইউজার ID: {target_user_id} আনব্যান করা হয়েছে!</b>", 
+            bot.edit_message_text(f"✅ <b>ইউজার ID: {target_user_id} আনব্যান করা হয়েছে!</b>", 
                                   chat_id=call.message.chat.id, 
                                   message_id=call.message.message_id, parse_mode="HTML")
 
@@ -478,7 +503,7 @@ if bot:
         elif call.data == "admin_addbal_prompt":
             msg = bot.send_message(
                 call.message.chat.id, 
-                "➕ <b>USER_ID এবং AMOUNT স্পেস দিয়ে লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 50</code>)", 
+                "➕ <b>USER_ID এবং AMOUNT স্পেস দিয়ে লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 50</code>)", 
                 parse_mode="HTML", 
                 reply_markup=ForceReply(selective=True)
             )
@@ -487,7 +512,7 @@ if bot:
         elif call.data == "admin_cutbal_prompt":
             msg = bot.send_message(
                 call.message.chat.id, 
-                "➖ <b>USER_ID এবং AMOUNT স্পেস দিয়ে লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 20</code>)", 
+                "➖ <b>USER_ID এবং AMOUNT স্পেস দিয়ে লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 20</code>)", 
                 parse_mode="HTML", 
                 reply_markup=ForceReply(selective=True)
             )
@@ -520,7 +545,7 @@ if bot:
         target_user_id = message.text.strip()
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
-        bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
+        bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
 
     def process_unban_input(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
@@ -528,27 +553,27 @@ if bot:
         target_user_id = message.text.strip()
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
-        bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
+        bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
 
     def process_addbal_input(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
             return
         target_user_id = args[0].strip()
         try:
             amount = float(args[1].strip())
         except ValueError:
-            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
+            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
             return
 
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": amount}}, upsert=True)
-            bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর অ্যাকাউন্টে ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
+            bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর অ্যাকাউন্টে ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
             try:
-                bot.send_message(target_user_id, f"🎉 অ্যাডমিন আপনার ওয়ালেটে <b>৳{amount:.2f}</b> যুক্ত করেছেন!", parse_mode="HTML")
+                bot.send_message(target_user_id, f"🎉 অ্যাডমিন আপনার ওয়ালেটে <b>৳{amount:.2f}</b> যুক্ত করেছেন!", parse_mode="HTML")
             except Exception:
                 pass
 
@@ -557,20 +582,20 @@ if bot:
             return
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
             return
         target_user_id = args[0].strip()
         try:
             amount = float(args[1].strip())
         except ValueError:
-            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
+            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
             return
 
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": -amount}}, upsert=True)
-            bot.reply_to(message, f"✂️ <b>ইউজার ID {target_user_id} এর অ্যাকাউন্ট থেকে ৳{amount:.2f} কেটে নেওয়া হয়েছে!</b>", parse_mode="HTML")
+            bot.reply_to(message, f"✂️ <b>ইউজার ID {target_user_id} এর অ্যাকাউন্ট থেকে ৳{amount:.2f} কেটে নেওয়া হয়েছে!</b>", parse_mode="HTML")
             try:
-                bot.send_message(target_user_id, f"⚠️ অ্যাডমিন আপনার ওয়ালেট থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।", parse_mode="HTML")
+                bot.send_message(target_user_id, f"⚠️ অ্যাডমিন আপনার ওয়ালেট থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।", parse_mode="HTML")
             except Exception:
                 pass
 
@@ -586,7 +611,7 @@ if bot:
             all_users = list(users_collection.find({}, {"user_id": 1}))
             success_count = 0
             
-            status_msg = bot.reply_to(message, "⏳ ব্রডকাস্ট মেসেজ পাঠানো শুরু হয়েছে...")
+            status_msg = bot.reply_to(message, "⏳ ব্রডকাস্ট মেসেজ পাঠানো শুরু হয়েছে...")
             
             for user in all_users:
                 u_id = user.get("user_id")
@@ -606,12 +631,12 @@ if bot:
             return
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/unban USER_ID</code>", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/unban USER_ID</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
-        bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
+        bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
 
     @bot.message_handler(commands=['ban'])
     def handle_ban_command(message):
@@ -619,12 +644,12 @@ if bot:
             return
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/ban USER_ID</code>", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/ban USER_ID</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
-        bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
+        bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
 
     @bot.message_handler(commands=['addbalance'])
     def handle_addbalance_command(message):
@@ -632,20 +657,20 @@ if bot:
             return
         args = message.text.split()
         if len(args) < 3:
-            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
         try:
             amount = float(args[2].strip())
         except ValueError:
-            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
+            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
             return
 
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": amount}}, upsert=True)
-            bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর অ্যাকাউন্টে ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
+            bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর অ্যাকাউন্টে ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
             try:
-                bot.send_message(target_user_id, f"🎉 অ্যাডমিন আপনার ওয়ালেটে <b>৳{amount:.2f}</b> যুক্ত করেছেন!", parse_mode="HTML")
+                bot.send_message(target_user_id, f"🎉 অ্যাডমিন আপনার ওয়ালেটে <b>৳{amount:.2f}</b> যুক্ত করেছেন!", parse_mode="HTML")
             except Exception:
                 pass
 
@@ -655,20 +680,20 @@ if bot:
             return
         args = message.text.split()
         if len(args) < 3:
-            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/cutbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/cutbalance USER_ID AMOUNT</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
         try:
             amount = float(args[2].strip())
         except ValueError:
-            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
+            bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
             return
 
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": -amount}}, upsert=True)
-            bot.reply_to(message, f"✂️ <b>ইউজার ID {target_user_id} এর অ্যাকাউন্ট থেকে ৳{amount:.2f} কেটে নেওয়া হয়েছে!</b>", parse_mode="HTML")
+            bot.reply_to(message, f"✂️ <b>ইউজার ID {target_user_id} এর অ্যাকাউন্ট থেকে ৳{amount:.2f} কেটে নেওয়া হয়েছে!</b>", parse_mode="HTML")
             try:
-                bot.send_message(target_user_id, f"⚠️ অ্যাডমিন আপনার ওয়ালেট থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।", parse_mode="HTML")
+                bot.send_message(target_user_id, f"⚠️ অ্যাডমিন আপনার ওয়ালেট থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।", parse_mode="HTML")
             except Exception:
                 pass
 
@@ -678,12 +703,12 @@ if bot:
             return
         text_to_send = message.text.replace("/broadcast", "").strip()
         if not text_to_send:
-            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/broadcast আপনার মেসেজ</code>", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/broadcast আপনার মেসেজ</code>", parse_mode="HTML")
             return
         if users_collection is not None:
             all_users = list(users_collection.find({}, {"user_id": 1}))
             success_count = 0
-            status_msg = bot.reply_to(message, "⏳ ব্রডকাস্ট মেসেজ পাঠানো শুরু হয়েছে...")
+            status_msg = bot.reply_to(message, "⏳ ব্রডকাস্ট মেসেজ পাঠানো শুরু হয়েছে...")
             for user in all_users:
                 u_id = user.get("user_id")
                 if u_id:
@@ -730,7 +755,7 @@ def get_user_data():
 
     try:
         if not check_user_joined_channels(user_id):
-            return jsonify({"status": "not_joined", "message": "আপনি সকল চ্যানেলে জয়েন নেই!"}), 200
+            return jsonify({"status": "not_joined", "message": "আপনি সকল চ্যানেলে জয়েন নেই!"}), 200
     except Exception:
         pass
 
@@ -804,10 +829,10 @@ def verify_channel_task():
             try:
                 member = bot.get_chat_member(channel, int(user_id)) if bot else None
                 if member and member.status in ['left', 'kicked']:
-                    return jsonify({"status": "not_joined", "message": "আপনি এখনো চ্যানেলে জয়েন করেননি!"}), 200
+                    return jsonify({"status": "not_joined", "message": "আপনি এখনো চ্যানেলে জয়েন করেননি!"}), 200
             except Exception as e:
                 print(f"Task verification error: {e}")
-                return jsonify({"status": "error", "message": "ভেরিফিকেশনে সমস্যা হয়েছে!"}), 500
+                return jsonify({"status": "error", "message": "ভেরিফিকেশনে সমস্যা হয়েছে!"}), 500
 
         users_collection.update_one(
             {"user_id": str(user_id)},
@@ -817,7 +842,7 @@ def verify_channel_task():
             },
             upsert=True
         )
-        return jsonify({"status": "success", "message": f"🎉 সফল হয়েছে! ৳{reward:.2f} ব্যালেন্সে যোগ করা হয়েছে।"}), 200
+        return jsonify({"status": "success", "message": f"🎉 সফল হয়েছে! ৳{reward:.2f} ব্যালেন্সে যোগ করা হয়েছে।"}), 200
 
     return jsonify({"status": "error", "message": "Database connection error"}), 500
 
@@ -934,7 +959,7 @@ def request_withdraw():
         req_id = str(res.inserted_id)
 
         admin_msg = (
-            f"📥 <b>নতুন উইথড্র রিকোয়েস্ট!</b>\n\n"
+            f"📥 <b>নতুন উইথড্র রিকোয়েস্ট!</b>\n\n"
             f"👤 <b>ইউজার:</b> {user_data.get('first_name', 'User')} (@{user_data.get('username', 'No Username')})\n"
             f"🆔 <b>ইউজার ID:</b> <code>{user_id}</code>\n"
             f"💵 <b>পরিমাণ:</b> ৳{amount:.2f}\n"
