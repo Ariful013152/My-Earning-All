@@ -6,6 +6,7 @@
     <title>My Earning All</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://openfpcdn.io/fingerprintjs/v3"></script>
+    <script src="https://ad.gigapub.tech/script?id=8072"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -464,6 +465,18 @@
                 </div>
                 <button class="compact-btn" id="adsterraBtn" onclick="startAdsterraTask()">শুরু করুন</button>
             </div>
+
+            <!-- Compact Gigapub Task -->
+            <div class="task-list-card">
+                <div class="task-info">
+                    <div class="task-icon"><i class="fas fa-play-circle"></i></div>
+                    <div class="task-details">
+                        <b>Gigapub টাস্ক</b>
+                        <small>আজকে দেখেছেন: <span id="gigapubCount">0</span> বার <span id="gigapubTimer" style="color:#e3b341;"></span></small>
+                    </div>
+                </div>
+                <button class="compact-btn" id="gigapubBtn" onclick="startGigapubTask()">শুরু করুন</button>
+            </div>
         </div>
 
         <!-- SUPPORT TAB -->
@@ -586,6 +599,7 @@
 
         let monetagCount = 0;
         let adsterraCount = 0;
+        let gigapubCount = 0;
         let balance = 0.00;
         let totalRefers = 0;
         let withdrawsHistory = [];
@@ -661,6 +675,7 @@
                         totalRefers = parseInt(data.total_refers);
                         monetagCount = parseInt(data.monetag_count || 0);
                         adsterraCount = parseInt(data.adsterra_count || 0);
+                        gigapubCount = parseInt(data.gigapub_count || 0);
                         withdrawsHistory = data.withdraws || [];
 
                         if (data.first_name && data.first_name !== "User") {
@@ -693,8 +708,9 @@
             document.getElementById('totalEarn').innerText = balance.toFixed(2);
             document.getElementById('monetagCount').innerText = monetagCount;
             document.getElementById('adsterraCount').innerText = adsterraCount;
+            document.getElementById('gigapubCount').innerText = gigapubCount;
             document.getElementById('refCount').innerText = totalRefers;
-            document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount;
+            document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount + gigapubCount;
             document.getElementById('userName').innerText = firstName;
         }
 
@@ -856,6 +872,51 @@
                     });
                 }
             }, 1000);
+        }
+
+        function startGigapubTask() {
+            if (typeof window.showGiga !== 'function') {
+                alert("⚠️ এড সিস্টেম লোড হয়নি, অনুগ্রহ করে পেজটি রিফ্রেশ করে আবার চেষ্টা করুন!");
+                return;
+            }
+
+            const btn = document.getElementById('gigapubBtn');
+            btn.disabled = true;
+            document.getElementById('gigapubTimer').innerText = "(লোড হচ্ছে...)";
+
+            window.showGiga()
+                .then(() => {
+                    // এড সম্পূর্ণ দেখা হয়েছে, রিওয়ার্ড দেওয়া হবে
+                    document.getElementById('gigapubTimer').innerText = "";
+                    fetch('/verify-ad-task', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: userId, task_type: 'gigapub' })
+                    })
+                    .then(res => res.json())
+                    .then(resData => {
+                        if (resData.status === 'success') {
+                            gigapubCount = resData.new_count;
+                            balance += resData.reward;
+                            updateUI();
+                            alert(`🎉 অভিনন্দন! আপনি TK ${resData.reward.toFixed(2)} পেয়েছেন।`);
+                        } else {
+                            alert(resData.message || "টাস্ক সম্পন্ন করা সম্ভব হয়নি!");
+                        }
+                    })
+                    .catch(() => {
+                        alert("সার্ভারে সংযোগ করা যায়নি, অনুগ্রহ করে আবার চেষ্টা করুন!");
+                    })
+                    .finally(() => {
+                        btn.disabled = false;
+                    });
+                })
+                .catch(() => {
+                    // এই মুহূর্তে দেখানোর মতো কোনো এড নেই
+                    document.getElementById('gigapubTimer').innerText = "";
+                    alert("⚠️ এই মুহূর্তে কোনো এড পাওয়া যায়নি, একটু পরে আবার চেষ্টা করুন!");
+                    btn.disabled = false;
+                });
         }
 
         function selectMethod(method, el) {
