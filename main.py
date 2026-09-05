@@ -4,6 +4,9 @@ import random
 import datetime
 import requests
 import threading
+import hashlib
+import hmac
+import urllib.parse
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ForceReply
 from flask import Flask, request, jsonify, render_template
@@ -51,7 +54,36 @@ if MONGO_URI:
     except Exception as e:
         print(f"❌ MongoDB Connection Error: {e}")
 
-banned_users = set()
+# -------- TELEGRAM WEBAPP HASH VERIFICATION --------
+def verify_telegram_init_data(init_data):
+    if not BOT_TOKEN or not init_data:
+        return False
+    try:
+        parsed_data = urllib.parse.parse_qsl(init_data, keep_blank_values=True)
+        data_dict = dict(parsed_data)
+        received_hash = data_dict.pop('hash', None)
+        if not received_hash:
+            return False
+        
+        data_list = [f"{k}={v}" for k, v in sorted(data_dict.items())]
+        data_check_string = "\n".join(data_list)
+        
+        secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode('utf-8'), hashlib.sha256).digest()
+        calculated_hash = hmac.new(secret_key, data_check_string.encode('utf-8'), hashlib.sha256).hexdigest()
+        
+        return hmac.compare_digest(calculated_hash, received_hash)
+    except Exception as e:
+        print(f"Auth verification error: {e}")
+        return False
+
+# -------- HELPER: CHECK USER BANNED STATUS FROM DB --------
+def is_user_banned(user_id):
+    if users_collection is None:
+        return False
+    user = users_collection.find_one({"user_id": str(user_id)})
+    if user and user.get("banned", False):
+        return True
+    return False
 
 # -------- FORCE JOIN CHECKER --------
 def check_user_joined_channels(user_id):
@@ -126,7 +158,7 @@ if bot:
         first_name = message.from_user.first_name or "User"
         username = message.from_user.username or "No Username"
 
-        if user_id in banned_users:
+        if is_user_banned(user_id):
             bot.reply_to(message, "❌ <b>আপনি এই বট থেকে ব্যান হয়েছেন!</b>", parse_mode="HTML")
             return
 
@@ -162,7 +194,7 @@ if bot:
 
             users_collection.update_one(
                 {"user_id": user_id},
-                {"$set": {"first_name": first_name, "username": username},
+                {"$set": {"first_name": first_name, "username": username, "banned": False},
                  "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d")}},
                 upsert=True
             )
@@ -239,7 +271,6 @@ if bot:
             withdraws_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "completed"}})
             bot.answer_callback_query(call.id, "✅ Withdraw Approved!")
 
-            # Admin message update
             bot.edit_message_text(
                 f"{call.message.text}\n\n<b>✅ স্ট্যাটাস: Approved by Admin</b>",
                 chat_id=call.message.chat.id,
@@ -247,13 +278,11 @@ if bot:
                 parse_mode="HTML"
             )
 
-            # Notify User
             try:
                 bot.send_message(user_id, f"🎉 <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি অ্যাপ্রুভ হয়েছে এবং টাকা পাঠানো হয়েছে!</b>", parse_mode="HTML")
             except Exception:
                 pass
 
-            # Channel Post
             hidden_acc = account[:3] + "xxxx" + account[-2:]
             msg = (
                 f"<b>My Earning All Payment</b>\n"
@@ -272,13 +301,11 @@ if bot:
 
         elif action == "rej":
             withdraws_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "rejected"}})
-            # Refund money back to user balance
             if users_collection is not None:
                 users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
 
             bot.answer_callback_query(call.id, "❌ Withdraw Rejected!")
 
-            # Admin message update
             bot.edit_message_text(
                 f"{call.message.text}\n\n<b>❌ স্ট্যাটাস: Rejected & Refunded</b>",
                 chat_id=call.message.chat.id,
@@ -286,7 +313,6 @@ if bot:
                 parse_mode="HTML"
             )
 
-            # Notify User
             try:
                 bot.send_message(user_id, f"❌ <b>আপনার ৳{amount:.2f} ({method}) উইথড্র রিকোয়েস্টটি রিজেক্ট করা হয়েছে এবং ব্যালেন্স ওয়ালেটে ফেরত দেওয়া হয়েছে।</b>", parse_mode="HTML")
             except Exception:
@@ -297,7 +323,6 @@ if bot:
         action, target_user_id = call.data.split('_')
         
         if action == 'ban':
-            banned_users.add(target_user_id)
             if users_collection is not None:
                 users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
             bot.answer_callback_query(call.id, f"User {target_user_id} Banned!")
@@ -305,7 +330,6 @@ if bot:
                                   chat_id=call.message.chat.id, 
                                   message_id=call.message.message_id, parse_mode="HTML")
         elif action == 'unban':
-            banned_users.discard(target_user_id)
             if users_collection is not None:
                 users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
             bot.answer_callback_query(call.id, f"User {target_user_id} Unbanned!")
@@ -313,7 +337,6 @@ if bot:
                                   chat_id=call.message.chat.id, 
                                   message_id=call.message.message_id, parse_mode="HTML")
 
-    # -------- ADMIN PANEL & FORCE REPLY HANDLERS --------
     @bot.message_handler(commands=['admin'])
     def handle_admin_panel(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
@@ -380,8 +403,8 @@ if bot:
             bot.register_next_step_handler(msg, process_cutbal_input)
             
         elif call.data == "admin_stats":
-            total_banned = len(banned_users)
             total_db_users = users_collection.count_documents({}) if users_collection is not None else 0
+            total_banned = users_collection.count_documents({"banned": True}) if users_collection is not None else 0
             
             msg = f"<b>📊 ইউজার স্ট্যাটিস্টিক্স:</b>\n\n"
             msg += f"👤 মোট রেজিস্টার্ড ইউজার: {total_db_users}\n"
@@ -400,12 +423,10 @@ if bot:
             
         bot.answer_callback_query(call.id)
 
-    # -------- INCOMING REPLY PROCESSORS --------
     def process_ban_input(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
         target_user_id = message.text.strip()
-        banned_users.add(target_user_id)
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
         bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
@@ -414,7 +435,6 @@ if bot:
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
         target_user_id = message.text.strip()
-        banned_users.discard(target_user_id)
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
         bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
@@ -489,7 +509,6 @@ if bot:
             
             bot.edit_message_text(f"✅ <b>ব্রডকাস্ট সম্পন্ন!</b>\n\nমোট <b>{success_count}</b> জন ইউজারের কাছে মেসেজ পৌঁছেছে।", chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="HTML")
 
-    # -------- DIRECT BACKWARD COMPATIBLE COMMAND HANDLERS --------
     @bot.message_handler(commands=['unban'])
     def handle_unban_command(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
@@ -499,7 +518,6 @@ if bot:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/unban USER_ID</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
-        banned_users.discard(target_user_id)
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
         bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
@@ -513,7 +531,6 @@ if bot:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/ban USER_ID</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
-        banned_users.add(target_user_id)
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
         bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
@@ -617,6 +634,9 @@ def get_user_data():
     if not user_id:
         return jsonify({"status": "error", "message": "User ID required"}), 400
 
+    if is_user_banned(user_id):
+        return jsonify({"status": "banned"}), 200
+
     try:
         if not check_user_joined_channels(user_id):
             return jsonify({"status": "not_joined", "message": "আপনি সকল চ্যানেলে জয়েন নেই!"}), 200
@@ -643,7 +663,6 @@ def get_user_data():
                 adsterra_count = user_data.get("adsterra_count", 0)
                 gigapub_count = user_data.get("gigapub_count", 0)
 
-            # Retrieve withdraw history
             user_withdraws = []
             if withdraws_collection is not None:
                 docs = withdraws_collection.find({"user_id": str(user_id)})
@@ -672,13 +691,16 @@ def get_user_data():
 
 @app.route('/verify-channel-task', methods=['POST'])
 def verify_channel_task():
-    data = request.json
+    data = request.json or {}
     user_id = data.get('user_id')
     channel = data.get('channel')
     reward = float(data.get('reward', 0.50))
 
     if not user_id or not channel:
         return jsonify({"status": "error", "message": "Invalid parameters"}), 400
+
+    if is_user_banned(user_id):
+        return jsonify({"status": "banned"}), 200
 
     if users_collection is not None:
         user = users_collection.find_one({"user_id": str(user_id)})
@@ -687,7 +709,6 @@ def verify_channel_task():
         if channel in completed_tasks:
             return jsonify({"status": "already_completed", "message": "আপনি এই টাস্কটি আগেই সম্পূর্ণ করেছেন!"}), 200
 
-        # টেলিগ্রাম বট টাস্কের ক্ষেত্রে মেম্বারশিপ চেক বাধ্যতামূলক নয়
         if not channel.startswith('bot_'):
             try:
                 member = bot.get_chat_member(channel, int(user_id)) if bot else None
@@ -717,6 +738,9 @@ def verify_ad_task():
 
     if not user_id or task_type not in ['monetag', 'adsterra', 'gigapub']:
         return jsonify({"status": "error", "message": "Invalid task parameters"}), 400
+
+    if is_user_banned(user_id):
+        return jsonify({"status": "banned"}), 200
 
     if users_collection is None:
         return jsonify({"status": "error", "message": "Database offline"}), 500
@@ -780,15 +804,16 @@ def request_withdraw():
     if not user_id or amount < 200 or len(account) < 11:
         return jsonify({"status": "error", "message": "Invalid request parameters"}), 400
 
+    if is_user_banned(user_id):
+        return jsonify({"status": "banned"}), 200
+
     if users_collection is not None and withdraws_collection is not None:
         user_data = users_collection.find_one({"user_id": user_id})
         if not user_data or float(user_data.get("balance", 0)) < amount:
             return jsonify({"status": "error", "message": "পর্যাপ্ত ব্যালেন্স নেই!"}), 400
 
-        # Cut balance from user
         users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": -amount}})
 
-        # Save withdraw record with 'pending' status
         req_doc = {
             "user_id": user_id,
             "amount": amount,
@@ -800,7 +825,6 @@ def request_withdraw():
         res = withdraws_collection.insert_one(req_doc)
         req_id = str(res.inserted_id)
 
-        # Notify Admins with Accept/Reject inline buttons
         admin_msg = (
             f"📥 <b>নতুন উইথড্র রিকোয়েস্ট!</b>\n\n"
             f"👤 <b>ইউজার:</b> {user_data.get('first_name', 'User')} (@{user_data.get('username', 'No Username')})\n"
@@ -837,13 +861,12 @@ def check_device():
     first_name = data.get('first_name', 'Unknown')
     username = data.get('username', 'No Username')
 
-    if user_id in banned_users:
+    if is_user_banned(user_id):
         return jsonify({"status": "banned"}), 200
 
     if users_collection is not None:
         u_data = users_collection.find_one({"user_id": user_id})
         if u_data and u_data.get("banned", False):
-            banned_users.add(user_id)
             return jsonify({"status": "banned"}), 200
 
     if devices_collection is not None:
