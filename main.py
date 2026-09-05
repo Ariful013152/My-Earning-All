@@ -195,7 +195,7 @@ if bot:
             users_collection.update_one(
                 {"user_id": user_id},
                 {"$set": {"first_name": first_name, "username": username, "banned": False},
-                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d")}},
+                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "gigapub_first_view_at": None, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d")}},
                 upsert=True
             )
 
@@ -767,10 +767,27 @@ def verify_ad_task():
 
     if task_type == 'gigapub':
         gigapub_reward = 0.05
-        users_collection.update_one(
-            {"user_id": user_id},
-            {"$inc": {"balance": gigapub_reward, "gigapub_count": 1}}
-        )
+        now = datetime.datetime.utcnow()
+        first_view_at = user_data.get("gigapub_first_view_at")
+
+        if first_view_at and (now - first_view_at) < datetime.timedelta(hours=24):
+            if gigapub_count >= 20:
+                remaining = datetime.timedelta(hours=24) - (now - first_view_at)
+                hours_left = int(remaining.total_seconds() // 3600)
+                mins_left = int((remaining.total_seconds() % 3600) // 60)
+                return jsonify({
+                    "status": "limit_reached",
+                    "message": f"আজকের Gigapub টাস্ক লিমিট শেষ! আরও {hours_left} ঘন্টা {mins_left} মিনিট পর আবার দেখতে পারবেন।"
+                }), 400
+            update_fields = {"$inc": {"balance": gigapub_reward, "gigapub_count": 1}}
+        else:
+            update_fields = {
+                "$inc": {"balance": gigapub_reward},
+                "$set": {"gigapub_count": 1, "gigapub_first_view_at": now}
+            }
+            gigapub_count = 0
+
+        users_collection.update_one({"user_id": user_id}, update_fields)
         return jsonify({"status": "success", "reward": gigapub_reward, "new_count": gigapub_count + 1}), 200
 
     if task_type == 'monetag':
@@ -801,7 +818,7 @@ def request_withdraw():
     account = str(data.get('account', ''))
     method = str(data.get('method', 'bKash'))
 
-    if not user_id or amount < 200 or len(account) < 11:
+    if not user_id or amount < 100 or len(account) < 11:
         return jsonify({"status": "error", "message": "Invalid request parameters"}), 400
 
     if is_user_banned(user_id):
