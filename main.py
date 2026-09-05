@@ -163,7 +163,7 @@ if bot:
             users_collection.update_one(
                 {"user_id": user_id},
                 {"$set": {"first_name": first_name, "username": username},
-                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d")}},
+                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d")}},
                 upsert=True
             )
 
@@ -633,13 +633,15 @@ def get_user_data():
             if user_data.get("last_reset_date") != today_str:
                 users_collection.update_one(
                     {"user_id": str(user_id)},
-                    {"$set": {"monetag_count": 0, "adsterra_count": 0, "last_reset_date": today_str}}
+                    {"$set": {"monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "last_reset_date": today_str}}
                 )
                 monetag_count = 0
                 adsterra_count = 0
+                gigapub_count = 0
             else:
                 monetag_count = user_data.get("monetag_count", 0)
                 adsterra_count = user_data.get("adsterra_count", 0)
+                gigapub_count = user_data.get("gigapub_count", 0)
 
             # Retrieve withdraw history
             user_withdraws = []
@@ -661,11 +663,12 @@ def get_user_data():
                 "first_name": user_data.get("first_name", "User"),
                 "monetag_count": monetag_count,
                 "adsterra_count": adsterra_count,
+                "gigapub_count": gigapub_count,
                 "completed_channel_tasks": user_data.get("completed_channel_tasks", []),
                 "withdraws": user_withdraws
             }), 200
 
-    return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "first_name": "User", "monetag_count": 0, "adsterra_count": 0, "completed_channel_tasks": [], "withdraws": []}), 200
+    return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "first_name": "User", "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "completed_channel_tasks": [], "withdraws": []}), 200
 
 @app.route('/verify-channel-task', methods=['POST'])
 def verify_channel_task():
@@ -712,7 +715,7 @@ def verify_ad_task():
     user_id = str(data.get('user_id'))
     task_type = str(data.get('task_type'))
 
-    if not user_id or task_type not in ['monetag', 'adsterra']:
+    if not user_id or task_type not in ['monetag', 'adsterra', 'gigapub']:
         return jsonify({"status": "error", "message": "Invalid task parameters"}), 400
 
     if users_collection is None:
@@ -726,15 +729,25 @@ def verify_ad_task():
     if user_data.get("last_reset_date") != today_str:
         users_collection.update_one(
             {"user_id": user_id},
-            {"$set": {"monetag_count": 0, "adsterra_count": 0, "last_reset_date": today_str}}
+            {"$set": {"monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "last_reset_date": today_str}}
         )
         monetag_count = 0
         adsterra_count = 0
+        gigapub_count = 0
     else:
         monetag_count = user_data.get("monetag_count", 0)
         adsterra_count = user_data.get("adsterra_count", 0)
+        gigapub_count = user_data.get("gigapub_count", 0)
 
     reward = 0.10
+
+    if task_type == 'gigapub':
+        gigapub_reward = 0.05
+        users_collection.update_one(
+            {"user_id": user_id},
+            {"$inc": {"balance": gigapub_reward, "gigapub_count": 1}}
+        )
+        return jsonify({"status": "success", "reward": gigapub_reward, "new_count": gigapub_count + 1}), 200
 
     if task_type == 'monetag':
         if monetag_count >= 20:
