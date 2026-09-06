@@ -58,6 +58,22 @@ def generate_task_code():
     completed exe.io / shrinkme.io ad-locker page."""
     return "".join(secrets.choice(LINK_TASK_CODE_ALPHABET) for _ in range(LINK_TASK_CODE_LENGTH))
 
+_bot_username_cache = {"value": None}
+
+def get_bot_username():
+    """Cached lookup of the bot's @username, used to build t.me deep links.
+    Returns None (never raises) if the bot isn't configured or the Telegram
+    API call fails, so callers can fall back to copy/paste-only UI."""
+    if not bot:
+        return None
+    if not _bot_username_cache["value"]:
+        try:
+            _bot_username_cache["value"] = bot.get_me().username
+        except Exception as e:
+            print(f"get_bot_username error: {e}")
+            return None
+    return _bot_username_cache["value"]
+
 app = Flask(__name__, template_folder='.', static_folder='.')
 
 # Restricted CORS configuration for production security
@@ -258,6 +274,21 @@ if bot:
             bot.reply_to(message, "❌ <b>আপনি এই বট থেকে ব্যান হয়েছেন!</b>", parse_mode="HTML")
             return
 
+        # One-tap code redemption: the exe.io/shrinkme.io result page links
+        # here as "/start code_XXXXXX" (see verify_link_task) so the user
+        # doesn't have to manually copy/paste the code. This is handled and
+        # answered immediately, without going through the referral/channel
+        # flow below — it isn't granting new app access, just crediting a
+        # reward for a task the user already completed.
+        if message.text and message.text.startswith('/start'):
+            quick_args = message.text.split()
+            start_payload = quick_args[1] if len(quick_args) > 1 else None
+            if start_payload and start_payload.startswith("code_"):
+                candidate_code = start_payload[len("code_"):].upper()
+                if LINK_TASK_CODE_REGEX.match(candidate_code):
+                    redeem_link_task_code(user_id, candidate_code, message_to_reply=message)
+                    return
+
         # Save the referrer id (if present in the /start deep-link) to the DB right away,
         # BEFORE the channel-join gate below. This is critical: when the user later taps
         # "Check Verification", this same function runs again but with the bot's own
@@ -391,51 +422,44 @@ if bot:
             bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
 
     # -------- LINK TASK CODE REDEMPTION --------
-    # After finishing the exe.io/shrinkme.io page the user is shown a short
-    # one-time code; they paste that code back into this chat to claim the
-    # reward. Matches ONLY messages that look exactly like a generated code
-    # (fixed length, restricted alphabet) so normal chat/commands aren't
-    # affected.
-    @bot.message_handler(func=lambda m: m.text and not m.text.startswith('/') and LINK_TASK_CODE_REGEX.match(m.text.strip().upper()))
-    def handle_link_task_code(message):
-        user_id = str(message.from_user.id)
-
-        if is_user_banned(user_id):
-            return
+    # After finishing the exe.io/shrinkme.io page the user gets a short
+    # one-time code. It can be redeemed two ways: (1) pasted as a plain text
+    # message here, or (2) via the "Submit in Bot" deep-link button on the
+    # result page, which arrives as "/start code_XXXXXX" — see send_welcome.
+    def redeem_link_task_code(user_id, code, message_to_reply=None):
+        """Returns (ok, reply_text). If message_to_reply is given, also sends
+        the reply directly so callers don't have to."""
+        def _reply(ok, text):
+            if message_to_reply is not None:
+                bot.reply_to(message_to_reply, text, parse_mode="HTML" if ok else None)
+            return ok, text
 
         if link_tasks_collection is None or users_collection is None:
-            bot.reply_to(message, "\u26a0\ufe0f \u09b8\u09be\u09b0\u09cd\u09ad\u09be\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be, \u098f\u0995\u099f\u09c1 \u09aa\u09b0\u09c7 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964")
-            return
+            return _reply(False, "\u26a0\ufe0f \u09b8\u09be\u09b0\u09cd\u09ad\u09be\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be, \u098f\u0995\u099f\u09c1 \u09aa\u09b0\u09c7 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964")
 
-        code = message.text.strip().upper()
         task = link_tasks_collection.find_one({"code": code, "status": "code_issued"})
-
         if not task:
-            bot.reply_to(message, "\u274c \u0995\u09cb\u09a1\u099f\u09bf \u09b8\u09ac\u09bf \u09a8\u09af\u09bc \u0985\u09a5\u09ac\u09be \u0987\u09a4\u09bf\u09ae\u09a7\u09cd\u09af\u09c7 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7!")
-            return
+            return _reply(False, "\u274c \u0995\u09cb\u09a1\u099f\u09bf \u09b8\u09ac\u09bf \u09a8\u09af\u09bc \u0985\u09a5\u09ac\u09be \u0987\u09a4\u09bf\u09ae\u09a7\u09cd\u09af\u09c7 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7!")
 
         # The code is tied to the user who generated it — someone else
         # forwarding/guessing a code they saw can't redeem it.
         if str(task.get("user_id")) != user_id:
-            bot.reply_to(message, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u09aa\u09a8\u09be\u09b0 \u0985\u09cd\u09af\u09be\u0995\u09be\u0989\u09a8\u09cd\u099f\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u09a8\u09af\u09bc!")
-            return
+            return _reply(False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u09aa\u09a8\u09be\u09b0 \u0985\u09cd\u09af\u09be\u0995\u09be\u0989\u09a8\u09cd\u099f\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u09a8\u09af\u09bc!")
 
         issued_at = task.get("code_issued_at")
         if not issued_at or (datetime.datetime.utcnow() - issued_at) > datetime.timedelta(minutes=LINK_TASK_CODE_EXPIRE_MINUTES):
             link_tasks_collection.update_one({"_id": task["_id"]}, {"$set": {"status": "expired"}})
-            bot.reply_to(message, "\u274c \u0995\u09cb\u09a1\u09c7\u09b0 \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7, \u09a8\u09a4\u09c1\u09a8 \u099f\u09be\u09b8\u09cd\u0995 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c1\u09a8\u0964")
-            return
+            return _reply(False, "\u274c \u0995\u09cb\u09a1\u09c7\u09b0 \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7, \u09a8\u09a4\u09c1\u09a8 \u099f\u09be\u09b8\u09cd\u0995 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c1\u09a8\u0964")
 
-        # Atomic claim: if two messages with the same code arrive back-to-back
-        # (user double-pastes, Telegram retries delivery, etc.) only the first
-        # one actually credits the balance.
+        # Atomic claim: if the same code is submitted twice back-to-back
+        # (double tap, retried delivery, tapping both the button AND pasting
+        # manually) only the first one actually credits the balance.
         claimed = link_tasks_collection.find_one_and_update(
             {"_id": task["_id"], "status": "code_issued"},
             {"$set": {"status": "completed", "completed_at": datetime.datetime.utcnow()}}
         )
         if not claimed:
-            bot.reply_to(message, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u0997\u09c7\u0987 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7!")
-            return
+            return _reply(False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u0997\u09c7\u0987 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7!")
 
         provider = task["provider"]
         count_field = f"{provider}_link_count"
@@ -444,12 +468,21 @@ if bot:
             {"$inc": {"balance": LINK_TASK_REWARD, count_field: 1}}
         )
 
-        bot.reply_to(
-            message,
+        success_text = (
             f"\U0001F389 <b>\u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!</b>\n\n"
-            f"\u09f3{LINK_TASK_REWARD:.2f} \u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8\u09c7 \u09af\u09cb\u0997 \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964 \u0985\u09cd\u09af\u09be\u09aa\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8 \u099a\u09c7\u0995 \u0995\u09b0\u09c1\u09a8\u0964",
-            parse_mode="HTML"
+            f"\u09f3{LINK_TASK_REWARD:.2f} \u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8\u09c7 \u09af\u09cb\u0997 \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964 \u0985\u09cd\u09af\u09be\u09aa\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8 \u099a\u09c7\u0995 \u0995\u09b0\u09c1\u09a8\u0964"
         )
+        return _reply(True, success_text)
+
+    # Matches ONLY messages that look exactly like a generated code (fixed
+    # length, restricted alphabet) so normal chat/commands aren't affected.
+    @bot.message_handler(func=lambda m: m.text and not m.text.startswith('/') and LINK_TASK_CODE_REGEX.match(m.text.strip().upper()))
+    def handle_link_task_code(message):
+        user_id = str(message.from_user.id)
+        if is_user_banned(user_id):
+            return
+        code = message.text.strip().upper()
+        redeem_link_task_code(user_id, code, message_to_reply=message)
 
     # -------- WITHDRAW ACTION HANDLER (ACCEPT/REJECT) --------
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('wd_acc_', 'wd_rej_')))
@@ -1145,8 +1178,22 @@ def verify_link_task(token):
         color = "#22c55e" if ok else "#ef4444"
         code_html = ""
         if code:
-            # Copy-to-clipboard button so the user doesn't have to retype the
-            # code by hand on mobile.
+            # Copy-to-clipboard fallback, plus a one-tap deep link straight
+            # into the bot chat that auto-submits the code (no copy/paste
+            # needed). The deep link degrades gracefully to "just copy it"
+            # if the bot username can't be resolved for any reason.
+            bot_username = get_bot_username()
+            deep_link_html = ""
+            if bot_username:
+                deep_link = f"https://t.me/{bot_username}?start=code_{code}"
+                deep_link_html = f"""
+                <div style="margin-top:14px;">
+                    <a href="{deep_link}" style="display:inline-block; background:#22c55e; color:#0b0f19;
+                        text-decoration:none; font-weight:bold; border-radius:8px; padding:10px 22px; font-size:15px;">
+                        \U0001F4E4 বটে কোড জমা দিন
+                    </a>
+                </div>
+                """
             code_html = f"""
             <div style="margin:28px auto 8px; max-width:280px; background:#111827;
                         border:2px dashed #22c55e; border-radius:12px; padding:18px;">
@@ -1156,6 +1203,7 @@ def verify_link_task(token):
                     border-radius:8px; padding:10px 22px; font-size:15px; cursor:pointer;">
                 \U0001F4CB Copy Code
             </button>
+            {deep_link_html}
             <script>
                 function copyTaskCode() {{
                     const text = document.getElementById('taskCode').innerText;
@@ -1186,10 +1234,10 @@ def verify_link_task(token):
 
     success_title = "\U0001F389 \u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
     code_instructions = (
-        "\u0989\u09aa\u09b0\u09c7\u09b0 \u0995\u09cb\u09a1\u099f\u09bf \u0995\u09aa\u09bf \u0995\u09b0\u09c7 \u0986\u09ae\u09be\u09a6\u09c7\u09b0 "
-        "\u099f\u09c7\u09b2\u09bf\u0997\u09cd\u09b0\u09be\u09ae \u09ac\u099f\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09aa\u09be\u09a0\u09be\u09a8 \u2014 "
-        f"\u0995\u09cb\u09a1\u099f\u09bf {LINK_TASK_CODE_EXPIRE_MINUTES} \u09ae\u09bf\u09a8\u09bf\u099f \u09aa\u09b0\u09cd\u09af\u09a8\u09cd\u09a4 \u0995\u09be\u09b0\u09cd\u09af\u0995\u09b0 \u09a5\u09be\u0995\u09ac\u09c7\u0964 "
-        f"\u0995\u09cb\u09a1 \u099c\u09ae\u09be \u09a6\u09bf\u09b2\u09c7 \u09f3{LINK_TASK_REWARD:.2f} \u09aa\u09be\u09ac\u09c7\u09a8\u0964"
+        "নিচের <b>\u09ac\u099f\u09c7 \u0995\u09cb\u09a1 \u099c\u09ae\u09be \u09a6\u09bf\u09a8</b> বাটনে চাপ দিলে সরাসরি টেলিগ্রাম বটে কোড জমা হয়ে যাবে। "
+        "বাটন কাজ না করলে কোডটি কপি করে বটে গিয়ে ম্যানুয়ালি পাঠান। "
+        f"কোডটি {LINK_TASK_CODE_EXPIRE_MINUTES} মিনিট পর্যন্ত কার্যকর থাকবে। "
+        f"কোড জমা দিলে ৳{LINK_TASK_REWARD:.2f} পাবেন।"
     )
 
     # Re-opening the same result page (double tap / browser back) while a
