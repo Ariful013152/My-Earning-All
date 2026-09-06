@@ -495,6 +495,10 @@
                 </div>
                 <button class="compact-btn" id="shrinkmeBtn" onclick="startLinkTask('shrinkme')">শুরু করুন</button>
             </div>
+
+            <p style="color:#94a3b8; font-size:12px; text-align:center; padding:6px 12px 0;">
+                Exe.io / ShrinkMe টাস্ক শেষে যেই কোডটি দেখাবে সেটি কপি করে টেলিগ্রাম বটে গিয়ে পাঠিয়ে দিন — তখনই টাকা যোগ হবে।
+            </p>
         </div>
 
         <!-- SUPPORT TAB -->
@@ -982,7 +986,7 @@
                 }
                 if (resData.status === 'success' && resData.short_url) {
                     openExternalLink(resData.short_url);
-                    timerEl.innerText = "(লিংক সম্পন্ন করে ফিরে আসুন)";
+                    timerEl.innerText = "(লিংক শেষে পাওয়া কোডটি বটে পাঠান)";
                 } else {
                     alert(resData.message || "টাস্ক শুরু করা সম্ভব হয়নি!");
                 }
@@ -997,8 +1001,10 @@
         }
 
         // Refresh balance/counts automatically when the user comes back from the
-        // exe.io/shrinkme browser tab, since the reward is credited server-side
-        // via the redirect callback, not by this page directly.
+        // exe.io/shrinkme browser tab. The reward itself is only credited once
+        // the user pastes the code (shown at the end of the ad-locker page)
+        // back into the Telegram bot chat — this just re-syncs the balance
+        // shown here after that happens.
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 fetchUserDataFromServer();
