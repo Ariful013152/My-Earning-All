@@ -496,9 +496,22 @@
                 <button class="compact-btn" id="shrinkmeBtn" onclick="startLinkTask('shrinkme')">শুরু করুন</button>
             </div>
 
-            <p style="color:#94a3b8; font-size:12px; text-align:center; padding:6px 12px 0;">
-                Exe.io / ShrinkMe টাস্ক শেষে যেই কোডটি দেখাবে সেটি কপি করে টেলিগ্রাম বটে গিয়ে পাঠান, তারপর বটের Confirm বাটনে চাপ দিলে টাকা যোগ হবে।
-            </p>
+            <div class="task-list-card" style="flex-direction:column; align-items:stretch; gap:10px; padding:14px;">
+                <div class="task-info" style="margin-bottom:2px;">
+                    <div class="task-icon"><i class="fas fa-key"></i></div>
+                    <div class="task-details">
+                        <b>কোড কনফার্ম করুন</b>
+                        <small>Exe.io / ShrinkMe টাস্ক শেষে পাওয়া কোডটি এখানে বসান</small>
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="taskCodeInput" placeholder="যেমন: A9K2M7" maxlength="6"
+                           style="flex:1; min-width:0; background:#0b0f19; border:1px solid #2d3748; border-radius:8px;
+                                  color:#fff; padding:10px 12px; font-size:16px; text-transform:uppercase; letter-spacing:3px; text-align:center;">
+                    <button class="compact-btn" id="confirmCodeBtn" onclick="confirmTaskCode()" style="flex-shrink:0;">Confirm</button>
+                </div>
+                <small id="codeConfirmMsg" style="min-height:14px; display:block; text-align:center;"></small>
+            </div>
         </div>
 
         <!-- SUPPORT TAB -->
@@ -986,7 +999,7 @@
                 }
                 if (resData.status === 'success' && resData.short_url) {
                     openExternalLink(resData.short_url);
-                    timerEl.innerText = "(লিংক শেষে পাওয়া কোডটি বটে পাঠান)";
+                    timerEl.innerText = "(লিংক শেষে পাওয়া কোড নিচে বসিয়ে Confirm করুন)";
                 } else {
                     alert(resData.message || "টাস্ক শুরু করা সম্ভব হয়নি!");
                 }
@@ -1000,11 +1013,64 @@
             });
         }
 
+        let codeConfirmInFlight = false;
+
+        function confirmTaskCode() {
+            const input = document.getElementById('taskCodeInput');
+            const btn = document.getElementById('confirmCodeBtn');
+            const msgEl = document.getElementById('codeConfirmMsg');
+            const code = input.value.trim().toUpperCase();
+
+            if (codeConfirmInFlight) return; // ignore double-taps while a request is in flight
+
+            if (!code) {
+                msgEl.style.color = '#ef4444';
+                msgEl.innerText = 'কোড লিখুন।';
+                return;
+            }
+
+            codeConfirmInFlight = true;
+            btn.disabled = true;
+            const originalLabel = btn.innerText;
+            btn.innerText = '...';
+            msgEl.style.color = '#94a3b8';
+            msgEl.innerText = 'যাচাই করা হচ্ছে...';
+
+            fetch('/api/confirm-link-task-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, code: code })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    msgEl.style.color = '#22c55e';
+                    msgEl.innerText = data.message || 'সফল হয়েছে! টাকা যোগ হয়েছে।';
+                    input.value = '';
+                    fetchUserDataFromServer();
+                } else if (data.status === 'banned') {
+                    msgEl.style.color = '#ef4444';
+                    msgEl.innerText = 'আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে।';
+                } else {
+                    msgEl.style.color = '#ef4444';
+                    msgEl.innerText = data.message || 'কোডটি সঠিক নয় অথবা মেয়াদ শেষ!';
+                }
+            })
+            .catch(() => {
+                msgEl.style.color = '#ef4444';
+                msgEl.innerText = 'সার্ভারে সংযোগ করা যায়নি, আবার চেষ্টা করুন!';
+            })
+            .finally(() => {
+                codeConfirmInFlight = false;
+                btn.disabled = false;
+                btn.innerText = originalLabel;
+            });
+        }
+
         // Refresh balance/counts automatically when the user comes back from the
-        // exe.io/shrinkme browser tab. The reward itself is only credited once
-        // the user pastes the code (shown at the end of the ad-locker page)
-        // back into the Telegram bot chat — this just re-syncs the balance
-        // shown here after that happens.
+        // exe.io/shrinkme browser tab. Actual crediting still requires pasting
+        // the code into the box above and tapping Confirm — this just keeps the
+        // numbers on screen in sync in the meantime.
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 fetchUserDataFromServer();
