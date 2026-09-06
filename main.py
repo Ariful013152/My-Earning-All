@@ -6,6 +6,7 @@ import requests
 import threading
 import hashlib
 import hmac
+import secrets
 import urllib.parse
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ForceReply
@@ -31,6 +32,16 @@ ADMIN_CHAT_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_RAW.split(",")
 MONGO_URI = os.environ.get("MONGO_URI")
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://my-earning-app.onrender.com")
 
+# Link-locker (exe.io / shrinkme.io) settings. Get these API keys from each
+# site's dashboard under "Tools" -> "Developer API". Both services use the
+# same URL pattern: https://<site>/api?api=<KEY>&url=<destination>&format=json
+EXEIO_API_KEY = os.environ.get("EXEIO_API_KEY", "05acf567748b4b134e39a9f286f63ea96c9557ad")
+SHRINKME_API_KEY = os.environ.get("SHRINKME_API_KEY", "92cc1c9481510f95eccbd2941a0087ffb4752d4a")
+LINK_TASK_REWARD = 0.10
+LINK_TASK_DAILY_LIMIT = 20
+LINK_TASK_MIN_SECONDS = 8  # a real ad-locker page takes at least this long to click through
+LINK_TASK_MAX_AGE_HOURS = 24  # a pending token older than this is treated as expired
+
 app = Flask(__name__, template_folder='.', static_folder='.')
 
 # Restricted CORS configuration for production security
@@ -43,6 +54,7 @@ users_collection = None
 devices_collection = None
 withdraws_collection = None
 referrals_collection = None
+link_tasks_collection = None
 
 if MONGO_URI:
     try:
@@ -52,6 +64,7 @@ if MONGO_URI:
         devices_collection = db["devices"]
         withdraws_collection = db["withdraws"]
         referrals_collection = db["referrals"]
+        link_tasks_collection = db["link_tasks"]
         print("✅ MongoDB Connected Successfully")
     except Exception as e:
         print(f"❌ MongoDB Connection Error: {e}")
@@ -107,6 +120,38 @@ def check_user_joined_channels(user_id):
             return False
     return True
 
+# -------- LINK-LOCKER (exe.io / shrinkme.io) SHORTENER --------
+LINK_LOCKER_DOMAINS = {
+    "exeio": "https://exe.io/api",
+    "shrinkme": "https://shrinkme.io/api",
+}
+LINK_LOCKER_KEYS = {
+    "exeio": EXEIO_API_KEY,
+    "shrinkme": SHRINKME_API_KEY,
+}
+
+def create_locked_link(provider, destination_url):
+    """
+    Asks exe.io / shrinkme.io to shorten `destination_url` behind their ad-locker
+    page. Returns the short URL on success, or None on failure.
+    """
+    api_key = LINK_LOCKER_KEYS.get(provider)
+    api_base = LINK_LOCKER_DOMAINS.get(provider)
+    if not api_key or not api_base:
+        return None
+    try:
+        resp = requests.get(
+            api_base,
+            params={"api": api_key, "url": destination_url, "format": "json"},
+            timeout=10
+        )
+        data = resp.json()
+        # Different providers in this family use slightly different key names
+        return data.get("shortenedUrl") or data.get("shortUrl") or data.get("short")
+    except Exception as e:
+        print(f"Link locker error ({provider}): {e}")
+        return None
+
 # -------- FAKE WITHDRAW AUTO SENDER --------
 def send_fake_withdraw_loop():
     while True:
@@ -142,6 +187,30 @@ def send_fake_withdraw_loop():
             print(f"⚠️ Fake withdraw error: {e}")
             
         time.sleep(300)
+
+# -------- LINK TASK CLEANUP (removes stale/abandoned link_tasks records) --------
+def cleanup_link_tasks_loop():
+    while True:
+        try:
+            if link_tasks_collection is not None:
+                pending_cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=LINK_TASK_MAX_AGE_HOURS)
+                # Anyone who never finished the ad (still "pending") long past the
+                # expiry window gets deleted outright — they never got paid anyway.
+                link_tasks_collection.delete_many({
+                    "status": "pending",
+                    "created_at": {"$lt": pending_cutoff}
+                })
+
+                # Completed/expired records are kept for a week for support/dispute
+                # lookups, then removed so the collection doesn't grow forever.
+                old_cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=7)
+                link_tasks_collection.delete_many({
+                    "status": {"$in": ["completed", "expired"]},
+                    "created_at": {"$lt": old_cutoff}
+                })
+        except Exception as e:
+            print(f"Link task cleanup error: {e}")
+        time.sleep(3600)  # run once every hour
 
 # -------- KEEP ALIVE --------
 def keep_alive():
@@ -769,15 +838,20 @@ def get_user_data():
             if user_data.get("last_reset_date") != today_str:
                 users_collection.update_one(
                     {"user_id": str(user_id)},
-                    {"$set": {"monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "last_reset_date": today_str}}
+                    {"$set": {"monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0,
+                              "exeio_link_count": 0, "shrinkme_link_count": 0, "last_reset_date": today_str}}
                 )
                 monetag_count = 0
                 adsterra_count = 0
                 gigapub_count = 0
+                exeio_link_count = 0
+                shrinkme_link_count = 0
             else:
                 monetag_count = user_data.get("monetag_count", 0)
                 adsterra_count = user_data.get("adsterra_count", 0)
                 gigapub_count = user_data.get("gigapub_count", 0)
+                exeio_link_count = user_data.get("exeio_link_count", 0)
+                shrinkme_link_count = user_data.get("shrinkme_link_count", 0)
 
             user_withdraws = []
             if withdraws_collection is not None:
@@ -799,6 +873,8 @@ def get_user_data():
                 "monetag_count": monetag_count,
                 "adsterra_count": adsterra_count,
                 "gigapub_count": gigapub_count,
+                "exeio_link_count": exeio_link_count,
+                "shrinkme_link_count": shrinkme_link_count,
                 "completed_channel_tasks": user_data.get("completed_channel_tasks", []),
                 "withdraws": user_withdraws
             }), 200
@@ -879,7 +955,7 @@ def verify_ad_task():
         adsterra_count = user_data.get("adsterra_count", 0)
         gigapub_count = user_data.get("gigapub_count", 0)
 
-    reward = 0.10
+    reward = 0.05
 
     if task_type == 'gigapub':
         gigapub_reward = 0.05
@@ -925,6 +1001,112 @@ def verify_ad_task():
             {"$inc": {"balance": reward, "adsterra_count": 1}}
         )
         return jsonify({"status": "success", "reward": reward, "new_count": adsterra_count + 1}), 200
+
+@app.route('/api/generate-link-task', methods=['POST'])
+def generate_link_task():
+    data = request.json or {}
+    user_id = str(data.get('user_id'))
+    provider = str(data.get('provider'))
+
+    if not user_id or provider not in ('exeio', 'shrinkme'):
+        return jsonify({"status": "error", "message": "\u09ad\u09c1\u09b2 \u09aa\u09cd\u09b0\u09cb\u09ad\u09be\u0987\u09a1\u09be\u09b0!"}), 400
+
+    if is_user_banned(user_id):
+        return jsonify({"status": "banned"}), 200
+
+    if users_collection is None or link_tasks_collection is None:
+        return jsonify({"status": "error", "message": "Database offline"}), 500
+
+    user_data = users_collection.find_one({"user_id": user_id})
+    if not user_data:
+        return jsonify({"status": "error", "message": "\u0987\u0989\u099c\u09be\u09b0 \u09aa\u09be\u0993\u09af\u09bc\u09be \u09af\u09be\u09af\u09bc\u09a8\u09bf!"}), 404
+
+    count_field = f"{provider}_link_count"
+    today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    if user_data.get("last_reset_date") != today_str:
+        users_collection.update_one(
+            {"user_id": user_id},
+            {"$set": {"monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0,
+                      "exeio_link_count": 0, "shrinkme_link_count": 0, "last_reset_date": today_str}}
+        )
+        current_count = 0
+    else:
+        current_count = user_data.get(count_field, 0)
+
+    if current_count >= LINK_TASK_DAILY_LIMIT:
+        limit_msg = "\u0986\u099c\u0995\u09c7\u09b0 Exe.io \u099f\u09be\u09b8\u09cd\u0995 \u09b2\u09bf\u09ae\u09bf\u099f \u09b6\u09c7\u09b7!" if provider == 'exeio' else "\u0986\u099c\u0995\u09c7\u09b0 ShrinkMe \u099f\u09be\u09b8\u09cd\u0995 \u09b2\u09bf\u09ae\u09bf\u099f \u09b6\u09c7\u09b7!"
+        return jsonify({"status": "limit_reached", "message": limit_msg}), 400
+
+    token = secrets.token_urlsafe(24)
+    destination_url = f"{RENDER_EXTERNAL_URL}/verify-link-task/{token}"
+    short_url = create_locked_link(provider, destination_url)
+
+    if not short_url:
+        return jsonify({"status": "error", "message": "\u09b2\u09bf\u0982\u0995 \u09a4\u09c8\u09b0\u09bf \u0995\u09b0\u09be \u09af\u09be\u09af\u09bc\u09a8\u09bf, \u098f\u0995\u099f\u09c1 \u09aa\u09b0 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964"}), 502
+
+    link_tasks_collection.insert_one({
+        "token": token,
+        "user_id": user_id,
+        "provider": provider,
+        "status": "pending",
+        "created_at": datetime.datetime.utcnow()
+    })
+
+    return jsonify({"status": "success", "short_url": short_url}), 200
+
+@app.route('/verify-link-task/<token>', methods=['GET'])
+def verify_link_task(token):
+    def result_page(title, message, ok):
+        color = "#22c55e" if ok else "#ef4444"
+        return f"""
+        <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {{ background:#0b0f19; color:#f1f5f9; font-family:sans-serif; text-align:center; padding-top:80px; }}
+            h2 {{ color:{color}; }}
+            p {{ color:#94a3b8; font-size:15px; }}
+        </style></head>
+        <body><h2>{title}</h2><p>{message}</p></body></html>
+        """
+
+    fail_title = "\u099f\u09be\u09b8\u09cd\u0995 \u09ac\u09cd\u09af\u09b0\u09cd\u09a5 \u09b9\u09af\u09bc\u09c7\u099b\u09c7"
+    fail_retry_msg = "\u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8 \u0985\u09a5\u09ac\u09be \u098f\u09a1\u09ae\u09bf\u09a8\u0995\u09c7 \u099c\u09be\u09a8\u09be\u09a8\u0964"
+
+    if link_tasks_collection is None or users_collection is None:
+        return result_page(fail_title, "Database offline", False)
+
+    task = link_tasks_collection.find_one({"token": token})
+    if not task:
+        msg = "\u099f\u09cb\u0995\u09c7\u09a8 \u09aa\u09be\u0993\u09af\u09bc\u09be \u09af\u09be\u09af\u09bc\u09a8\u09bf \u09ac\u09be \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7!"
+        return result_page(fail_title, msg, False)
+
+    if task.get("status") != "pending":
+        msg = "\u098f\u0987 \u099f\u09be\u09b8\u09cd\u0995\u099f\u09bf \u0987\u09a4\u09bf\u09ae\u09a7\u09cd\u09af\u09c7 \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
+        return result_page(fail_title, msg, False)
+
+    elapsed = (datetime.datetime.utcnow() - task["created_at"]).total_seconds()
+
+    if elapsed > LINK_TASK_MAX_AGE_HOURS * 3600:
+        link_tasks_collection.update_one({"token": token}, {"$set": {"status": "expired"}})
+        msg = "\u098f\u0987 \u09b2\u09bf\u0982\u0995\u099f\u09bf\u09b0 \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7\u0964 \u0985\u09cd\u09af\u09be\u09aa\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09a8\u09a4\u09c1\u09a8 \u0995\u09b0\u09c7 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c1\u09a8\u0964"
+        return result_page(fail_title, msg, False)
+
+    if elapsed < LINK_TASK_MIN_SECONDS:
+        msg = "\u09b8\u09b0\u09be\u09b8\u09b0\u09bf \u098f\u0987 \u09b2\u09bf\u0982\u0995\u09c7 \u0986\u09b8\u09be \u09af\u09be\u09ac\u09c7 \u09a8\u09be, \u09b6\u09b0\u09cd\u099f \u09b2\u09bf\u0982\u0995 \u09a5\u09c7\u0995\u09c7 \u0986\u09b8\u09a4\u09c7 \u09b9\u09ac\u09c7!"
+        return result_page(fail_title, msg, False)
+
+    provider = task["provider"]
+    user_id = task["user_id"]
+    count_field = f"{provider}_link_count"
+
+    link_tasks_collection.update_one({"token": token}, {"$set": {"status": "completed"}})
+    users_collection.update_one(
+        {"user_id": user_id},
+        {"$inc": {"balance": LINK_TASK_REWARD, count_field: 1}}
+    )
+
+    success_title = "\ud83c\udf89 \u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
+    success_msg = f"\u0986\u09aa\u09a8\u09bf \u09f3{LINK_TASK_REWARD:.2f} \u09aa\u09c7\u09af\u09bc\u09c7\u099b\u09c7\u09a8\u0964 \u098f\u0996\u09a8 \u099f\u09c7\u09b2\u09bf\u0997\u09cd\u09b0\u09be\u09ae \u09ac\u099f\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8 \u099a\u09c7\u0995 \u0995\u09b0\u09c1\u09a8\u0964 \u098f\u0987 \u099f\u09cd\u09af\u09be\u09ac\u099f\u09bf \u09ac\u09a8\u09cd\u09a7 \u0995\u09b0\u09c7 \u09a6\u09bf\u09a4\u09c7 \u09aa\u09be\u09b0\u09c7\u09a8\u0964"
+    return result_page(success_title, success_msg, True)
 
 @app.route('/request-withdraw', methods=['POST'])
 def request_withdraw():
@@ -1045,7 +1227,9 @@ if __name__ == '__main__':
     if bot:
         threading.Thread(target=run_bot, daemon=True).start()
         threading.Thread(target=send_fake_withdraw_loop, daemon=True).start()
-    
+
+    threading.Thread(target=cleanup_link_tasks_loop, daemon=True).start()
+
     if RENDER_EXTERNAL_URL:
         threading.Thread(target=keep_alive, daemon=True).start()
     
