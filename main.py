@@ -58,22 +58,6 @@ def generate_task_code():
     completed exe.io / shrinkme.io ad-locker page."""
     return "".join(secrets.choice(LINK_TASK_CODE_ALPHABET) for _ in range(LINK_TASK_CODE_LENGTH))
 
-_bot_username_cache = {"value": None}
-
-def get_bot_username():
-    """Cached lookup of the bot's @username, used to build t.me deep links.
-    Returns None (never raises) if the bot isn't configured or the Telegram
-    API call fails, so callers can fall back to copy/paste-only UI."""
-    if not bot:
-        return None
-    if not _bot_username_cache["value"]:
-        try:
-            _bot_username_cache["value"] = bot.get_me().username
-        except Exception as e:
-            print(f"get_bot_username error: {e}")
-            return None
-    return _bot_username_cache["value"]
-
 app = Flask(__name__, template_folder='.', static_folder='.')
 
 # Restricted CORS configuration for production security
@@ -87,6 +71,7 @@ devices_collection = None
 withdraws_collection = None
 referrals_collection = None
 link_tasks_collection = None
+settings_collection = None
 
 if MONGO_URI:
     try:
@@ -97,9 +82,30 @@ if MONGO_URI:
         withdraws_collection = db["withdraws"]
         referrals_collection = db["referrals"]
         link_tasks_collection = db["link_tasks"]
+        settings_collection = db["settings"]
         print("✅ MongoDB Connected Successfully")
     except Exception as e:
         print(f"❌ MongoDB Connection Error: {e}")
+
+BOT_MAINTENANCE_MSG = "\U0001F6E0\uFE0F বটটি বর্তমানে সাময়িকভাবে বন্ধ আছে। একটু পরে আবার চেষ্টা করুন।"
+
+
+def is_bot_active():
+    """Global on/off switch, toggled from the admin panel. Defaults to ON
+    if the settings doc doesn't exist yet or the DB is unavailable, so a
+    fresh deploy never accidentally starts in a locked-out state."""
+    if settings_collection is None:
+        return True
+    doc = settings_collection.find_one({"_id": "global"})
+    if doc is None:
+        return True
+    return doc.get("bot_enabled", True)
+
+
+def set_bot_active(active):
+    if settings_collection is None:
+        return
+    settings_collection.update_one({"_id": "global"}, {"$set": {"bot_enabled": active}}, upsert=True)
 
 
 # -------- TELEGRAM WEBAPP HASH VERIFICATION --------
@@ -274,20 +280,9 @@ if bot:
             bot.reply_to(message, "❌ <b>আপনি এই বট থেকে ব্যান হয়েছেন!</b>", parse_mode="HTML")
             return
 
-        # One-tap code redemption: the exe.io/shrinkme.io result page links
-        # here as "/start code_XXXXXX" (see verify_link_task) so the user
-        # doesn't have to manually copy/paste the code. This is handled and
-        # answered immediately, without going through the referral/channel
-        # flow below — it isn't granting new app access, just crediting a
-        # reward for a task the user already completed.
-        if message.text and message.text.startswith('/start'):
-            quick_args = message.text.split()
-            start_payload = quick_args[1] if len(quick_args) > 1 else None
-            if start_payload and start_payload.startswith("code_"):
-                candidate_code = start_payload[len("code_"):].upper()
-                if LINK_TASK_CODE_REGEX.match(candidate_code):
-                    redeem_link_task_code(user_id, candidate_code, message_to_reply=message)
-                    return
+        if message.from_user.id not in ADMIN_CHAT_IDS and not is_bot_active():
+            bot.reply_to(message, BOT_MAINTENANCE_MSG, parse_mode="HTML")
+            return
 
         # Save the referrer id (if present in the /start deep-link) to the DB right away,
         # BEFORE the channel-join gate below. This is critical: when the user later taps
@@ -414,6 +409,12 @@ if bot:
     @bot.callback_query_handler(func=lambda call: call.data == "check_join")
     def handle_check_join(call):
         user_id = call.from_user.id
+        if is_user_banned(user_id):
+            bot.answer_callback_query(call.id, "❌ আপনি ব্যান হয়েছেন!", show_alert=True)
+            return
+        if user_id not in ADMIN_CHAT_IDS and not is_bot_active():
+            bot.answer_callback_query(call.id, BOT_MAINTENANCE_MSG, show_alert=True)
+            return
         if check_user_joined_channels(user_id):
             bot.answer_callback_query(call.id, "✅ ভেরিফিকেশন সফল হয়েছে!")
             bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -423,43 +424,47 @@ if bot:
 
     # -------- LINK TASK CODE REDEMPTION --------
     # After finishing the exe.io/shrinkme.io page the user gets a short
-    # one-time code. It can be redeemed two ways: (1) pasted as a plain text
-    # message here, or (2) via the "Submit in Bot" deep-link button on the
-    # result page, which arrives as "/start code_XXXXXX" — see send_welcome.
-    def redeem_link_task_code(user_id, code, message_to_reply=None):
-        """Returns (ok, reply_text). If message_to_reply is given, also sends
-        the reply directly so callers don't have to."""
-        def _reply(ok, text):
-            if message_to_reply is not None:
-                bot.reply_to(message_to_reply, text, parse_mode="HTML" if ok else None)
-            return ok, text
-
+    # one-time code, pastes it here as a plain message. The bot then shows
+    # a Confirm/Cancel button — money is only credited once Confirm is
+    # tapped, not the instant the code is pasted.
+    def validate_link_task_code(user_id, code):
+        """Read-only check — does NOT claim/credit. Returns (ok, task_or_errormsg)."""
         if link_tasks_collection is None or users_collection is None:
-            return _reply(False, "\u26a0\ufe0f \u09b8\u09be\u09b0\u09cd\u09ad\u09be\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be, \u098f\u0995\u099f\u09c1 \u09aa\u09b0\u09c7 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964")
+            return False, "\u26a0\ufe0f \u09b8\u09be\u09b0\u09cd\u09ad\u09be\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be, \u098f\u0995\u099f\u09c1 \u09aa\u09b0\u09c7 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964"
 
         task = link_tasks_collection.find_one({"code": code, "status": "code_issued"})
         if not task:
-            return _reply(False, "\u274c \u0995\u09cb\u09a1\u099f\u09bf \u09b8\u09ac\u09bf \u09a8\u09af\u09bc \u0985\u09a5\u09ac\u09be \u0987\u09a4\u09bf\u09ae\u09a7\u09cd\u09af\u09c7 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7!")
+            return False, "\u274c \u0995\u09cb\u09a1\u099f\u09bf \u09b8\u09ac\u09bf \u09a8\u09af\u09bc \u0985\u09a5\u09ac\u09be \u0987\u09a4\u09bf\u09ae\u09a7\u09cd\u09af\u09c7 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7!"
 
         # The code is tied to the user who generated it — someone else
         # forwarding/guessing a code they saw can't redeem it.
         if str(task.get("user_id")) != user_id:
-            return _reply(False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u09aa\u09a8\u09be\u09b0 \u0985\u09cd\u09af\u09be\u0995\u09be\u0989\u09a8\u09cd\u099f\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u09a8\u09af\u09bc!")
+            return False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u09aa\u09a8\u09be\u09b0 \u0985\u09cd\u09af\u09be\u0995\u09be\u0989\u09a8\u09cd\u099f\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u09a8\u09af\u09bc!"
 
         issued_at = task.get("code_issued_at")
         if not issued_at or (datetime.datetime.utcnow() - issued_at) > datetime.timedelta(minutes=LINK_TASK_CODE_EXPIRE_MINUTES):
             link_tasks_collection.update_one({"_id": task["_id"]}, {"$set": {"status": "expired"}})
-            return _reply(False, "\u274c \u0995\u09cb\u09a1\u09c7\u09b0 \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7, \u09a8\u09a4\u09c1\u09a8 \u099f\u09be\u09b8\u09cd\u0995 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c1\u09a8\u0964")
+            return False, "\u274c \u0995\u09cb\u09a1\u09c7\u09b0 \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7, \u09a8\u09a4\u09c1\u09a8 \u099f\u09be\u09b8\u09cd\u0995 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c1\u09a8\u0964"
 
-        # Atomic claim: if the same code is submitted twice back-to-back
-        # (double tap, retried delivery, tapping both the button AND pasting
-        # manually) only the first one actually credits the balance.
+        return True, task
+
+    def claim_link_task_code(user_id, code):
+        """Actually credits the reward — call only after the user taps Confirm.
+        Re-validates everything from scratch and claims atomically, so it's
+        safe even if Confirm is somehow tapped twice."""
+        ok, task_or_msg = validate_link_task_code(user_id, code)
+        if not ok:
+            return False, task_or_msg
+        task = task_or_msg
+
+        # Atomic claim — only succeeds if the task is still 'code_issued' at
+        # this exact moment. Closes the double-tap / double-confirm race.
         claimed = link_tasks_collection.find_one_and_update(
             {"_id": task["_id"], "status": "code_issued"},
             {"$set": {"status": "completed", "completed_at": datetime.datetime.utcnow()}}
         )
         if not claimed:
-            return _reply(False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u0997\u09c7\u0987 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7!")
+            return False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u0997\u09c7\u0987 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
 
         provider = task["provider"]
         count_field = f"{provider}_link_count"
@@ -472,7 +477,7 @@ if bot:
             f"\U0001F389 <b>\u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!</b>\n\n"
             f"\u09f3{LINK_TASK_REWARD:.2f} \u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8\u09c7 \u09af\u09cb\u0997 \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964 \u0985\u09cd\u09af\u09be\u09aa\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8 \u099a\u09c7\u0995 \u0995\u09b0\u09c1\u09a8\u0964"
         )
-        return _reply(True, success_text)
+        return True, success_text
 
     # Matches ONLY messages that look exactly like a generated code (fixed
     # length, restricted alphabet) so normal chat/commands aren't affected.
@@ -481,8 +486,60 @@ if bot:
         user_id = str(message.from_user.id)
         if is_user_banned(user_id):
             return
+        if user_id not in [str(a) for a in ADMIN_CHAT_IDS] and not is_bot_active():
+            bot.reply_to(message, BOT_MAINTENANCE_MSG, parse_mode="HTML")
+            return
+
         code = message.text.strip().upper()
-        redeem_link_task_code(user_id, code, message_to_reply=message)
+        ok, result = validate_link_task_code(user_id, code)
+        if not ok:
+            bot.reply_to(message, result)
+            return
+
+        markup = InlineKeyboardMarkup()
+        markup.add(
+            InlineKeyboardButton("\u2705 Confirm", callback_data=f"code_confirm_{code}"),
+            InlineKeyboardButton("\u274c Cancel", callback_data="code_cancel")
+        )
+        bot.reply_to(
+            message,
+            f"\u0986\u09aa\u09a8\u09be\u09b0 \u0995\u09cb\u09a1: <b>{code}</b>\n\u09f3{LINK_TASK_REWARD:.2f} \u09aa\u09c7\u09a4\u09c7 \u09a8\u09bf\u099a\u09c7\u09b0 <b>Confirm</b> \u09ac\u09be\u099f\u09a8\u09c7 \u099a\u09be\u09aa \u09a6\u09bf\u09a8\u0964",
+            parse_mode="HTML",
+            reply_markup=markup
+        )
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("code_confirm_") or call.data == "code_cancel")
+    def handle_code_confirm_callback(call):
+        user_id = str(call.from_user.id)
+
+        if call.data == "code_cancel":
+            bot.answer_callback_query(call.id, "\u09ac\u09be\u09a4\u09bf\u09b2 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964")
+            try:
+                bot.edit_message_text(
+                    "\u274c \u0995\u09cb\u09a1 \u099c\u09ae\u09be \u09ac\u09be\u09a4\u09bf\u09b2 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964",
+                    chat_id=call.message.chat.id, message_id=call.message.message_id
+                )
+            except Exception:
+                pass
+            return
+
+        if is_user_banned(user_id):
+            bot.answer_callback_query(call.id, "\u274c \u09ac\u09cd\u09af\u09be\u09a8\u09a1 \u0985\u09cd\u09af\u09be\u0995\u09be\u0989\u09a8\u09cd\u099f!", show_alert=True)
+            return
+        if user_id not in [str(a) for a in ADMIN_CHAT_IDS] and not is_bot_active():
+            bot.answer_callback_query(call.id, BOT_MAINTENANCE_MSG, show_alert=True)
+            return
+
+        code = call.data[len("code_confirm_"):]
+        ok, result_text = claim_link_task_code(user_id, code)
+        bot.answer_callback_query(call.id, "\u2705 \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8!" if ok else "\u274c \u09ac\u09cd\u09af\u09b0\u09cd\u09a5!")
+        try:
+            bot.edit_message_text(
+                result_text, chat_id=call.message.chat.id, message_id=call.message.message_id,
+                parse_mode="HTML" if ok else None
+            )
+        except Exception:
+            pass
 
     # -------- WITHDRAW ACTION HANDLER (ACCEPT/REJECT) --------
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('wd_acc_', 'wd_rej_')))
@@ -640,27 +697,40 @@ if bot:
                                   chat_id=call.message.chat.id, 
                                   message_id=call.message.message_id, parse_mode="HTML")
 
+    def build_admin_panel_markup():
+        markup = InlineKeyboardMarkup(row_width=2)
+        bot_status_label = "\U0001F7E2 Bot: ON (চাপ দিলে OFF হবে)" if is_bot_active() else "\U0001F534 Bot: OFF (চাপ দিলে ON হবে)"
+
+        btn_ban = InlineKeyboardButton("\U0001F6AB Ban User", callback_data="admin_ban_prompt")
+        btn_unban = InlineKeyboardButton("\u2705 Unban User", callback_data="admin_unban_prompt")
+        btn_add_bal = InlineKeyboardButton("\u2795 Add Balance", callback_data="admin_addbal_prompt")
+        btn_cut_bal = InlineKeyboardButton("\u2796 Cut Balance", callback_data="admin_cutbal_prompt")
+        btn_stats = InlineKeyboardButton("\U0001F4CA Total Users", callback_data="admin_stats")
+        btn_broadcast = InlineKeyboardButton("\U0001F4E2 Broadcast", callback_data="admin_broadcast_prompt")
+        btn_startall = InlineKeyboardButton("\U0001F504 Start All Users", callback_data="admin_startall_confirm")
+        btn_toggle = InlineKeyboardButton(bot_status_label, callback_data="admin_toggle_bot")
+        btn_msguser = InlineKeyboardButton("\u2709\uFE0F Message User", callback_data="admin_msguser_prompt")
+        btn_bannedlist = InlineKeyboardButton("\U0001F4CB Banned List", callback_data="admin_banned_list")
+
+        markup.add(btn_ban, btn_unban)
+        markup.add(btn_add_bal, btn_cut_bal)
+        markup.add(btn_stats, btn_broadcast)
+        markup.add(btn_msguser, btn_bannedlist)
+        markup.add(btn_toggle)
+        markup.add(btn_startall)
+        return markup
+
     @bot.message_handler(commands=['admin'])
     def handle_admin_panel(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
             bot.reply_to(message, "❌ আপনি এই বটের অ্যাডমিন নন।")
             return
 
-        markup = InlineKeyboardMarkup(row_width=2)
-        btn_ban = InlineKeyboardButton("🚫 Ban User", callback_data="admin_ban_prompt")
-        btn_unban = InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_prompt")
-        btn_add_bal = InlineKeyboardButton("➕ Add Balance", callback_data="admin_addbal_prompt")
-        btn_cut_bal = InlineKeyboardButton("➖ Cut Balance", callback_data="admin_cutbal_prompt")
-        btn_stats = InlineKeyboardButton("📊 Total Users", callback_data="admin_stats")
-        btn_broadcast = InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast_prompt")
-        
-        markup.add(btn_ban, btn_unban, btn_add_bal, btn_cut_bal, btn_stats, btn_broadcast)
-        
         bot.send_message(
             message.chat.id, 
             "<b>⚙️ অ্যাডমিন কন্ট্রোল প্যানেল</b>\n\nনিচের যেকোনো বাটনে ক্লিক করে সরাসরি কাজ সম্পন্ন করুন:", 
             parse_mode="HTML", 
-            reply_markup=markup
+            reply_markup=build_admin_panel_markup()
         )
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('admin_'))
@@ -723,8 +793,115 @@ if bot:
                 reply_markup=ForceReply(selective=True)
             )
             bot.register_next_step_handler(msg, process_broadcast_input)
-            
+
+        elif call.data == "admin_msguser_prompt":
+            msg = bot.send_message(
+                call.message.chat.id,
+                "\u2709\uFE0F <b>যাকে মেসেজ পাঠাতে চান তার USER ID লিখে এই মেসেজে রিপ্লাই দিন:</b>",
+                parse_mode="HTML",
+                reply_markup=ForceReply(selective=True)
+            )
+            bot.register_next_step_handler(msg, process_msguser_id_input)
+
+        elif call.data == "admin_banned_list":
+            if users_collection is None:
+                bot.send_message(call.message.chat.id, "⚠️ ডাটাবেস সংযুক্ত নেই।")
+            else:
+                banned_docs = list(users_collection.find({"banned": True}, {"user_id": 1, "first_name": 1, "username": 1}).limit(150))
+                if not banned_docs:
+                    bot.send_message(call.message.chat.id, "\u2705 বর্তমানে কোনো ইউজার ব্যানড নেই।")
+                else:
+                    lines = [f"<b>\U0001F4CB ব্যানড ইউজার তালিকা ({len(banned_docs)} জন):</b>\n"]
+                    for d in banned_docs:
+                        uid = d.get("user_id", "?")
+                        name = d.get("first_name", "N/A")
+                        uname = d.get("username", "N/A")
+                        lines.append(f"\u2022 <code>{uid}</code> — {name} (@{uname})")
+                    text = "\n".join(lines)
+                    if len(text) > 3900:
+                        text = text[:3900] + "\n... (আরও আছে)"
+                    bot.send_message(call.message.chat.id, text, parse_mode="HTML")
+
+        elif call.data == "admin_toggle_bot":
+            new_state = not is_bot_active()
+            set_bot_active(new_state)
+            status_text = "\U0001F7E2 চালু (ON)" if new_state else "\U0001F534 বন্ধ (OFF)"
+            bot.send_message(call.message.chat.id, f"\u2699\uFE0F বট এখন: <b>{status_text}</b>", parse_mode="HTML")
+            try:
+                bot.edit_message_reply_markup(
+                    chat_id=call.message.chat.id, message_id=call.message.message_id,
+                    reply_markup=build_admin_panel_markup()
+                )
+            except Exception:
+                pass
+
+        elif call.data == "admin_startall_confirm":
+            confirm_markup = InlineKeyboardMarkup()
+            confirm_markup.add(
+                InlineKeyboardButton("\u2705 হ্যাঁ, সবাইকে পাঠান", callback_data="admin_startall_go"),
+                InlineKeyboardButton("\u274C বাতিল", callback_data="admin_startall_cancel")
+            )
+            total_db_users = users_collection.count_documents({}) if users_collection is not None else 0
+            bot.send_message(
+                call.message.chat.id,
+                f"\u26A0\uFE0F আপনি কি নিশ্চিত? এতে <b>{total_db_users}</b> জন ইউজারের কাছে বট রিস্টার্ট মেসেজ যাবে।",
+                parse_mode="HTML",
+                reply_markup=confirm_markup
+            )
+
+        elif call.data == "admin_startall_cancel":
+            bot.edit_message_text("\u274C বাতিল করা হয়েছে।", chat_id=call.message.chat.id, message_id=call.message.message_id)
+
+        elif call.data == "admin_startall_go":
+            if users_collection is None:
+                bot.send_message(call.message.chat.id, "⚠️ ডাটাবেস সংযুক্ত নেই।")
+            else:
+                all_users = list(users_collection.find({}, {"user_id": 1}))
+                status_msg = bot.send_message(call.message.chat.id, "\u23F3 সকল ইউজারের বট রিস্টার্ট করা হচ্ছে...")
+                success_count = 0
+                restart_markup = InlineKeyboardMarkup()
+                restart_markup.add(InlineKeyboardButton("\U0001F680 Open App \U0001F680", web_app=WebAppInfo(url=RENDER_EXTERNAL_URL)))
+                restart_text = "\U0001F504 <b>বট রিস্টার্ট করা হয়েছে!</b>\n\nআমাদের অ্যাপে ঢুকতে নিচে থাকা Open App বাটনে চাপ দিন।"
+                for u in all_users:
+                    uid = u.get("user_id")
+                    if uid:
+                        try:
+                            bot.send_message(uid, restart_text, parse_mode="HTML", reply_markup=restart_markup)
+                            success_count += 1
+                            time.sleep(0.05)
+                        except Exception:
+                            pass
+                bot.edit_message_text(
+                    f"\u2705 <b>রিস্টার্ট সম্পন্ন!</b>\n\nমোট <b>{success_count}</b> জন ইউজারের কাছে মেসেজ পৌঁছেছে।",
+                    chat_id=call.message.chat.id, message_id=status_msg.message_id, parse_mode="HTML"
+                )
+
         bot.answer_callback_query(call.id)
+
+    def process_msguser_id_input(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        target_user_id = message.text.strip()
+        msg = bot.send_message(
+            message.chat.id,
+            f"\u2709\uFE0F <b>ইউজার {target_user_id} কে যে মেসেজ পাঠাতে চান তা লিখে রিপ্লাই দিন:</b>",
+            parse_mode="HTML",
+            reply_markup=ForceReply(selective=True)
+        )
+        bot.register_next_step_handler(msg, process_msguser_text_input, target_user_id)
+
+    def process_msguser_text_input(message, target_user_id):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        text_to_send = message.text.strip() if message.text else ""
+        if not text_to_send:
+            bot.reply_to(message, "⚠️ খালি মেসেজ পাঠানো যাবে না।")
+            return
+        try:
+            bot.send_message(target_user_id, f"\U0001F4E9 <b>অ্যাডমিন মেসেজ:</b>\n\n{text_to_send}", parse_mode="HTML")
+            bot.reply_to(message, f"\u2705 ইউজার <code>{target_user_id}</code> কে মেসেজ পাঠানো হয়েছে।", parse_mode="HTML")
+        except Exception as e:
+            bot.reply_to(message, f"\u274C মেসেজ পাঠাতে ব্যর্থ হয়েছে: {e}")
 
     def process_ban_input(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
@@ -1178,22 +1355,10 @@ def verify_link_task(token):
         color = "#22c55e" if ok else "#ef4444"
         code_html = ""
         if code:
-            # Copy-to-clipboard fallback, plus a one-tap deep link straight
-            # into the bot chat that auto-submits the code (no copy/paste
-            # needed). The deep link degrades gracefully to "just copy it"
-            # if the bot username can't be resolved for any reason.
-            bot_username = get_bot_username()
-            deep_link_html = ""
-            if bot_username:
-                deep_link = f"https://t.me/{bot_username}?start=code_{code}"
-                deep_link_html = f"""
-                <div style="margin-top:14px;">
-                    <a href="{deep_link}" style="display:inline-block; background:#22c55e; color:#0b0f19;
-                        text-decoration:none; font-weight:bold; border-radius:8px; padding:10px 22px; font-size:15px;">
-                        \U0001F4E4 বটে কোড জমা দিন
-                    </a>
-                </div>
-                """
+            # Copy-to-clipboard button so the user doesn't have to retype the
+            # code by hand on mobile. The user then pastes it into the bot
+            # chat, where a Confirm button finalizes the reward (see
+            # handle_link_task_code / handle_code_confirm_callback).
             code_html = f"""
             <div style="margin:28px auto 8px; max-width:280px; background:#111827;
                         border:2px dashed #22c55e; border-radius:12px; padding:18px;">
@@ -1203,7 +1368,6 @@ def verify_link_task(token):
                     border-radius:8px; padding:10px 22px; font-size:15px; cursor:pointer;">
                 \U0001F4CB Copy Code
             </button>
-            {deep_link_html}
             <script>
                 function copyTaskCode() {{
                     const text = document.getElementById('taskCode').innerText;
@@ -1234,10 +1398,9 @@ def verify_link_task(token):
 
     success_title = "\U0001F389 \u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
     code_instructions = (
-        "নিচের <b>\u09ac\u099f\u09c7 \u0995\u09cb\u09a1 \u099c\u09ae\u09be \u09a6\u09bf\u09a8</b> বাটনে চাপ দিলে সরাসরি টেলিগ্রাম বটে কোড জমা হয়ে যাবে। "
-        "বাটন কাজ না করলে কোডটি কপি করে বটে গিয়ে ম্যানুয়ালি পাঠান। "
-        f"কোডটি {LINK_TASK_CODE_EXPIRE_MINUTES} মিনিট পর্যন্ত কার্যকর থাকবে। "
-        f"কোড জমা দিলে ৳{LINK_TASK_REWARD:.2f} পাবেন।"
+        "উপরের কোডটি কপি করে আমাদের টেলিগ্রাম বটে ফিরে গিয়ে পাঠান, "
+        "তারপর বট যে Confirm বাটন দেখাবে সেটাতে চাপ দিলেই টাকা যোগ হবে। "
+        f"কোডটি {LINK_TASK_CODE_EXPIRE_MINUTES} মিনিট পর্যন্ত কার্যকর থাকবে।"
     )
 
     # Re-opening the same result page (double tap / browser back) while a
