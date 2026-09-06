@@ -58,6 +58,66 @@ def generate_task_code():
     completed exe.io / shrinkme.io ad-locker page."""
     return "".join(secrets.choice(LINK_TASK_CODE_ALPHABET) for _ in range(LINK_TASK_CODE_LENGTH))
 
+
+def validate_link_task_code(user_id, code):
+    """Read-only check — does NOT claim/credit. Returns (ok, task_or_errormsg).
+    Used by both the Telegram-bot paste flow and the in-WebApp confirm box."""
+    if link_tasks_collection is None or users_collection is None:
+        return False, "\u26a0\ufe0f \u09b8\u09be\u09b0\u09cd\u09ad\u09be\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be, \u098f\u0995\u099f\u09c1 \u09aa\u09b0\u09c7 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964"
+
+    task = link_tasks_collection.find_one({"code": code, "status": "code_issued"})
+    if not task:
+        return False, "\u274c \u0995\u09cb\u09a1\u099f\u09bf \u09b8\u09ac\u09bf \u09a8\u09af\u09bc \u0985\u09a5\u09ac\u09be \u0987\u09a4\u09bf\u09ae\u09a7\u09cd\u09af\u09c7 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7!"
+
+    # The code is tied to the user who generated it — someone else
+    # forwarding/guessing a code they saw can't redeem it.
+    if str(task.get("user_id")) != str(user_id):
+        return False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u09aa\u09a8\u09be\u09b0 \u0985\u09cd\u09af\u09be\u0995\u09be\u0989\u09a8\u09cd\u099f\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u09a8\u09af\u09bc!"
+
+    issued_at = task.get("code_issued_at")
+    if not issued_at or (datetime.datetime.utcnow() - issued_at) > datetime.timedelta(minutes=LINK_TASK_CODE_EXPIRE_MINUTES):
+        link_tasks_collection.update_one({"_id": task["_id"]}, {"$set": {"status": "expired"}})
+        return False, "\u274c \u0995\u09cb\u09a1\u09c7\u09b0 \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7, \u09a8\u09a4\u09c1\u09a8 \u099f\u09be\u09b8\u09cd\u0995 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c1\u09a8\u0964"
+
+    return True, task
+
+
+def claim_link_task_code(user_id, code):
+    """Actually credits the reward — call only after the user has confirmed
+    (either the WebApp's own Confirm button, or the bot's Confirm button).
+    Re-validates everything from scratch and claims atomically via Mongo's
+    find_one_and_update, so it's safe even under concurrent/duplicate taps
+    from many users at once."""
+    ok, task_or_msg = validate_link_task_code(user_id, code)
+    if not ok:
+        return False, task_or_msg
+    task = task_or_msg
+
+    # Atomic claim — only succeeds if the task is still 'code_issued' at
+    # this exact moment. Closes the double-tap / double-confirm race, and
+    # is safe when many users (or the same user twice) hit this at once
+    # since MongoDB itself serializes the update per document.
+    claimed = link_tasks_collection.find_one_and_update(
+        {"_id": task["_id"], "status": "code_issued"},
+        {"$set": {"status": "completed", "completed_at": datetime.datetime.utcnow()}}
+    )
+    if not claimed:
+        return False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u0997\u09c7\u0987 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
+
+    provider = task["provider"]
+    count_field = f"{provider}_link_count"
+    users_collection.update_one(
+        {"user_id": str(user_id)},
+        {"$inc": {"balance": LINK_TASK_REWARD, count_field: 1}}
+    )
+
+    success_text = (
+        f"\U0001F389 <b>\u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!</b>\n\n"
+        f"\u09f3{LINK_TASK_REWARD:.2f} \u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8\u09c7 \u09af\u09cb\u0997 \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964 \u0985\u09cd\u09af\u09be\u09aa\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8 \u099a\u09c7\u0995 \u0995\u09b0\u09c1\u09a8\u0964"
+    )
+    return True, success_text
+
+
 app = Flask(__name__, template_folder='.', static_folder='.')
 
 # Restricted CORS configuration for production security
@@ -84,6 +144,26 @@ if MONGO_URI:
         link_tasks_collection = db["link_tasks"]
         settings_collection = db["settings"]
         print("✅ MongoDB Connected Successfully")
+
+        # Indexes matter a lot here: users_collection.find_one({"user_id": ...})
+        # and link_tasks_collection lookups by token/code run on nearly every
+        # request. Without an index Mongo does a full collection scan per
+        # lookup, which gets slower as the collections grow and turns into
+        # real lag once many users are active at once. These are safe to run
+        # every startup — creating an index that already exists is a no-op.
+        try:
+            users_collection.create_index("user_id", unique=True)
+            users_collection.create_index("banned")
+            users_collection.create_index("last_active")
+            link_tasks_collection.create_index("token", unique=True)
+            link_tasks_collection.create_index("code")
+            link_tasks_collection.create_index([("status", 1), ("created_at", 1)])
+            link_tasks_collection.create_index([("status", 1), ("code_issued_at", 1)])
+            withdraws_collection.create_index("user_id")
+            devices_collection.create_index("device_id")
+            print("✅ MongoDB indexes ensured")
+        except Exception as e:
+            print(f"⚠️ Index creation error (non-fatal): {e}")
     except Exception as e:
         print(f"❌ MongoDB Connection Error: {e}")
 
@@ -138,6 +218,13 @@ def is_user_banned(user_id):
     if user and user.get("banned", False):
         return True
     return False
+
+
+def is_valid_telegram_id(value):
+    """Telegram numeric user IDs only — rejects stray commands (e.g. an admin
+    accidentally typing '/admin' into a 'send USER ID' prompt), empty input,
+    or obvious typos, before it gets used in a DB write or a send_message call."""
+    return bool(value) and value.isdigit() and 5 <= len(value) <= 15
 
 # -------- FORCE JOIN CHECKER --------
 def check_user_joined_channels(user_id):
@@ -421,63 +508,6 @@ if bot:
             send_welcome(call.message)
         else:
             bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
-
-    # -------- LINK TASK CODE REDEMPTION --------
-    # After finishing the exe.io/shrinkme.io page the user gets a short
-    # one-time code, pastes it here as a plain message. The bot then shows
-    # a Confirm/Cancel button — money is only credited once Confirm is
-    # tapped, not the instant the code is pasted.
-    def validate_link_task_code(user_id, code):
-        """Read-only check — does NOT claim/credit. Returns (ok, task_or_errormsg)."""
-        if link_tasks_collection is None or users_collection is None:
-            return False, "\u26a0\ufe0f \u09b8\u09be\u09b0\u09cd\u09ad\u09be\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be, \u098f\u0995\u099f\u09c1 \u09aa\u09b0\u09c7 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964"
-
-        task = link_tasks_collection.find_one({"code": code, "status": "code_issued"})
-        if not task:
-            return False, "\u274c \u0995\u09cb\u09a1\u099f\u09bf \u09b8\u09ac\u09bf \u09a8\u09af\u09bc \u0985\u09a5\u09ac\u09be \u0987\u09a4\u09bf\u09ae\u09a7\u09cd\u09af\u09c7 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7!"
-
-        # The code is tied to the user who generated it — someone else
-        # forwarding/guessing a code they saw can't redeem it.
-        if str(task.get("user_id")) != user_id:
-            return False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u09aa\u09a8\u09be\u09b0 \u0985\u09cd\u09af\u09be\u0995\u09be\u0989\u09a8\u09cd\u099f\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u09a8\u09af\u09bc!"
-
-        issued_at = task.get("code_issued_at")
-        if not issued_at or (datetime.datetime.utcnow() - issued_at) > datetime.timedelta(minutes=LINK_TASK_CODE_EXPIRE_MINUTES):
-            link_tasks_collection.update_one({"_id": task["_id"]}, {"$set": {"status": "expired"}})
-            return False, "\u274c \u0995\u09cb\u09a1\u09c7\u09b0 \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7, \u09a8\u09a4\u09c1\u09a8 \u099f\u09be\u09b8\u09cd\u0995 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c1\u09a8\u0964"
-
-        return True, task
-
-    def claim_link_task_code(user_id, code):
-        """Actually credits the reward — call only after the user taps Confirm.
-        Re-validates everything from scratch and claims atomically, so it's
-        safe even if Confirm is somehow tapped twice."""
-        ok, task_or_msg = validate_link_task_code(user_id, code)
-        if not ok:
-            return False, task_or_msg
-        task = task_or_msg
-
-        # Atomic claim — only succeeds if the task is still 'code_issued' at
-        # this exact moment. Closes the double-tap / double-confirm race.
-        claimed = link_tasks_collection.find_one_and_update(
-            {"_id": task["_id"], "status": "code_issued"},
-            {"$set": {"status": "completed", "completed_at": datetime.datetime.utcnow()}}
-        )
-        if not claimed:
-            return False, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u0997\u09c7\u0987 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
-
-        provider = task["provider"]
-        count_field = f"{provider}_link_count"
-        users_collection.update_one(
-            {"user_id": user_id},
-            {"$inc": {"balance": LINK_TASK_REWARD, count_field: 1}}
-        )
-
-        success_text = (
-            f"\U0001F389 <b>\u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!</b>\n\n"
-            f"\u09f3{LINK_TASK_REWARD:.2f} \u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8\u09c7 \u09af\u09cb\u0997 \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964 \u0985\u09cd\u09af\u09be\u09aa\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8 \u099a\u09c7\u0995 \u0995\u09b0\u09c1\u09a8\u0964"
-        )
-        return True, success_text
 
     # Matches ONLY messages that look exactly like a generated code (fixed
     # length, restricted alphabet) so normal chat/commands aren't affected.
@@ -776,12 +806,23 @@ if bot:
             bot.register_next_step_handler(msg, process_cutbal_input)
             
         elif call.data == "admin_stats":
-            total_db_users = users_collection.count_documents({}) if users_collection is not None else 0
-            total_banned = users_collection.count_documents({"banned": True}) if users_collection is not None else 0
-            
-            msg = f"<b>📊 ইউজার স্ট্যাটিস্টিক্স:</b>\n\n"
-            msg += f"👤 মোট রেজিস্টার্ড ইউজার: {total_db_users}\n"
-            msg += f"🚫 মোট ব্যানড ইউজার: {total_banned}"
+            if users_collection is not None:
+                total_db_users = users_collection.count_documents({})
+                total_banned = users_collection.count_documents({"banned": True})
+                active_cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
+                # "Active" = opened the app in the last 24 hours (last_active is
+                # stamped by /get-user-data on every app load) and not banned.
+                total_active = users_collection.count_documents({
+                    "last_active": {"$gte": active_cutoff},
+                    "banned": {"$ne": True}
+                })
+            else:
+                total_db_users = total_banned = total_active = 0
+
+            msg = f"<b>\U0001F4CA ইউজার স্ট্যাটিস্টিক্স:</b>\n\n"
+            msg += f"\U0001F464 মোট রেজিস্টার্ড ইউজার: {total_db_users}\n"
+            msg += f"\U0001F7E2 বর্তমানে একটিভ (২৪ ঘন্টায়): {total_active}\n"
+            msg += f"\U0001F6AB মোট ব্যানড ইউজার: {total_banned}"
             
             bot.send_message(call.message.chat.id, msg, parse_mode="HTML")
             
@@ -882,6 +923,9 @@ if bot:
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
         target_user_id = message.text.strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)। আবার /admin থেকে চেষ্টা করুন।")
+            return
         msg = bot.send_message(
             message.chat.id,
             f"\u2709\uFE0F <b>ইউজার {target_user_id} কে যে মেসেজ পাঠাতে চান তা লিখে রিপ্লাই দিন:</b>",
@@ -901,12 +945,15 @@ if bot:
             bot.send_message(target_user_id, f"\U0001F4E9 <b>অ্যাডমিন মেসেজ:</b>\n\n{text_to_send}", parse_mode="HTML")
             bot.reply_to(message, f"\u2705 ইউজার <code>{target_user_id}</code> কে মেসেজ পাঠানো হয়েছে।", parse_mode="HTML")
         except Exception as e:
-            bot.reply_to(message, f"\u274C মেসেজ পাঠাতে ব্যর্থ হয়েছে: {e}")
+            bot.reply_to(message, f"\u274C মেসেজ পাঠাতে ব্যর্থ হয়েছে (ইউজার হয়তো বটকে ব্লক করেছেন বা ভুল ID): {e}")
 
     def process_ban_input(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
         target_user_id = message.text.strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
         bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
@@ -915,6 +962,9 @@ if bot:
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
         target_user_id = message.text.strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
         bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
@@ -927,6 +977,9 @@ if bot:
             bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
             return
         target_user_id = args[0].strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
         try:
             amount = float(args[1].strip())
         except ValueError:
@@ -949,6 +1002,9 @@ if bot:
             bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
             return
         target_user_id = args[0].strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
         try:
             amount = float(args[1].strip())
         except ValueError:
@@ -998,6 +1054,9 @@ if bot:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/unban USER_ID</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": False}})
         bot.reply_to(message, f"✅ <b>ইউজার ID: {target_user_id} সফলভাবে আনব্যান করা হয়েছে!</b>", parse_mode="HTML")
@@ -1011,6 +1070,9 @@ if bot:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/ban USER_ID</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$set": {"banned": True}})
         bot.reply_to(message, f"🚫 <b>ইউজার ID: {target_user_id} ব্যান করা হয়েছে!</b>", parse_mode="HTML")
@@ -1024,6 +1086,9 @@ if bot:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
         try:
             amount = float(args[2].strip())
         except ValueError:
@@ -1047,6 +1112,9 @@ if bot:
             bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/cutbalance USER_ID AMOUNT</code>", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
         try:
             amount = float(args[2].strip())
         except ValueError:
@@ -1128,6 +1196,13 @@ def get_user_data():
         if user_data:
             if user_data.get("banned", False):
                 return jsonify({"status": "banned"}), 200
+
+            # Stamped on every app load/foreground — powers the "active users"
+            # count in the admin panel. Cheap indexed write, not read back here.
+            users_collection.update_one(
+                {"user_id": str(user_id)},
+                {"$set": {"last_active": datetime.datetime.utcnow()}}
+            )
             
             today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
             if user_data.get("last_reset_date") != today_str:
@@ -1349,6 +1424,35 @@ def generate_link_task():
 
     return jsonify({"status": "success", "short_url": short_url}), 200
 
+@app.route('/api/confirm-link-task-code', methods=['POST'])
+def confirm_link_task_code_api():
+    """In-app version of code confirmation (the same code/expiry/ownership
+    rules as the Telegram-bot Confirm button — both call claim_link_task_code,
+    which claims atomically via Mongo so concurrent submissions from many
+    users at once never double-credit)."""
+    data = request.json or {}
+    user_id = str(data.get('user_id', '')).strip()
+    raw_code = str(data.get('code', '')).strip().upper()
+
+    if not user_id or not raw_code:
+        return jsonify({"status": "error", "message": "\u09ad\u09c1\u09b2 \u09b0\u09bf\u0995\u09cb\u09df\u09c7\u09b8\u09cd\u099f!"}), 400
+
+    if not LINK_TASK_CODE_REGEX.match(raw_code):
+        return jsonify({"status": "error", "message": "\u0995\u09cb\u09a1\u099f\u09bf \u09b8\u09ac\u09bf \u09a8\u09af\u09bc!"}), 400
+
+    if is_user_banned(user_id):
+        return jsonify({"status": "banned"}), 200
+
+    ok, result_text = claim_link_task_code(user_id, raw_code)
+
+    # claim_link_task_code's success message carries a Telegram-style <b> tag
+    # for the bot chat; strip it for the plain-text in-app message box.
+    clean_message = re.sub(r"</?b>", "", result_text)
+
+    if ok:
+        return jsonify({"status": "success", "message": clean_message}), 200
+    return jsonify({"status": "error", "message": clean_message}), 400
+
 @app.route('/verify-link-task/<token>', methods=['GET'])
 def verify_link_task(token):
     def result_page(title, message, ok, code=None):
@@ -1398,8 +1502,8 @@ def verify_link_task(token):
 
     success_title = "\U0001F389 \u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
     code_instructions = (
-        "উপরের কোডটি কপি করে আমাদের টেলিগ্রাম বটে ফিরে গিয়ে পাঠান, "
-        "তারপর বট যে Confirm বাটন দেখাবে সেটাতে চাপ দিলেই টাকা যোগ হবে। "
+        "উপরের কোডটি কপি করে অ্যাপে ফিরে যান, Exe.io/ShrinkMe টাস্কের নিচে থাকা কোড-বক্সে বসিয়ে "
+        "<b>Confirm</b> বাটনে চাপ দিন — তখনই টাকা যোগ হবে। "
         f"কোডটি {LINK_TASK_CODE_EXPIRE_MINUTES} মিনিট পর্যন্ত কার্যকর থাকবে।"
     )
 
