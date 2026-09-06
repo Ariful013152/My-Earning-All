@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import random
 import datetime
@@ -41,6 +42,21 @@ LINK_TASK_REWARD = 0.10
 LINK_TASK_DAILY_LIMIT = 20
 LINK_TASK_MIN_SECONDS = 8  # a real ad-locker page takes at least this long to click through
 LINK_TASK_MAX_AGE_HOURS = 24  # a pending token older than this is treated as expired
+
+# Codes are typed by hand into Telegram, so keep the alphabet short and
+# unambiguous: no 0/O, 1/I/L, and no digit-letter pairs that look alike.
+LINK_TASK_CODE_ALPHABET = "23456789ACDEFGHJKMNPQRTUVWXY"
+LINK_TASK_CODE_LENGTH = 6
+LINK_TASK_CODE_EXPIRE_MINUTES = 15  # how long a generated code stays redeemable
+LINK_TASK_CODE_REGEX = re.compile(
+    rf"^[{LINK_TASK_CODE_ALPHABET}]{{{LINK_TASK_CODE_LENGTH}}}$"
+)
+
+
+def generate_task_code():
+    """Cryptographically random, one-time redemption code shown after a
+    completed exe.io / shrinkme.io ad-locker page."""
+    return "".join(secrets.choice(LINK_TASK_CODE_ALPHABET) for _ in range(LINK_TASK_CODE_LENGTH))
 
 app = Flask(__name__, template_folder='.', static_folder='.')
 
@@ -200,6 +216,14 @@ def cleanup_link_tasks_loop():
                     "status": "pending",
                     "created_at": {"$lt": pending_cutoff}
                 })
+
+                # A code that was issued but never redeemed in time is marked
+                # expired so the (now-dead) code can't be typed in later.
+                code_cutoff = datetime.datetime.utcnow() - datetime.timedelta(minutes=LINK_TASK_CODE_EXPIRE_MINUTES)
+                link_tasks_collection.update_many(
+                    {"status": "code_issued", "code_issued_at": {"$lt": code_cutoff}},
+                    {"$set": {"status": "expired"}}
+                )
 
                 # Completed/expired records are kept for a week for support/dispute
                 # lookups, then removed so the collection doesn't grow forever.
@@ -365,6 +389,67 @@ if bot:
             send_welcome(call.message)
         else:
             bot.answer_callback_query(call.id, "❌ আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!", show_alert=True)
+
+    # -------- LINK TASK CODE REDEMPTION --------
+    # After finishing the exe.io/shrinkme.io page the user is shown a short
+    # one-time code; they paste that code back into this chat to claim the
+    # reward. Matches ONLY messages that look exactly like a generated code
+    # (fixed length, restricted alphabet) so normal chat/commands aren't
+    # affected.
+    @bot.message_handler(func=lambda m: m.text and not m.text.startswith('/') and LINK_TASK_CODE_REGEX.match(m.text.strip().upper()))
+    def handle_link_task_code(message):
+        user_id = str(message.from_user.id)
+
+        if is_user_banned(user_id):
+            return
+
+        if link_tasks_collection is None or users_collection is None:
+            bot.reply_to(message, "\u26a0\ufe0f \u09b8\u09be\u09b0\u09cd\u09ad\u09be\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be, \u098f\u0995\u099f\u09c1 \u09aa\u09b0\u09c7 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964")
+            return
+
+        code = message.text.strip().upper()
+        task = link_tasks_collection.find_one({"code": code, "status": "code_issued"})
+
+        if not task:
+            bot.reply_to(message, "\u274c \u0995\u09cb\u09a1\u099f\u09bf \u09b8\u09ac\u09bf \u09a8\u09af\u09bc \u0985\u09a5\u09ac\u09be \u0987\u09a4\u09bf\u09ae\u09a7\u09cd\u09af\u09c7 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7!")
+            return
+
+        # The code is tied to the user who generated it — someone else
+        # forwarding/guessing a code they saw can't redeem it.
+        if str(task.get("user_id")) != user_id:
+            bot.reply_to(message, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u09aa\u09a8\u09be\u09b0 \u0985\u09cd\u09af\u09be\u0995\u09be\u0989\u09a8\u09cd\u099f\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u09a8\u09af\u09bc!")
+            return
+
+        issued_at = task.get("code_issued_at")
+        if not issued_at or (datetime.datetime.utcnow() - issued_at) > datetime.timedelta(minutes=LINK_TASK_CODE_EXPIRE_MINUTES):
+            link_tasks_collection.update_one({"_id": task["_id"]}, {"$set": {"status": "expired"}})
+            bot.reply_to(message, "\u274c \u0995\u09cb\u09a1\u09c7\u09b0 \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7, \u09a8\u09a4\u09c1\u09a8 \u099f\u09be\u09b8\u09cd\u0995 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c1\u09a8\u0964")
+            return
+
+        # Atomic claim: if two messages with the same code arrive back-to-back
+        # (user double-pastes, Telegram retries delivery, etc.) only the first
+        # one actually credits the balance.
+        claimed = link_tasks_collection.find_one_and_update(
+            {"_id": task["_id"], "status": "code_issued"},
+            {"$set": {"status": "completed", "completed_at": datetime.datetime.utcnow()}}
+        )
+        if not claimed:
+            bot.reply_to(message, "\u274c \u098f\u0987 \u0995\u09cb\u09a1\u099f\u09bf \u0986\u0997\u09c7\u0987 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7!")
+            return
+
+        provider = task["provider"]
+        count_field = f"{provider}_link_count"
+        users_collection.update_one(
+            {"user_id": user_id},
+            {"$inc": {"balance": LINK_TASK_REWARD, count_field: 1}}
+        )
+
+        bot.reply_to(
+            message,
+            f"\ud83c\udf89 <b>\u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!</b>\n\n"
+            f"\u09f3{LINK_TASK_REWARD:.2f} \u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8\u09c7 \u09af\u09cb\u0997 \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964 \u0985\u09cd\u09af\u09be\u09aa\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8 \u099a\u09c7\u0995 \u0995\u09b0\u09c1\u09a8\u0964",
+            parse_mode="HTML"
+        )
 
     # -------- WITHDRAW ACTION HANDLER (ACCEPT/REJECT) --------
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('wd_acc_', 'wd_rej_')))
@@ -1056,20 +1141,40 @@ def generate_link_task():
 
 @app.route('/verify-link-task/<token>', methods=['GET'])
 def verify_link_task(token):
-    def result_page(title, message, ok):
+    def result_page(title, message, ok, code=None):
         color = "#22c55e" if ok else "#ef4444"
+        code_html = ""
+        if code:
+            # Copy-to-clipboard button so the user doesn't have to retype the
+            # code by hand on mobile.
+            code_html = f"""
+            <div style="margin:28px auto 8px; max-width:280px; background:#111827;
+                        border:2px dashed #22c55e; border-radius:12px; padding:18px;">
+                <div id="taskCode" style="font-size:32px; font-weight:bold; letter-spacing:6px; color:#22c55e;">{code}</div>
+            </div>
+            <button onclick="copyTaskCode()" style="background:#2563eb; color:#fff; border:none;
+                    border-radius:8px; padding:10px 22px; font-size:15px; cursor:pointer;">
+                \U0001F4CB Copy Code
+            </button>
+            <script>
+                function copyTaskCode() {{
+                    const text = document.getElementById('taskCode').innerText;
+                    if (navigator.clipboard) {{ navigator.clipboard.writeText(text); }}
+                    alert('Code copied: ' + text);
+                }}
+            </script>
+            """
         return f"""
         <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-            body {{ background:#0b0f19; color:#f1f5f9; font-family:sans-serif; text-align:center; padding-top:80px; }}
+            body {{ background:#0b0f19; color:#f1f5f9; font-family:sans-serif; text-align:center; padding-top:60px; }}
             h2 {{ color:{color}; }}
-            p {{ color:#94a3b8; font-size:15px; }}
+            p {{ color:#94a3b8; font-size:15px; padding:0 24px; }}
         </style></head>
-        <body><h2>{title}</h2><p>{message}</p></body></html>
+        <body><h2>{title}</h2><p>{message}</p>{code_html}</body></html>
         """
 
     fail_title = "\u099f\u09be\u09b8\u09cd\u0995 \u09ac\u09cd\u09af\u09b0\u09cd\u09a5 \u09b9\u09af\u09bc\u09c7\u099b\u09c7"
-    fail_retry_msg = "\u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8 \u0985\u09a5\u09ac\u09be \u098f\u09a1\u09ae\u09bf\u09a8\u0995\u09c7 \u099c\u09be\u09a8\u09be\u09a8\u0964"
 
     if link_tasks_collection is None or users_collection is None:
         return result_page(fail_title, "Database offline", False)
@@ -1077,6 +1182,25 @@ def verify_link_task(token):
     task = link_tasks_collection.find_one({"token": token})
     if not task:
         msg = "\u099f\u09cb\u0995\u09c7\u09a8 \u09aa\u09be\u0993\u09af\u09bc\u09be \u09af\u09be\u09af\u09bc\u09a8\u09bf \u09ac\u09be \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7!"
+        return result_page(fail_title, msg, False)
+
+    success_title = "\ud83c\udf89 \u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
+    code_instructions = (
+        "\u0989\u09aa\u09b0\u09c7\u09b0 \u0995\u09cb\u09a1\u099f\u09bf \u0995\u09aa\u09bf \u0995\u09b0\u09c7 \u0986\u09ae\u09be\u09a6\u09c7\u09b0 "
+        "\u099f\u09c7\u09b2\u09bf\u0997\u09cd\u09b0\u09be\u09ae \u09ac\u099f\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09aa\u09be\u09a0\u09be\u09a8 \u2014 "
+        f"\u0995\u09cb\u09a1\u099f\u09bf {LINK_TASK_CODE_EXPIRE_MINUTES} \u09ae\u09bf\u09a8\u09bf\u099f \u09aa\u09b0\u09cd\u09af\u09a8\u09cd\u09a4 \u0995\u09be\u09b0\u09cd\u09af\u0995\u09b0 \u09a5\u09be\u0995\u09ac\u09c7\u0964 "
+        f"\u0995\u09cb\u09a1 \u099c\u09ae\u09be \u09a6\u09bf\u09b2\u09c7 \u09f3{LINK_TASK_REWARD:.2f} \u09aa\u09be\u09ac\u09c7\u09a8\u0964"
+    )
+
+    # Re-opening the same result page (double tap / browser back) while a
+    # code is still live should just show the same code again, not mint a
+    # fresh one or throw an error.
+    if task.get("status") == "code_issued":
+        issued_at = task.get("code_issued_at")
+        code = task.get("code")
+        if code and issued_at and (datetime.datetime.utcnow() - issued_at) < datetime.timedelta(minutes=LINK_TASK_CODE_EXPIRE_MINUTES):
+            return result_page(success_title, code_instructions, True, code=code)
+        msg = "\u0995\u09cb\u09a1\u09c7\u09b0 \u09ae\u09c7\u09af\u09bc\u09be\u09a6 \u09b6\u09c7\u09b7 \u09b9\u09af\u09bc\u09c7 \u0997\u09c7\u099b\u09c7\u0964 \u0985\u09cd\u09af\u09be\u09aa\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u09a8\u09a4\u09c1\u09a8 \u0995\u09b0\u09c7 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c1\u09a8\u0964"
         return result_page(fail_title, msg, False)
 
     if task.get("status") != "pending":
@@ -1094,19 +1218,22 @@ def verify_link_task(token):
         msg = "\u09b8\u09b0\u09be\u09b8\u09b0\u09bf \u098f\u0987 \u09b2\u09bf\u0982\u0995\u09c7 \u0986\u09b8\u09be \u09af\u09be\u09ac\u09c7 \u09a8\u09be, \u09b6\u09b0\u09cd\u099f \u09b2\u09bf\u0982\u0995 \u09a5\u09c7\u0995\u09c7 \u0986\u09b8\u09a4\u09c7 \u09b9\u09ac\u09c7!"
         return result_page(fail_title, msg, False)
 
-    provider = task["provider"]
-    user_id = task["user_id"]
-    count_field = f"{provider}_link_count"
+    code = generate_task_code()
+    now = datetime.datetime.utcnow()
 
-    link_tasks_collection.update_one({"token": token}, {"$set": {"status": "completed"}})
-    users_collection.update_one(
-        {"user_id": user_id},
-        {"$inc": {"balance": LINK_TASK_REWARD, count_field: 1}}
+    # Atomic "claim" — only succeeds if the task was still 'pending' at the
+    # moment of the update. This closes a race where the same link is opened
+    # twice (double tap, page refresh, or a replayed request) and would
+    # otherwise mint two different codes / credit the task twice.
+    claimed = link_tasks_collection.find_one_and_update(
+        {"token": token, "status": "pending"},
+        {"$set": {"status": "code_issued", "code": code, "code_issued_at": now}}
     )
+    if not claimed:
+        msg = "\u098f\u0987 \u099f\u09be\u09b8\u09cd\u0995\u099f\u09bf \u0987\u09a4\u09bf\u09ae\u09a7\u09cd\u09af\u09c7 \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
+        return result_page(fail_title, msg, False)
 
-    success_title = "\ud83c\udf89 \u0995\u09be\u099c \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7!"
-    success_msg = f"\u0986\u09aa\u09a8\u09bf \u09f3{LINK_TASK_REWARD:.2f} \u09aa\u09c7\u09af\u09bc\u09c7\u099b\u09c7\u09a8\u0964 \u098f\u0996\u09a8 \u099f\u09c7\u09b2\u09bf\u0997\u09cd\u09b0\u09be\u09ae \u09ac\u099f\u09c7 \u09ab\u09bf\u09b0\u09c7 \u0997\u09bf\u09af\u09bc\u09c7 \u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09cd\u09af\u09be\u09b2\u09c7\u09a8\u09cd\u09b8 \u099a\u09c7\u0995 \u0995\u09b0\u09c1\u09a8\u0964 \u098f\u0987 \u099f\u09cd\u09af\u09be\u09ac\u099f\u09bf \u09ac\u09a8\u09cd\u09a7 \u0995\u09b0\u09c7 \u09a6\u09bf\u09a4\u09c7 \u09aa\u09be\u09b0\u09c7\u09a8\u0964"
-    return result_page(success_title, success_msg, True)
+    return result_page(success_title, code_instructions, True, code=code)
 
 @app.route('/request-withdraw', methods=['POST'])
 def request_withdraw():
