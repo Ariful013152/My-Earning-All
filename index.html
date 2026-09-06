@@ -336,6 +336,7 @@
             <div class="avatar"><i class="fas fa-user"></i></div>
             <div class="user-meta">
                 <div class="username" id="userName">User</div>
+                <small style="color: var(--text-sub, #94a3b8); font-size: 11px;">ID: <span id="userIdDisplay">-</span></small>
                 <span class="badge">BRONZE</span>
             </div>
         </div>
@@ -472,6 +473,28 @@
                 </div>
                 <button class="compact-btn" id="gigapubBtn" onclick="startGigapubTask()">শুরু করুন</button>
             </div>
+
+            <div class="task-list-card">
+                <div class="task-info">
+                    <div class="task-icon"><i class="fas fa-link"></i></div>
+                    <div class="task-details">
+                        <b>Exe.io টাস্ক</b>
+                        <small>সীমা: <span id="exeioCount">0</span>/20 <span id="exeioTimer" style="color:#e3b341;"></span></small>
+                    </div>
+                </div>
+                <button class="compact-btn" id="exeioBtn" onclick="startLinkTask('exeio')">শুরু করুন</button>
+            </div>
+
+            <div class="task-list-card">
+                <div class="task-info">
+                    <div class="task-icon"><i class="fas fa-link"></i></div>
+                    <div class="task-details">
+                        <b>ShrinkMe টাস্ক</b>
+                        <small>সীমা: <span id="shrinkmeCount">0</span>/20 <span id="shrinkmeTimer" style="color:#e3b341;"></span></small>
+                    </div>
+                </div>
+                <button class="compact-btn" id="shrinkmeBtn" onclick="startLinkTask('shrinkme')">শুরু করুন</button>
+            </div>
         </div>
 
         <!-- SUPPORT TAB -->
@@ -594,6 +617,8 @@
         let monetagCount = 0;
         let adsterraCount = 0;
         let gigapubCount = 0;
+        let exeioCount = 0;
+        let shrinkmeCount = 0;
         let balance = 0.00;
         let totalRefers = 0;
         let withdrawsHistory = [];
@@ -670,6 +695,8 @@
                         monetagCount = parseInt(data.monetag_count || 0);
                         adsterraCount = parseInt(data.adsterra_count || 0);
                         gigapubCount = parseInt(data.gigapub_count || 0);
+                        exeioCount = parseInt(data.exeio_link_count || 0);
+                        shrinkmeCount = parseInt(data.shrinkme_link_count || 0);
                         withdrawsHistory = data.withdraws || [];
 
                         if (data.first_name && data.first_name !== "User") {
@@ -703,9 +730,12 @@
             document.getElementById('monetagCount').innerText = monetagCount;
             document.getElementById('adsterraCount').innerText = adsterraCount;
             document.getElementById('gigapubCount').innerText = gigapubCount;
+            document.getElementById('exeioCount').innerText = exeioCount;
+            document.getElementById('shrinkmeCount').innerText = shrinkmeCount;
             document.getElementById('refCount').innerText = totalRefers;
-            document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount + gigapubCount;
+            document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount + gigapubCount + exeioCount + shrinkmeCount;
             document.getElementById('userName').innerText = firstName;
+            document.getElementById('userIdDisplay').innerText = userId;
         }
 
         function renderWithdrawHistory() {
@@ -930,6 +960,50 @@
                     btn.disabled = false;
                 });
         }
+
+        function startLinkTask(provider) {
+            const btn = document.getElementById(provider + 'Btn');
+            const timerEl = document.getElementById(provider + 'Timer');
+            btn.disabled = true;
+            timerEl.innerText = "(লিংক তৈরি হচ্ছে...)";
+
+            fetch('/api/generate-link-task', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, provider: provider })
+            })
+            .then(res => res.json())
+            .then(resData => {
+                timerEl.innerText = "";
+                if (resData.status === 'banned') {
+                    alert("❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!");
+                    location.reload();
+                    return;
+                }
+                if (resData.status === 'success' && resData.short_url) {
+                    openExternalLink(resData.short_url);
+                    timerEl.innerText = "(লিংক সম্পন্ন করে ফিরে আসুন)";
+                } else {
+                    alert(resData.message || "টাস্ক শুরু করা সম্ভব হয়নি!");
+                }
+            })
+            .catch(() => {
+                timerEl.innerText = "";
+                alert("সার্ভারে সংযোগ করা যায়নি, অনুগ্রহ করে আবার চেষ্টা করুন!");
+            })
+            .finally(() => {
+                btn.disabled = false;
+            });
+        }
+
+        // Refresh balance/counts automatically when the user comes back from the
+        // exe.io/shrinkme browser tab, since the reward is credited server-side
+        // via the redirect callback, not by this page directly.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                fetchUserDataFromServer();
+            }
+        });
 
         function selectMethod(method, el) {
             selectedMethod = method;
