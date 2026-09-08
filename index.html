@@ -13,10 +13,22 @@
             --bg-color: #0b0e14;
             --card-bg: #121824;
             --card-border: #1e293b;
+            --surface-bg: #090d16;
             --accent-cyan: #00d2ff;
             --accent-blue: #0072ff;
             --text-main: #ffffff;
             --text-sub: #94a3b8;
+        }
+
+        body.light-theme {
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --card-border: #e2e8f0;
+            --surface-bg: #eef2f7;
+            --accent-cyan: #0090c8;
+            --accent-blue: #0072ff;
+            --text-main: #0f172a;
+            --text-sub: #64748b;
         }
 
         * {
@@ -33,6 +45,7 @@
             display: flex;
             flex-direction: column;
             min-height: 100vh;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
 
         .top-bar {
@@ -152,19 +165,21 @@
 
         .method-selector {
             display: flex;
+            flex-wrap: wrap;
             gap: 8px;
             margin: 12px 0;
         }
 
         .method-btn {
-            flex: 1;
-            padding: 10px;
+            flex: 1 1 28%;
+            min-width: 90px;
+            padding: 10px 6px;
             border-radius: 8px;
             border: 1px solid var(--card-border);
-            background: #090d16;
+            background: var(--surface-bg);
             color: var(--text-sub);
             cursor: pointer;
-            font-size: 12px;
+            font-size: 11px;
         }
 
         .method-btn.active {
@@ -176,10 +191,10 @@
         .input-box {
             width: 100%;
             padding: 12px;
-            background: #090d16;
+            background: var(--surface-bg);
             border: 1px solid var(--card-border);
             border-radius: 10px;
-            color: white;
+            color: var(--text-main);
             margin-bottom: 12px;
             outline: none;
             font-size: 13px;
@@ -260,7 +275,7 @@
             bottom: 0;
             left: 0;
             right: 0;
-            background: #090d16;
+            background: var(--surface-bg);
             border-top: 1px solid var(--card-border);
             display: flex;
             justify-content: space-around;
@@ -292,7 +307,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: #090d16;
+            background: var(--surface-bg);
             padding: 10px 12px;
             border-radius: 8px;
             margin-bottom: 8px;
@@ -313,7 +328,7 @@
         }
 
         .history-card {
-            background: #090d16;
+            background: var(--surface-bg);
             border: 1px solid var(--card-border);
             border-radius: 10px;
             padding: 10px 12px;
@@ -338,8 +353,14 @@
                 <div class="username" id="userName">User</div>
                 <small style="color: var(--text-sub, #94a3b8); font-size: 11px;">ID: <span id="userIdDisplay">-</span></small>
                 <span class="badge">BRONZE</span>
+                <div id="achievementBadges" style="display:flex; gap:5px; margin-top:5px;"></div>
             </div>
         </div>
+        <button id="themeToggleBtn" onclick="toggleTheme()" title="থিম পরিবর্তন করুন"
+                style="background:none; border:1px solid var(--card-border); border-radius:50%; width:36px; height:36px;
+                       color:var(--text-main); font-size:15px; cursor:pointer; flex-shrink:0;">
+            <i class="fas fa-moon" id="themeToggleIcon"></i>
+        </button>
     </div>
 
     <div class="container">
@@ -390,6 +411,12 @@
 
         <!-- TASK TAB -->
         <div id="tasks" class="tab-content">
+            <div class="card" style="margin-bottom: 12px; padding: 10px; text-align: center;">
+                <small style="color: var(--text-sub);">
+                    <i class="fas fa-clock" style="color: var(--accent-cyan);"></i>
+                    ডেইলি টাস্ক লিমিট রিসেট হতে বাকি: <b id="resetCountdown" style="color: var(--text-main);">--:--:--</b>
+                </small>
+            </div>
             <div class="card" style="margin-bottom: 12px; text-align: left; padding: 12px;">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
                     <i class="fab fa-telegram" style="color: var(--accent-cyan); font-size: 18px;"></i>
@@ -506,8 +533,8 @@
                 </div>
                 <div style="display:flex; gap:8px;">
                     <input type="text" id="taskCodeInput" placeholder="যেমন: A9K2M7" maxlength="6"
-                           style="flex:1; min-width:0; background:#0b0f19; border:1px solid #2d3748; border-radius:8px;
-                                  color:#fff; padding:10px 12px; font-size:16px; text-transform:uppercase; letter-spacing:3px; text-align:center;">
+                           style="flex:1; min-width:0; background:var(--surface-bg); border:1px solid var(--card-border); border-radius:8px;
+                                  color:var(--text-main); padding:10px 12px; font-size:16px; text-transform:uppercase; letter-spacing:3px; text-align:center;">
                     <button class="compact-btn" id="confirmCodeBtn" onclick="confirmTaskCode()" style="flex-shrink:0;">Confirm</button>
                 </div>
                 <small id="codeConfirmMsg" style="min-height:14px; display:block; text-align:center;"></small>
@@ -552,6 +579,7 @@
                 <div class="method-selector">
                     <button class="method-btn active" id="bKashBtn" onclick="selectMethod('bKash', this)">● বিকাশ (bKash)</button>
                     <button class="method-btn" id="NagadBtn" onclick="selectMethod('Nagad', this)">● নগদ (Nagad)</button>
+                    <button class="method-btn" id="RechargeBtn" onclick="selectMethod('Recharge', this)">● রিচার্জ (Recharge)</button>
                 </div>
 
                 <input type="number" class="input-box" placeholder="মিনিমাম ১০০ টাকা" id="withdrawAmount">
@@ -583,6 +611,28 @@
             tg.ready();
             tg.expand();
         }
+
+        // -------- THEME TOGGLE (Dark/Light) --------
+        function applyTheme(theme) {
+            const icon = document.getElementById('themeToggleIcon');
+            if (theme === 'light') {
+                document.body.classList.add('light-theme');
+                if (icon) { icon.classList.remove('fa-moon'); icon.classList.add('fa-sun'); }
+            } else {
+                document.body.classList.remove('light-theme');
+                if (icon) { icon.classList.remove('fa-sun'); icon.classList.add('fa-moon'); }
+            }
+        }
+
+        function toggleTheme() {
+            const isLight = document.body.classList.contains('light-theme');
+            const nextTheme = isLight ? 'dark' : 'light';
+            applyTheme(nextTheme);
+            localStorage.setItem('preferred_theme', nextTheme);
+        }
+
+        // Apply saved preference immediately (defaults to dark, matching the app's original look).
+        applyTheme(localStorage.getItem('preferred_theme') || 'dark');
 
         let botUsername = "myearningall01_bot";
         let selectedMethod = "bKash";
@@ -638,6 +688,8 @@
         let shrinkmeCount = 0;
         let balance = 0.00;
         let totalRefers = 0;
+        let totalEarned = 0.00;
+        let totalTasksCompleted = 0;
         let withdrawsHistory = [];
 
         async function getDeviceId() {
@@ -709,6 +761,8 @@
                     if (data.status === 'success') {
                         balance = parseFloat(data.balance);
                         totalRefers = parseInt(data.total_refers);
+                        totalEarned = parseFloat(data.total_earned || 0);
+                        totalTasksCompleted = parseInt(data.total_tasks_completed || 0);
                         monetagCount = parseInt(data.monetag_count || 0);
                         adsterraCount = parseInt(data.adsterra_count || 0);
                         gigapubCount = parseInt(data.gigapub_count || 0);
@@ -753,6 +807,27 @@
             document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount + gigapubCount + exeioCount + shrinkmeCount;
             document.getElementById('userName').innerText = firstName;
             document.getElementById('userIdDisplay').innerText = userId;
+            renderAchievementBadges();
+        }
+
+        // -------- ACHIEVEMENT BADGES --------
+        const ACHIEVEMENT_DEFS = [
+            { icon: '💰', label: 'প্রথম ৳100 আয়', check: () => totalEarned >= 100 },
+            { icon: '⚡', label: '৫০টা টাস্ক সম্পন্ন', check: () => totalTasksCompleted >= 50 },
+            { icon: '👥', label: '১০ জন রেফার', check: () => totalRefers >= 10 }
+        ];
+
+        function renderAchievementBadges() {
+            const container = document.getElementById('achievementBadges');
+            if (!container) return;
+            container.innerHTML = ACHIEVEMENT_DEFS.map(b => {
+                const unlocked = b.check();
+                return `<span title="${b.label}${unlocked ? ' ✓' : ' (লক করা)'}"
+                              style="font-size:15px; line-height:1; padding:3px 5px; border-radius:6px;
+                                     background: var(--surface-bg);
+                                     opacity:${unlocked ? '1' : '0.35'};
+                                     filter:${unlocked ? 'none' : 'grayscale(100%)'};">${b.icon}</span>`;
+            }).join('');
         }
 
         function renderWithdrawHistory() {
@@ -1077,10 +1152,21 @@
             }
         });
 
+        const METHOD_MIN_AMOUNT = { 'bKash': 100, 'Nagad': 100, 'Recharge': 50 };
+
         function selectMethod(method, el) {
             selectedMethod = method;
             document.querySelectorAll('.method-btn').forEach(b => b.classList.remove('active'));
             el.classList.add('active');
+
+            const minAmount = METHOD_MIN_AMOUNT[method] || 100;
+            const amountInput = document.getElementById('withdrawAmount');
+            if (amountInput) amountInput.placeholder = `মিনিমাম ${minAmount} টাকা`;
+
+            const accountInput = document.getElementById('withdrawAccount');
+            if (accountInput) {
+                accountInput.placeholder = method === 'Recharge' ? 'যে নাম্বারে রিচার্জ করতে চান (01XXXXXXXXX)' : '01XXXXXXXXX';
+            }
         }
 
         function copyReferLink() {
@@ -1097,9 +1183,10 @@
         function submitWithdraw() {
             const amount = parseFloat(document.getElementById('withdrawAmount').value);
             const account = document.getElementById('withdrawAccount').value.trim();
+            const minAmount = METHOD_MIN_AMOUNT[selectedMethod] || 100;
 
-            if (!amount || amount < 100) {
-                alert("মিনিমাম ১০০ টাকা উইথড্র করতে পারবেন।");
+            if (!amount || amount < minAmount) {
+                alert(`মিনিমাম ${minAmount} টাকা উইথড্র করতে পারবেন।`);
                 return;
             }
 
@@ -1141,10 +1228,30 @@
             });
         }
 
+        // -------- DAILY TASK LIMIT RESET COUNTDOWN --------
+        // Task limits reset based on UTC date on the backend (last_reset_date
+        // vs today's UTC date string) — so the reset actually happens at UTC
+        // midnight, regardless of the user's own timezone.
+        function updateResetCountdown() {
+            const el = document.getElementById('resetCountdown');
+            if (!el) return;
+            const now = new Date();
+            const nextResetUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0);
+            let diff = nextResetUTC - now.getTime();
+            if (diff < 0) diff = 0;
+            const h = Math.floor(diff / 3600000);
+            const m = Math.floor((diff % 3600000) / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
+            const pad = n => String(n).padStart(2, '0');
+            el.innerText = `${pad(h)}:${pad(m)}:${pad(s)}`;
+        }
+
         window.onload = function() {
             setupReferralAndBotInfo();
             verifyDeviceOnServer();
             fetchUserDataFromServer();
+            updateResetCountdown();
+            setInterval(updateResetCountdown, 1000);
         };
     </script>
 </body>
