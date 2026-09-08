@@ -52,6 +52,12 @@ LINK_TASK_CODE_REGEX = re.compile(
     rf"^[{LINK_TASK_CODE_ALPHABET}]{{{LINK_TASK_CODE_LENGTH}}}$"
 )
 
+WITHDRAW_METHOD_MIN = {
+    "bKash": 100,
+    "Nagad": 100,
+    "Recharge": 50,
+}
+
 
 def generate_task_code():
     """Cryptographically random, one-time redemption code shown after a
@@ -108,7 +114,7 @@ def claim_link_task_code(user_id, code):
     count_field = f"{provider}_link_count"
     users_collection.update_one(
         {"user_id": str(user_id)},
-        {"$inc": {"balance": LINK_TASK_REWARD, count_field: 1}}
+        {"$inc": {"balance": LINK_TASK_REWARD, count_field: 1, "total_earned": LINK_TASK_REWARD, "total_tasks_completed": 1}}
     )
 
     success_text = (
@@ -345,6 +351,51 @@ def cleanup_link_tasks_loop():
             print(f"Link task cleanup error: {e}")
         time.sleep(3600)  # run once every hour
 
+INACTIVITY_REMINDER_HOURS = 24
+INACTIVITY_REMINDER_TEXT = (
+    "\u23F0 <b>আজকের টাস্ক এখনো বাকি!</b>\n\n"
+    "অ্যাপে ফিরে গিয়ে টাস্ক সম্পন্ন করে আয় করুন — ডেইলি লিমিট প্রতিদিন রিসেট হয়, "
+    "মিস করবেন না!"
+)
+
+def inactivity_reminder_loop():
+    """Nudges users who haven't opened the app in 24h+ with a Telegram
+    reminder. Sent at most once per 24h window per user (tracked via
+    last_reminder_sent) so this never turns into spam. Every user gets a
+    last_active value the moment they're created (see send_welcome), so a
+    plain last_active < cutoff check covers both "used it once and left"
+    and "joined but never opened the app" cases."""
+    if not bot:
+        return
+    while True:
+        try:
+            if users_collection is not None:
+                cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=INACTIVITY_REMINDER_HOURS)
+                idle_users = users_collection.find({
+                    "banned": {"$ne": True},
+                    "last_active": {"$lt": cutoff},
+                    "$or": [
+                        {"last_reminder_sent": {"$exists": False}},
+                        {"last_reminder_sent": {"$lt": cutoff}}
+                    ]
+                })
+                markup = InlineKeyboardMarkup()
+                markup.add(InlineKeyboardButton("\U0001F680 Open App \U0001F680", web_app=WebAppInfo(url=RENDER_EXTERNAL_URL)))
+                for u in idle_users:
+                    uid = u.get("user_id")
+                    if not uid:
+                        continue
+                    try:
+                        bot.send_message(uid, INACTIVITY_REMINDER_TEXT, parse_mode="HTML", reply_markup=markup)
+                        users_collection.update_one({"user_id": uid}, {"$set": {"last_reminder_sent": datetime.datetime.utcnow()}})
+                        time.sleep(0.05)  # gentle pacing, same as broadcast, to stay under Telegram's rate limits
+                    except Exception:
+                        # Most common cause: user blocked the bot — nothing to do, just move on.
+                        pass
+        except Exception as e:
+            print(f"Inactivity reminder error: {e}")
+        time.sleep(3600)  # check hourly — reminders still only go out once per 24h per user
+
 # -------- KEEP ALIVE --------
 def keep_alive():
     if RENDER_EXTERNAL_URL:
@@ -427,7 +478,7 @@ if bot:
             users_collection.update_one(
                 {"user_id": user_id},
                 {"$set": {"first_name": first_name, "username": username, "banned": False},
-                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "gigapub_first_view_at": None, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d")}},
+                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "gigapub_first_view_at": None, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d"), "total_earned": 0.0, "total_tasks_completed": 0, "joined_at": datetime.datetime.utcnow(), "last_active": datetime.datetime.utcnow()}},
                 upsert=True
             )
 
@@ -681,7 +732,7 @@ if bot:
             if users_collection is not None:
                 users_collection.update_one(
                     {"user_id": referrer_id},
-                    {"$inc": {"balance": 0.50, "total_refers": 1}},
+                    {"$inc": {"balance": 0.50, "total_refers": 1, "total_earned": 0.50}},
                     upsert=True
                 )
 
@@ -1239,6 +1290,8 @@ def get_user_data():
                 "status": "success",
                 "balance": float(user_data.get("balance", 0.00)),
                 "total_refers": int(user_data.get("total_refers", 0)),
+                "total_earned": float(user_data.get("total_earned", 0.00)),
+                "total_tasks_completed": int(user_data.get("total_tasks_completed", 0)),
                 "first_name": user_data.get("first_name", "User"),
                 "monetag_count": monetag_count,
                 "adsterra_count": adsterra_count,
@@ -1249,7 +1302,7 @@ def get_user_data():
                 "withdraws": user_withdraws
             }), 200
 
-    return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "first_name": "User", "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "completed_channel_tasks": [], "withdraws": []}), 200
+    return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "total_earned": 0.00, "total_tasks_completed": 0, "first_name": "User", "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "completed_channel_tasks": [], "withdraws": []}), 200
 
 @app.route('/verify-channel-task', methods=['POST'])
 def verify_channel_task():
@@ -1283,7 +1336,7 @@ def verify_channel_task():
         users_collection.update_one(
             {"user_id": str(user_id)},
             {
-                "$inc": {"balance": reward},
+                "$inc": {"balance": reward, "total_earned": reward, "total_tasks_completed": 1},
                 "$push": {"completed_channel_tasks": channel}
             },
             upsert=True
@@ -1341,10 +1394,10 @@ def verify_ad_task():
                     "status": "limit_reached",
                     "message": f"আজকের Gigapub টাস্ক লিমিট শেষ! আরও {hours_left} ঘন্টা {mins_left} মিনিট পর আবার দেখতে পারবেন।"
                 }), 400
-            update_fields = {"$inc": {"balance": gigapub_reward, "gigapub_count": 1}}
+            update_fields = {"$inc": {"balance": gigapub_reward, "gigapub_count": 1, "total_earned": gigapub_reward, "total_tasks_completed": 1}}
         else:
             update_fields = {
-                "$inc": {"balance": gigapub_reward},
+                "$inc": {"balance": gigapub_reward, "total_earned": gigapub_reward, "total_tasks_completed": 1},
                 "$set": {"gigapub_count": 1, "gigapub_first_view_at": now}
             }
             gigapub_count = 0
@@ -1358,7 +1411,7 @@ def verify_ad_task():
         
         users_collection.update_one(
             {"user_id": user_id},
-            {"$inc": {"balance": reward, "monetag_count": 1}}
+            {"$inc": {"balance": reward, "monetag_count": 1, "total_earned": reward, "total_tasks_completed": 1}}
         )
         return jsonify({"status": "success", "reward": reward, "new_count": monetag_count + 1}), 200
 
@@ -1368,7 +1421,7 @@ def verify_ad_task():
         
         users_collection.update_one(
             {"user_id": user_id},
-            {"$inc": {"balance": reward, "adsterra_count": 1}}
+            {"$inc": {"balance": reward, "adsterra_count": 1, "total_earned": reward, "total_tasks_completed": 1}}
         )
         return jsonify({"status": "success", "reward": reward, "new_count": adsterra_count + 1}), 200
 
@@ -1558,8 +1611,9 @@ def request_withdraw():
     account = str(data.get('account', ''))
     method = str(data.get('method', 'bKash'))
 
-    if not user_id or amount < 100 or len(account) < 11:
-        return jsonify({"status": "error", "message": "Invalid request parameters"}), 400
+    min_amount = WITHDRAW_METHOD_MIN.get(method, 100)
+    if not user_id or method not in WITHDRAW_METHOD_MIN or amount < min_amount or len(account) < 11:
+        return jsonify({"status": "error", "message": f"সর্বনিম্ন উইথড্র পরিমাণ ৳{min_amount:.0f} অথবা তথ্য সঠিক নয়!"}), 400
 
     if is_user_banned(user_id):
         return jsonify({"status": "banned"}), 200
@@ -1669,6 +1723,7 @@ if __name__ == '__main__':
     if bot:
         threading.Thread(target=run_bot, daemon=True).start()
         threading.Thread(target=send_fake_withdraw_loop, daemon=True).start()
+        threading.Thread(target=inactivity_reminder_loop, daemon=True).start()
 
     threading.Thread(target=cleanup_link_tasks_loop, daemon=True).start()
 
