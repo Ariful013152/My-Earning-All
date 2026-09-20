@@ -148,6 +148,108 @@ def is_user_banned(user_id):
     return False
 
 
+def process_due_deposit_profits(user_id=None):
+    """Credit every fully elapsed 24-hour deposit-profit period.
+
+    Profit is credited server-side. A deposit starts its 24-hour clock when
+    the admin approves it. The atomic MongoDB update prevents duplicate
+    credits when the background worker and an app request run together.
+    """
+    if deposits_collection is None or users_collection is None:
+        return 0.0
+
+    now = datetime.datetime.utcnow()
+    query = {"status": "active"}
+    if user_id is not None:
+        query["user_id"] = str(user_id)
+
+    total_by_user = {}
+    try:
+        docs = list(deposits_collection.find(query))
+    except Exception as exc:
+        print(f"⚠️ Deposit profit scan error: {exc}")
+        return 0.0
+
+    for dep in docs:
+        try:
+            amount = round(float(dep.get("amount", 0) or 0), 2)
+            rate = float(dep.get("daily_rate", DEPOSIT_DAILY_RATE) or DEPOSIT_DAILY_RATE)
+            if amount <= 0 or rate <= 0:
+                continue
+
+            last_at = dep.get("last_profit_at")
+            if not isinstance(last_at, datetime.datetime):
+                # Backward compatibility for deposits created before the
+                # 24-hour timestamp field was added.
+                last_at = dep.get("started_at") or dep.get("approved_at") or dep.get("created_at")
+
+            if not isinstance(last_at, datetime.datetime):
+                continue
+
+            # Mongo may return timezone-aware datetimes depending on the
+            # client configuration; normalize to naive UTC for comparison.
+            if last_at.tzinfo is not None:
+                last_at = last_at.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+            elapsed_seconds = (now - last_at).total_seconds()
+            periods = int(elapsed_seconds // 86400)
+            if periods < 1:
+                continue
+
+            # Catch up every completed 24-hour period if the server was idle.
+            per_day = round(amount * rate, 2)
+            credit = round(per_day * periods, 2)
+            new_last_at = last_at + datetime.timedelta(days=periods)
+            new_last_date = new_last_at.strftime("%Y-%m-%d")
+
+            old_last_at = dep.get("last_profit_at")
+            filter_doc = {"_id": dep["_id"], "status": "active"}
+            if isinstance(old_last_at, datetime.datetime):
+                filter_doc["last_profit_at"] = old_last_at
+            else:
+                filter_doc["$or"] = [
+                    {"last_profit_at": {"$exists": False}},
+                    {"last_profit_at": None}
+                ]
+
+            result = deposits_collection.update_one(
+                filter_doc,
+                {"$set": {
+                    "last_profit_at": new_last_at,
+                    "last_profit_date": new_last_date
+                }, "$inc": {"total_profit": credit}}
+            )
+
+            if result.modified_count == 1:
+                uid = str(dep.get("user_id"))
+                total_by_user[uid] = round(total_by_user.get(uid, 0.0) + credit, 2)
+
+        except Exception as exc:
+            print(f"⚠️ Deposit profit error for {dep.get('_id')}: {exc}")
+
+    grand_total = 0.0
+    for uid, credit in total_by_user.items():
+        if credit <= 0:
+            continue
+        result = users_collection.update_one(
+            {"user_id": uid},
+            {"$inc": {"balance": credit, "total_earned": credit}}
+        )
+        if result.modified_count == 1:
+            grand_total += credit
+
+    return round(grand_total, 2)
+
+
+def deposit_profit_loop():
+    """Server-side worker: checks due 24-hour periods about once per minute."""
+    while True:
+        try:
+            process_due_deposit_profits()
+        except Exception as exc:
+            print(f"⚠️ Deposit profit worker error: {exc}")
+        time.sleep(60)
+
 def is_valid_telegram_id(value):
     """Telegram numeric user IDs only — rejects stray commands (e.g. an admin
     accidentally typing '/admin' into a 'send USER ID' prompt), empty input,
@@ -535,16 +637,27 @@ if bot:
         today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         if action == "acc":
-            deposits_collection.update_one(
+            now = datetime.datetime.utcnow()
+            approve_result = deposits_collection.update_one(
                 {"_id": ObjectId(req_id), "status": "pending"},
                 {"$set": {
                     "status": "active",
-                    "approved_at": datetime.datetime.utcnow(),
-                    "started_at": datetime.datetime.utcnow(),
+                    "approved_at": now,
+                    "started_at": now,
                     "last_profit_date": today,
-                    "daily_rate": DEPOSIT_DAILY_RATE
+                    "last_profit_at": now,
+                    "daily_rate": DEPOSIT_DAILY_RATE,
+                    "daily_profit": round(amount * DEPOSIT_DAILY_RATE, 2)
                 }}
             )
+            if approve_result.modified_count == 1 and users_collection is not None:
+                # The approved deposit principal is added to the user's
+                # withdrawable Main Balance immediately. Daily profit is
+                # added separately after each full 24-hour period.
+                users_collection.update_one(
+                    {"user_id": user_id},
+                    {"$inc": {"balance": amount}}
+                )
             bot.answer_callback_query(call.id, "✅ Deposit Approved!")
             try:
                 bot.edit_message_text(
@@ -1169,69 +1282,10 @@ def get_user_data():
                         "date": d.get("date")
                     })
 
-            # ---------------------------------------------------------
-            # AUTO CREDIT DAILY DEPOSIT PROFIT
-            # ---------------------------------------------------------
-            # Approved deposits start earning from the next UTC day.
-            # Whenever the user opens/refreshes the app, credit one
-            # unclaimed day of profit atomically into the main wallet.
-            # This keeps the existing /claim-deposit-profit endpoint
-            # available, while also making daily profit actually reach
-            # the main balance without requiring a separate button.
-            if deposits_collection is not None and users_collection is not None:
-                today_profit_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-                auto_profit_total = 0.0
-
-                active_profit_docs = deposits_collection.find({
-                    "user_id": str(user_id),
-                    "status": "active"
-                })
-
-                for dep in active_profit_docs:
-                    last_profit_date = dep.get("last_profit_date")
-
-                    # No profit on the approval day. Profit starts the next UTC day.
-                    if not last_profit_date:
-                        continue
-                    if last_profit_date >= today_profit_date:
-                        continue
-
-                    dep_amount = float(dep.get("amount", 0) or 0)
-                    dep_rate = float(dep.get("daily_rate", DEPOSIT_DAILY_RATE) or DEPOSIT_DAILY_RATE)
-                    dep_profit = round(dep_amount * dep_rate, 2)
-
-                    if dep_profit <= 0:
-                        continue
-
-                    # Only one request/process can credit this deposit for today.
-                    credit_result = deposits_collection.update_one(
-                        {
-                            "_id": dep["_id"],
-                            "status": "active",
-                            "last_profit_date": last_profit_date
-                        },
-                        {
-                            "$set": {"last_profit_date": today_profit_date},
-                            "$inc": {"total_profit": dep_profit}
-                        }
-                    )
-
-                    if credit_result.modified_count == 1:
-                        auto_profit_total += dep_profit
-
-                if auto_profit_total > 0:
-                    users_collection.update_one(
-                        {"user_id": str(user_id)},
-                        {
-                            "$inc": {
-                                "balance": round(auto_profit_total, 2),
-                                "total_earned": round(auto_profit_total, 2)
-                            }
-                        }
-                    )
-
-                    # Refresh user data after adding today's profit.
-                    user_data = users_collection.find_one({"user_id": str(user_id)}) or user_data
+            # Server-side 24-hour profit processing. The background worker
+            # also runs independently, so opening the Mini App is not required.
+            process_due_deposit_profits(str(user_id))
+            user_data = users_collection.find_one({"user_id": str(user_id)}) or user_data
 
             user_deposits = []
             active_deposit_total = 0.0
@@ -1501,42 +1555,18 @@ def claim_deposit_profit():
     if users_collection is None or deposits_collection is None:
         return jsonify({"status": "error", "message": "Database Connection Error"}), 500
 
-    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-    active = list(deposits_collection.find({"user_id": user_id, "status": "active"}))
-    if not active:
-        return jsonify({"status": "error", "message": "কোনো Active Deposit নেই।"}), 400
+    profit = process_due_deposit_profits(user_id)
+    if profit <= 0:
+        return jsonify({
+            "status": "already_claimed",
+            "message": "এখনও ২৪ ঘণ্টা পূর্ণ হয়নি বা আজকের Profit আগে থেকেই যোগ হয়েছে।",
+            "profit": 0
+        }), 200
 
-    total_profit = 0.0
-    claimed_ids = []
-    for d in active:
-        last_date = d.get("last_profit_date")
-        if last_date == today:
-            continue
-        amount = float(d.get("amount", 0))
-        rate = float(d.get("daily_rate", DEPOSIT_DAILY_RATE))
-        profit = round(amount * rate, 2)
-        if profit <= 0:
-            continue
-        # Atomic daily guard prevents double credit if two requests arrive together.
-        result = deposits_collection.update_one(
-            {"_id": d["_id"], "status": "active", "last_profit_date": {"$ne": today}},
-            {"$set": {"last_profit_date": today}, "$inc": {"total_profit": profit}}
-        )
-        if result.modified_count == 1:
-            total_profit += profit
-            claimed_ids.append(str(d["_id"]))
-
-    if total_profit <= 0:
-        return jsonify({"status": "already_claimed", "message": "আজকের Deposit Profit ইতিমধ্যে নেওয়া হয়েছে।", "profit": 0}), 200
-
-    users_collection.update_one(
-        {"user_id": user_id},
-        {"$inc": {"balance": total_profit, "total_earned": total_profit}}
-    )
     return jsonify({
         "status": "success",
-        "profit": round(total_profit, 2),
-        "message": f"আজকের Deposit Profit ৳{total_profit:.2f} ওয়ালেটে যোগ হয়েছে।"
+        "profit": round(profit, 2),
+        "message": f"Deposit Profit ৳{profit:.2f} Main Balance-এ যোগ হয়েছে।"
     }), 200
 
 
@@ -1748,6 +1778,10 @@ if __name__ == '__main__':
         threading.Thread(target=run_bot, daemon=True).start()
         threading.Thread(target=send_fake_withdraw_loop, daemon=True).start()
         threading.Thread(target=inactivity_reminder_loop, daemon=True).start()
+
+    # Deposit profits are processed on the server every minute. Each deposit
+    # is credited only after a complete 24-hour period has elapsed.
+    threading.Thread(target=deposit_profit_loop, daemon=True).start()
 
     if RENDER_EXTERNAL_URL:
         threading.Thread(target=keep_alive, daemon=True).start()
