@@ -412,10 +412,16 @@
         <!-- HOME TAB -->
         <div id="home" class="tab-content active">
             <div class="balance-gradient-card">
-                <div style="font-size: 11px; opacity: 0.85;">বর্তমান মোট ব্যালেন্স</div>
+                <div style="font-size: 11px; opacity: 0.85;">Main Wallet</div>
                 <h1 style="margin: 6px 0; font-size: 28px;">TK <span id="homeBalance">0.00</span></h1>
-                <span class="live-tag">● লাইভ ওয়ালেট</span>
+                <span class="live-tag">● Main Wallet</span>
                 <button class="action-btn-light" onclick="switchTab('wallet', 5)"><i class="fas fa-wallet"></i> টাকা উত্তোলন করুন</button>
+            </div>
+
+            <div class="card" style="margin-top:10px; background:linear-gradient(135deg,#063c28,#0b6b3d); border-color:rgba(49,255,145,.22); text-align:left;">
+                <div style="font-size:11px; color:var(--text-sub);">💳 Deposit Wallet</div>
+                <div style="font-size:25px; font-weight:800; margin-top:4px;">TK <span id="homeDepositWallet">0.00</span></div>
+                <div style="font-size:10px; color:var(--text-sub); margin-top:3px;">এই টাকার উপর 0.3% দৈনিক Deposit Profit হিসাব হবে</div>
             </div>
 
             <div class="grid-2">
@@ -627,11 +633,25 @@
 
         <!-- WALLET TAB -->
         <div id="wallet" class="tab-content">
-            <div class="card">
-                <div style="font-size: 11px; color: var(--text-sub);">উত্তোলনযোগ্য মেইন ব্যালেন্স</div>
-                <h2 style="margin: 8px 0; color: var(--accent-cyan);">TK <span id="walletBalance">0.00</span></h2>
+            <div class="grid-2" style="margin-bottom:10px;">
+                <div class="card" style="padding:12px;">
+                    <div style="font-size:10px;color:var(--text-sub);">Main Wallet</div>
+                    <h3 style="margin:5px 0 0;">৳<span id="walletBalance">0.00</span></h3>
+                </div>
+                <div class="card" style="padding:12px;">
+                    <div style="font-size:10px;color:var(--text-sub);">Deposit Wallet</div>
+                    <h3 style="margin:5px 0 0;">৳<span id="walletDepositBalance">0.00</span></h3>
+                </div>
+            </div>
 
-                <div class="method-selector">
+            <div class="card">
+                <div style="font-size: 11px; color: var(--text-sub);">কোন Wallet থেকে টাকা উত্তোলন করবেন?</div>
+                <div class="method-selector" id="withdrawWalletSelector" style="margin-top:8px;">
+                    <button class="method-btn active" id="withdrawMainBtn" onclick="selectWithdrawWallet('main', this)">💰 Main Wallet</button>
+                    <button class="method-btn" id="withdrawDepositBtn" onclick="selectWithdrawWallet('deposit', this)">💳 Deposit Wallet</button>
+                </div>
+
+                <div class="method-selector" id="withdrawMethodSelector">
                     <button class="method-btn active" id="bKashBtn" onclick="selectMethod('bKash', this)">● বিকাশ (bKash)</button>
                     <button class="method-btn" id="NagadBtn" onclick="selectMethod('Nagad', this)">● নগদ (Nagad)</button>
                     <button class="method-btn" id="RechargeBtn" onclick="selectMethod('Recharge', this)">● রিচার্জ (Recharge)</button>
@@ -748,6 +768,8 @@
         let depositsHistory = [];
         let activeDepositTotal = 0.00;
         let activeDailyProfit = 0.00;
+        let depositWallet = 0.00;
+        let withdrawWalletType = "main";
         let selectedDepositAmount = 100;
         let selectedDepositMethod = "bKash";
         const BKASH_MERCHANT = "01884635078";
@@ -870,7 +892,8 @@
                         return;
                     }
                     if (data.status === 'success') {
-                        balance = parseFloat(data.balance);
+                        balance = parseFloat(data.main_balance ?? data.balance ?? 0);
+                        depositWallet = parseFloat(data.deposit_wallet ?? data.active_deposit_total ?? 0);
                         totalRefers = parseInt(data.total_refers);
                         totalEarned = parseFloat(data.total_earned || 0);
                         totalTasksCompleted = parseInt(data.total_tasks_completed || 0);
@@ -908,13 +931,17 @@
         function updateUI() {
             document.getElementById('homeBalance').innerText = balance.toFixed(2);
             document.getElementById('walletBalance').innerText = balance.toFixed(2);
+            const homeDepositWalletEl = document.getElementById('homeDepositWallet');
+            const walletDepositBalanceEl = document.getElementById('walletDepositBalance');
+            if (homeDepositWalletEl) homeDepositWalletEl.innerText = depositWallet.toFixed(2);
+            if (walletDepositBalanceEl) walletDepositBalanceEl.innerText = depositWallet.toFixed(2);
             const activeDepositEl = document.getElementById('activeDepositTotal');
             const activeProfitEl = document.getElementById('activeDailyProfit');
-            if (activeDepositEl) activeDepositEl.innerText = activeDepositTotal.toFixed(2);
+            if (activeDepositEl) activeDepositEl.innerText = depositWallet.toFixed(2);
             if (activeProfitEl) activeProfitEl.innerText = activeDailyProfit.toFixed(2);
             renderDepositPackages();
             renderDepositHistory();
-            document.getElementById('totalEarn').innerText = balance.toFixed(2);
+            document.getElementById('totalEarn').innerText = totalEarned.toFixed(2);
             document.getElementById('monetagCount').innerText = monetagCount;
             document.getElementById('adsterraCount').innerText = adsterraCount;
             document.getElementById('gigapubCount').innerText = gigapubCount;
@@ -967,7 +994,7 @@
                     <div class="history-card">
                         <div>
                             <b>${item.method} (${item.account})</b><br>
-                            <small style="color:var(--text-sub);">${item.date || ''}</small>
+                            <small style="color:var(--text-sub);">${item.wallet_type === 'deposit' ? '💳 Deposit Wallet' : '💰 Main Wallet'} · ${item.date || ''}</small>
                         </div>
                         <div style="text-align: right;">
                             <b>৳${parseFloat(item.amount).toFixed(2)}</b><br>
@@ -1077,9 +1104,12 @@
                     ? '<span class="status-active">Active ✅</span>'
                     : item.status === 'pending'
                         ? '<span class="status-pending">Pending ⏳</span>'
-                        : '<span class="status-rejected">Rejected ❌</span>';
+                        : item.status === 'closed'
+                            ? '<span class="status-rejected" style="color:#f59e0b;">Closed 🔒</span>'
+                            : '<span class="status-rejected">Rejected ❌</span>';
+                const amountLabel = item.status === 'closed' ? 'Final Deposit: ' : 'Remaining Deposit: ';
                 return `<div class="history-card">
-                    <div><b>৳${parseFloat(item.amount).toFixed(2)}</b><br><small style="color:var(--text-sub);">${item.method || ''} · ${item.created_at || ''}</small><br><small style="color:var(--text-sub);">Daily: ৳${parseFloat(item.daily_profit || 0).toFixed(2)}</small></div>
+                    <div><b>${amountLabel}৳${parseFloat(item.amount).toFixed(2)}</b><br><small style="color:var(--text-sub);">${item.method || ''} · ${item.created_at || ''}</small><br><small style="color:var(--text-sub);">Daily: ৳${parseFloat(item.daily_profit || 0).toFixed(2)}</small></div>
                     <div style="text-align:right;">${status}<br><small style="color:var(--text-sub);">Profit: ৳${parseFloat(item.total_profit || 0).toFixed(2)}</small></div>
                 </div>`;
             }).join('');
@@ -1284,9 +1314,21 @@
 
         const METHOD_MIN_AMOUNT = { 'bKash': 100, 'Nagad': 100, 'Recharge': 50 };
 
+        function selectWithdrawWallet(type, el) {
+            withdrawWalletType = type;
+            document.querySelectorAll('#withdrawWalletSelector .method-btn').forEach(b => b.classList.remove('active'));
+            if (el) el.classList.add('active');
+
+            const amountInput = document.getElementById('withdrawAmount');
+            const available = type === 'deposit' ? depositWallet : balance;
+            if (amountInput) {
+                amountInput.placeholder = `উপলব্ধ: ৳${available.toFixed(2)}`;
+            }
+        }
+
         function selectMethod(method, el) {
             selectedMethod = method;
-            document.querySelectorAll('.method-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#withdrawMethodSelector .method-btn').forEach(b => b.classList.remove('active'));
             el.classList.add('active');
 
             const minAmount = METHOD_MIN_AMOUNT[method] || 100;
@@ -1325,8 +1367,10 @@
                 return;
             }
 
-            if (balance < amount) {
-                alert("আপনার পর্যাপ্ত ব্যালেন্স নেই।");
+            const availableBalance = withdrawWalletType === 'deposit' ? depositWallet : balance;
+            const walletLabel = withdrawWalletType === 'deposit' ? 'Deposit Wallet' : 'Main Wallet';
+            if (availableBalance < amount) {
+                alert(`${walletLabel}-এ পর্যাপ্ত ব্যালেন্স নেই।`);
                 return;
             }
 
@@ -1337,7 +1381,8 @@
                     user_id: userId,
                     amount: amount,
                     account: account,
-                    method: selectedMethod
+                    method: selectedMethod,
+                    wallet_type: withdrawWalletType
                 })
             })
             .then(res => res.json())
@@ -1350,7 +1395,7 @@
                 if (data.status === 'success') {
                     document.getElementById('withdrawAmount').value = '';
                     document.getElementById('withdrawAccount').value = '';
-                    alert("আপনার উইথড্র রিকোয়েস্ট পেন্ডিং রয়েছে ⏳। অ্যাডমিন অ্যাপ্রুভ করলে পেমেন্ট পেয়ে যাবেন!");
+                    alert(`${walletLabel} থেকে ৳${amount.toFixed(2)} উইথড্র রিকোয়েস্ট পেন্ডিং রয়েছে ⏳। অ্যাডমিন অ্যাপ্রুভ করলে পেমেন্ট পাবেন।`);
                     fetchUserDataFromServer();
                 } else {
                     alert(data.message || "উইথড্র রিকোয়েস্ট ব্যর্থ হয়েছে।");
