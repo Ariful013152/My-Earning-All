@@ -291,7 +291,7 @@
             text-decoration: none;
             font-size: 10px;
             cursor: pointer;
-            width: 20%;
+            width: 16.66%;
         }
 
         .nav-item i {
@@ -342,6 +342,14 @@
         .status-pending { color: #f59e0b; font-weight: bold; }
         .status-completed { color: #10b981; font-weight: bold; }
         .status-rejected { color: #ef4444; font-weight: bold; }
+        .status-active { color: #10b981; font-weight: bold; }
+        .status-pending { color: #f59e0b; font-weight: bold; }
+        .deposit-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+        .deposit-package { background:var(--surface-bg); border:1px solid var(--card-border); border-radius:10px; padding:11px 8px; color:var(--text-main); cursor:pointer; text-align:center; }
+        .deposit-package.active { border-color:var(--accent-cyan); background:rgba(0,210,255,.10); }
+        .deposit-package b { display:block; font-size:14px; }
+        .deposit-package small { color:var(--text-sub); font-size:10px; }
+        .deposit-summary { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
     </style>
 </head>
 <body>
@@ -370,7 +378,7 @@
                 <div style="font-size: 11px; opacity: 0.85;">বর্তমান মোট ব্যালেন্স</div>
                 <h1 style="margin: 6px 0; font-size: 28px;">TK <span id="homeBalance">0.00</span></h1>
                 <span class="live-tag">● লাইভ ওয়ালেট</span>
-                <button class="action-btn-light" onclick="switchTab('wallet', 4)"><i class="fas fa-wallet"></i> টাকা উত্তোলন করুন</button>
+                <button class="action-btn-light" onclick="switchTab('wallet', 5)"><i class="fas fa-wallet"></i> টাকা উত্তোলন করুন</button>
             </div>
 
             <div class="grid-2">
@@ -379,10 +387,21 @@
                     <div style="font-weight: bold; font-size: 13px;">দৈনিক টাস্ক</div>
                     <div style="font-size: 10px; color: var(--text-sub); margin-top: 2px;">বিজ্ঞাপন দেখে আয়</div>
                 </div>
-                <div class="card" onclick="switchTab('refer', 3)">
+                <div class="card" onclick="switchTab('refer', 4)">
                     <div class="icon-box"><i class="fas fa-gift"></i></div>
                     <div style="font-weight: bold; font-size: 13px;">রেফারেল বোনাস</div>
                     <div style="font-size: 10px; color: var(--text-sub); margin-top: 2px;">বন্ধুদের ইনভাইট করুন</div>
+                </div>
+            </div>
+
+            <div class="card" onclick="switchTab('deposit', 2)" style="margin-bottom:10px; cursor:pointer; background:linear-gradient(135deg,#0ea5e9,#2563eb); color:#fff; border:none;">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                    <div style="text-align:left;">
+                        <div style="font-size:12px; opacity:.85;">💰 Deposit</div>
+                        <b style="font-size:16px;">ডিপোজিট প্যাকেজ নিন</b>
+                        <div style="font-size:10px; opacity:.85; margin-top:3px;">একাধিক প্যাকেজ নেওয়া যাবে</div>
+                    </div>
+                    <i class="fas fa-chevron-right" style="font-size:20px;"></i>
                 </div>
             </div>
 
@@ -500,44 +519,69 @@
                 </div>
                 <button class="compact-btn" id="gigapubBtn" onclick="startGigapubTask()">শুরু করুন</button>
             </div>
+        </div>
 
-            <div class="task-list-card">
-                <div class="task-info">
-                    <div class="task-icon"><i class="fas fa-link"></i></div>
-                    <div class="task-details">
-                        <b>Exe.io টাস্ক</b>
-                        <small>সীমা: <span id="exeioCount">0</span>/20 <span id="exeioTimer" style="color:#e3b341;"></span></small>
-                    </div>
-                </div>
-                <button class="compact-btn" id="exeioBtn" onclick="startLinkTask('exeio')">শুরু করুন</button>
+        <!-- DEPOSIT TAB -->
+        <div id="deposit" class="tab-content">
+            <div class="card" style="margin-bottom:12px;">
+                <div class="icon-box"><i class="fas fa-coins"></i></div>
+                <h3 style="margin:4px 0 6px;">Deposit</h3>
+                <p style="font-size:11px; color:var(--text-sub); margin:0;">প্যাকেজ নির্বাচন করুন। একই User একাধিক প্যাকেজ নিতে পারবে। Deposit request অ্যাডমিন যাচাই করে Active করবেন।</p>
             </div>
 
-            <div class="task-list-card">
-                <div class="task-info">
-                    <div class="task-icon"><i class="fas fa-link"></i></div>
-                    <div class="task-details">
-                        <b>ShrinkMe টাস্ক</b>
-                        <small>সীমা: <span id="shrinkmeCount">0</span>/20 <span id="shrinkmeTimer" style="color:#e3b341;"></span></small>
-                    </div>
-                </div>
-                <button class="compact-btn" id="shrinkmeBtn" onclick="startLinkTask('shrinkme')">শুরু করুন</button>
+            <div class="deposit-summary">
+                <div class="card"><small style="color:var(--text-sub);">Active Deposit</small><h3 style="margin:5px 0;">৳<span id="activeDepositTotal">0.00</span></h3></div>
+                <div class="card"><small style="color:var(--text-sub);">Daily হিসাব</small><h3 style="margin:5px 0;">৳<span id="activeDailyProfit">0.00</span></h3></div>
             </div>
 
-            <div class="task-list-card" style="flex-direction:column; align-items:stretch; gap:10px; padding:14px;">
-                <div class="task-info" style="margin-bottom:2px;">
-                    <div class="task-icon"><i class="fas fa-key"></i></div>
-                    <div class="task-details">
-                        <b>কোড কনফার্ম করুন</b>
-                        <small>Exe.io / ShrinkMe টাস্ক শেষে পাওয়া কোডটি এখানে বসান</small>
+            <div class="card" style="text-align:left; margin-bottom:12px;">
+                <b style="font-size:13px;">প্যাকেজ নির্বাচন করুন</b>
+                <div class="deposit-grid" id="depositPackageGrid"></div>
+                <div style="margin-top:12px; padding:10px; background:var(--surface-bg); border-radius:10px; text-align:center;">
+                    <small style="color:var(--text-sub);">Selected Package</small>
+                    <h2 style="margin:4px 0; color:var(--accent-cyan);">৳<span id="selectedDepositAmount">100</span></h2>
+                    <small style="color:var(--text-sub);">Daily হিসাব: ৳<span id="selectedDailyProfit">0.30</span> (0.3% হিসাবে)</small>
+                </div>
+
+                <div class="method-selector">
+                    <button class="method-btn active" id="depositBkashBtn" onclick="selectDepositMethod('bKash', this)">● বিকাশ</button>
+                    <button class="method-btn" id="depositBinanceBtn" onclick="selectDepositMethod('Binance', this)">● Binance USDT</button>
+                </div>
+
+                <div id="bkashPaymentBox" style="margin-top:10px; padding:12px; background:var(--surface-bg); border-radius:10px; border:1px solid var(--card-border);">
+                    <div style="font-size:11px;color:var(--text-sub);">bKash Merchant Payment</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:5px;">
+                        <b style="font-size:18px;letter-spacing:.5px;">01884635078</b>
+                        <button type="button" class="compact-btn" onclick="copyDepositText(BKASH_MERCHANT)">Copy</button>
                     </div>
+                    <div style="font-size:10px;color:var(--text-sub);margin-top:5px;">প্যাকেজের পুরো টাকা ৳-তে bKash Merchant Payment করুন।</div>
                 </div>
-                <div style="display:flex; gap:8px;">
-                    <input type="text" id="taskCodeInput" placeholder="যেমন: A9K2M7" maxlength="6"
-                           style="flex:1; min-width:0; background:var(--surface-bg); border:1px solid var(--card-border); border-radius:8px;
-                                  color:var(--text-main); padding:10px 12px; font-size:16px; text-transform:uppercase; letter-spacing:3px; text-align:center;">
-                    <button class="compact-btn" id="confirmCodeBtn" onclick="confirmTaskCode()" style="flex-shrink:0;">Confirm</button>
+
+                <div id="binancePaymentBox" style="display:none;margin-top:10px;padding:12px;background:var(--surface-bg);border-radius:10px;border:1px solid var(--card-border);">
+                    <div style="font-size:11px;color:var(--text-sub);">Binance USDT — BNB Smart Chain (BEP20)</div>
+                    <div style="font-size:11px;line-height:1.45;word-break:break-all;margin-top:6px;"><b>0x0998085153541e45e0df0ff23debb0a1c961854d</b></div>
+                    <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BINANCE_USDT_ADDRESS)">Copy Address</button>
+                    <div style="margin-top:10px;padding:9px;border-radius:8px;background:rgba(0,210,255,.08);text-align:center;">
+                        <small style="color:var(--text-sub);">পেমেন্ট করতে হবে</small>
+                        <div style="font-size:20px;font-weight:800;color:var(--accent-cyan);"><span id="selectedUsdtAmount">0.91</span> USDT</div>
+                        <small style="color:var(--text-sub);">1 USDT = ৳110 হিসাবে</small>
+                    </div>
+                    <div style="font-size:10px;color:#f59e0b;margin-top:7px;">⚠️ শুধু USDT (BEP20 / BNB Smart Chain) পাঠাবেন। অন্য network ব্যবহার করলে payment শনাক্ত নাও হতে পারে।</div>
                 </div>
-                <small id="codeConfirmMsg" style="min-height:14px; display:block; text-align:center;"></small>
+
+                <input type="text" class="input-box" id="depositTransactionId" placeholder="bKash TXID / Binance Transaction Hash">
+                <button class="gradient-btn" onclick="submitDepositRequest()"><i class="fas fa-paper-plane"></i> Deposit Request পাঠান</button>
+                <div style="font-size:10px; color:var(--text-sub); margin-top:8px; text-align:center;">পেমেন্ট সম্পন্ন করে সঠিক TXID/Transaction Hash দিন। অ্যাডমিন যাচাই না করা পর্যন্ত Deposit Active হবে না।</div>
+            </div>
+
+            <div class="card" style="margin-bottom:12px;">
+                <button class="gradient-btn" onclick="claimDepositProfit()"><i class="fas fa-gift"></i> আজকের Deposit Profit Claim করুন</button>
+                <div style="font-size:10px; color:var(--text-sub); margin-top:7px; text-align:center;">Profit claim server-side একবার/দিন যাচাই করা হয়।</div>
+            </div>
+
+            <div style="margin-top:16px;">
+                <h4 style="margin:0 0 8px; font-size:13px; color:var(--text-sub);">📋 Deposit History</h4>
+                <div id="depositHistoryContainer"><div style="font-size:12px;color:var(--text-sub);text-align:center;">কোনো রেকর্ড পাওয়া যায়নি।</div></div>
             </div>
         </div>
 
@@ -600,9 +644,10 @@
     <div class="bottom-nav">
         <div class="nav-item active" onclick="switchTab('home', 0)"><i class="fas fa-home"></i>হোম</div>
         <div class="nav-item" onclick="switchTab('tasks', 1)"><i class="fas fa-bolt"></i>টাস্ক</div>
-        <div class="nav-item" onclick="switchTab('support', 2)"><i class="fas fa-headset"></i>সাপোর্ট</div>
-        <div class="nav-item" onclick="switchTab('refer', 3)"><i class="fas fa-gift"></i>রেফার</div>
-        <div class="nav-item" onclick="switchTab('wallet', 4)"><i class="fas fa-wallet"></i>ওয়ালেট</div>
+        <div class="nav-item" onclick="switchTab('deposit', 2)"><i class="fas fa-coins"></i>ডিপোজিট</div>
+        <div class="nav-item" onclick="switchTab('support', 3)"><i class="fas fa-headset"></i>সাপোর্ট</div>
+        <div class="nav-item" onclick="switchTab('refer', 4)"><i class="fas fa-gift"></i>রেফার</div>
+        <div class="nav-item" onclick="switchTab('wallet', 5)"><i class="fas fa-wallet"></i>ওয়ালেট</div>
     </div>
 
     <script>
@@ -684,13 +729,21 @@
         let monetagCount = 0;
         let adsterraCount = 0;
         let gigapubCount = 0;
-        let exeioCount = 0;
-        let shrinkmeCount = 0;
         let balance = 0.00;
         let totalRefers = 0;
         let totalEarned = 0.00;
         let totalTasksCompleted = 0;
         let withdrawsHistory = [];
+        let depositsHistory = [];
+        let activeDepositTotal = 0.00;
+        let activeDailyProfit = 0.00;
+        let selectedDepositAmount = 100;
+        let selectedDepositMethod = "bKash";
+
+        const BKASH_MERCHANT = "01884635078";
+        const BINANCE_USDT_ADDRESS = "0x0998085153541e45e0df0ff23debb0a1c961854d";
+        const USDT_BDT_RATE = 110;
+        const DEPOSIT_PACKAGES = [100,200,300,400,500,1000,1500,2000,3000,4000,5000,10000,20000,30000,40000,50000];
 
         async function getDeviceId() {
             let devId = localStorage.getItem('device_fingerprint_id');
@@ -766,9 +819,10 @@
                         monetagCount = parseInt(data.monetag_count || 0);
                         adsterraCount = parseInt(data.adsterra_count || 0);
                         gigapubCount = parseInt(data.gigapub_count || 0);
-                        exeioCount = parseInt(data.exeio_link_count || 0);
-                        shrinkmeCount = parseInt(data.shrinkme_link_count || 0);
                         withdrawsHistory = data.withdraws || [];
+                        depositsHistory = data.deposits || [];
+                        activeDepositTotal = parseFloat(data.active_deposit_total || 0);
+                        activeDailyProfit = parseFloat(data.active_daily_profit || 0);
 
                         if (data.first_name && data.first_name !== "User") {
                             firstName = data.first_name;
@@ -797,14 +851,18 @@
         function updateUI() {
             document.getElementById('homeBalance').innerText = balance.toFixed(2);
             document.getElementById('walletBalance').innerText = balance.toFixed(2);
+            const activeDepositEl = document.getElementById('activeDepositTotal');
+            const activeProfitEl = document.getElementById('activeDailyProfit');
+            if (activeDepositEl) activeDepositEl.innerText = activeDepositTotal.toFixed(2);
+            if (activeProfitEl) activeProfitEl.innerText = activeDailyProfit.toFixed(2);
+            renderDepositPackages();
+            renderDepositHistory();
             document.getElementById('totalEarn').innerText = balance.toFixed(2);
             document.getElementById('monetagCount').innerText = monetagCount;
             document.getElementById('adsterraCount').innerText = adsterraCount;
             document.getElementById('gigapubCount').innerText = gigapubCount;
-            document.getElementById('exeioCount').innerText = exeioCount;
-            document.getElementById('shrinkmeCount').innerText = shrinkmeCount;
             document.getElementById('refCount').innerText = totalRefers;
-            document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount + gigapubCount + exeioCount + shrinkmeCount;
+            document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount + gigapubCount;
             document.getElementById('userName').innerText = firstName;
             document.getElementById('userIdDisplay').innerText = userId;
             renderAchievementBadges();
@@ -862,6 +920,132 @@
                 `;
             });
             container.innerHTML = html;
+        }
+
+        function renderDepositPackages() {
+            const grid = document.getElementById('depositPackageGrid');
+            if (!grid) return;
+            grid.innerHTML = DEPOSIT_PACKAGES.map(amount => `
+                <button type="button" class="deposit-package ${amount === selectedDepositAmount ? 'active' : ''}" onclick="selectDepositPackage(${amount})">
+                    <b>৳${amount.toLocaleString()}</b>
+                    <small>Daily ৳${(amount * 0.003).toFixed(2)}</small>
+                </button>
+            `).join('');
+            const a = document.getElementById('selectedDepositAmount');
+            const p = document.getElementById('selectedDailyProfit');
+            const u = document.getElementById('selectedUsdtAmount');
+            if (a) a.innerText = selectedDepositAmount.toLocaleString();
+            if (p) p.innerText = (selectedDepositAmount * 0.003).toFixed(2);
+            if (u) u.innerText = (selectedDepositAmount / USDT_BDT_RATE).toFixed(2);
+        }
+
+        function selectDepositPackage(amount) {
+            selectedDepositAmount = amount;
+            renderDepositPackages();
+        }
+
+        function selectDepositMethod(method, el) {
+            selectedDepositMethod = method;
+            document.querySelectorAll('#deposit .method-btn').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+
+            const bkashBox = document.getElementById('bkashPaymentBox');
+            const binanceBox = document.getElementById('binancePaymentBox');
+            if (bkashBox) bkashBox.style.display = method === 'bKash' ? 'block' : 'none';
+            if (binanceBox) binanceBox.style.display = method === 'Binance' ? 'block' : 'none';
+        }
+
+        function copyDepositText(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => alert('✅ কপি হয়েছে।')).catch(() => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); alert('✅ কপি হয়েছে।'); } catch(e) {}
+            ta.remove();
+        }
+
+        function submitDepositRequest() {
+            const txid = document.getElementById('depositTransactionId').value.trim();
+            if (txid.length < 4) {
+                alert('সঠিক Payment Transaction ID দিন।');
+                return;
+            }
+            const btn = document.querySelector('#deposit .gradient-btn');
+            if (btn) btn.disabled = true;
+            fetch('/request-deposit', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    user_id: userId,
+                    amount: selectedDepositAmount,
+                    method: selectedDepositMethod,
+                    transaction_id: txid,
+                    usdt_amount: selectedDepositMethod === 'Binance' ? Number((selectedDepositAmount / USDT_BDT_RATE).toFixed(6)) : null
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'banned') {
+                    alert('❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!');
+                    location.reload();
+                    return;
+                }
+                if (data.status === 'success') {
+                    document.getElementById('depositTransactionId').value = '';
+                    alert('✅ Deposit request পাঠানো হয়েছে। অ্যাডমিন যাচাই করে Approve করবেন।');
+                    fetchUserDataFromServer();
+                } else {
+                    alert(data.message || 'Deposit request ব্যর্থ হয়েছে।');
+                }
+            }).catch(() => alert('সার্ভারে সংযোগ করা যায়নি।')).finally(() => {
+                if (btn) btn.disabled = false;
+            });
+        }
+
+        function claimDepositProfit() {
+            fetch('/claim-deposit-profit', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({user_id: userId})
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'banned') {
+                    alert('❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!');
+                    location.reload();
+                    return;
+                }
+                if (data.status === 'success') {
+                    alert(`🎉 আজকের Deposit Profit ৳${parseFloat(data.profit).toFixed(2)} ওয়ালেটে যোগ হয়েছে।`);
+                    fetchUserDataFromServer();
+                } else {
+                    alert(data.message || 'আজকের Profit Claim করা যায়নি।');
+                }
+            }).catch(() => alert('সার্ভারে সংযোগ করা যায়নি।'));
+        }
+
+        function renderDepositHistory() {
+            const container = document.getElementById('depositHistoryContainer');
+            if (!container) return;
+            if (!depositsHistory || depositsHistory.length === 0) {
+                container.innerHTML = '<div style="font-size:12px;color:var(--text-sub);text-align:center;">কোনো রেকর্ড পাওয়া যায়নি।</div>';
+                return;
+            }
+            container.innerHTML = depositsHistory.map(item => {
+                let status = item.status === 'active'
+                    ? '<span class="status-active">Active ✅</span>'
+                    : item.status === 'pending'
+                        ? '<span class="status-pending">Pending ⏳</span>'
+                        : '<span class="status-rejected">Rejected ❌</span>';
+                return `<div class="history-card">
+                    <div><b>৳${parseFloat(item.amount).toFixed(2)}</b><br><small style="color:var(--text-sub);">${item.method || ''} · ${item.created_at || ''}</small><br><small style="color:var(--text-sub);">Daily: ৳${parseFloat(item.daily_profit || 0).toFixed(2)}</small></div>
+                    <div style="text-align:right;">${status}<br><small style="color:var(--text-sub);">Profit: ৳${parseFloat(item.total_profit || 0).toFixed(2)}</small></div>
+                </div>`;
+            }).join('');
         }
 
         function switchTab(tabId, index) {
@@ -1053,99 +1237,8 @@
                 });
         }
 
-        function startLinkTask(provider) {
-            const btn = document.getElementById(provider + 'Btn');
-            const timerEl = document.getElementById(provider + 'Timer');
-            btn.disabled = true;
-            timerEl.innerText = "(লিংক তৈরি হচ্ছে...)";
-
-            fetch('/api/generate-link-task', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: userId, provider: provider })
-            })
-            .then(res => res.json())
-            .then(resData => {
-                timerEl.innerText = "";
-                if (resData.status === 'banned') {
-                    alert("❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!");
-                    location.reload();
-                    return;
-                }
-                if (resData.status === 'success' && resData.short_url) {
-                    openExternalLink(resData.short_url);
-                    timerEl.innerText = "(লিংক শেষে পাওয়া কোড নিচে বসিয়ে Confirm করুন)";
-                } else {
-                    alert(resData.message || "টাস্ক শুরু করা সম্ভব হয়নি!");
-                }
-            })
-            .catch(() => {
-                timerEl.innerText = "";
-                alert("সার্ভারে সংযোগ করা যায়নি, অনুগ্রহ করে আবার চেষ্টা করুন!");
-            })
-            .finally(() => {
-                btn.disabled = false;
-            });
-        }
-
-        let codeConfirmInFlight = false;
-
-        function confirmTaskCode() {
-            const input = document.getElementById('taskCodeInput');
-            const btn = document.getElementById('confirmCodeBtn');
-            const msgEl = document.getElementById('codeConfirmMsg');
-            const code = input.value.trim().toUpperCase();
-
-            if (codeConfirmInFlight) return; // ignore double-taps while a request is in flight
-
-            if (!code) {
-                msgEl.style.color = '#ef4444';
-                msgEl.innerText = 'কোড লিখুন।';
-                return;
-            }
-
-            codeConfirmInFlight = true;
-            btn.disabled = true;
-            const originalLabel = btn.innerText;
-            btn.innerText = '...';
-            msgEl.style.color = '#94a3b8';
-            msgEl.innerText = 'যাচাই করা হচ্ছে...';
-
-            fetch('/api/confirm-link-task-code', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: userId, code: code })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    msgEl.style.color = '#22c55e';
-                    msgEl.innerText = data.message || 'সফল হয়েছে! টাকা যোগ হয়েছে।';
-                    input.value = '';
-                    fetchUserDataFromServer();
-                } else if (data.status === 'banned') {
-                    msgEl.style.color = '#ef4444';
-                    msgEl.innerText = 'আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে।';
-                } else {
-                    msgEl.style.color = '#ef4444';
-                    msgEl.innerText = data.message || 'কোডটি সঠিক নয় অথবা মেয়াদ শেষ!';
-                }
-            })
-            .catch(() => {
-                msgEl.style.color = '#ef4444';
-                msgEl.innerText = 'সার্ভারে সংযোগ করা যায়নি, আবার চেষ্টা করুন!';
-            })
-            .finally(() => {
-                codeConfirmInFlight = false;
-                btn.disabled = false;
-                btn.innerText = originalLabel;
-            });
-        }
-
-        // Refresh balance/counts automatically when the user comes back from the
-        // exe.io/shrinkme browser tab. Actual crediting still requires pasting
-        // the code into the box above and tapping Confirm — this just keeps the
-        // numbers on screen in sync in the meantime.
+        // Refresh balance/counts automatically whenever the user comes back
+        // to this tab (e.g. after viewing a Monetag/Adsterra ad in a new tab).
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 fetchUserDataFromServer();
