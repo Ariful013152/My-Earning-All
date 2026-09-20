@@ -350,6 +350,43 @@
         .deposit-package b { display:block; font-size:14px; }
         .deposit-package small { color:var(--text-sub); font-size:10px; }
         .deposit-summary { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+
+        /* ===== Green Earning Premium UI ===== */
+        :root {
+            --bg-color:#06110d; --card-bg:#0b1b14; --card-border:#163d2a; --surface-bg:#07150f;
+            --accent-cyan:#39f58a; --accent-blue:#16c96b; --accent-green:#39f58a;
+            --text-main:#f4fff8; --text-sub:#8fb5a0;
+        }
+        body.light-theme {
+            --bg-color:#f1faf5; --card-bg:#ffffff; --card-border:#cfe8d8; --surface-bg:#e9f7ef;
+            --accent-cyan:#0aa95a; --accent-blue:#078b49; --accent-green:#0aa95a;
+            --text-main:#102319; --text-sub:#62806e;
+        }
+        body { background:radial-gradient(circle at 50% -10%, rgba(32,214,112,.16), transparent 38%), var(--bg-color); }
+        .top-bar { background:rgba(6,17,13,.82); backdrop-filter:blur(14px); padding:13px 16px; position:sticky; top:0; z-index:20; border-bottom:1px solid rgba(57,245,138,.08); }
+        body.light-theme .top-bar { background:rgba(241,250,245,.88); }
+        .avatar { background:linear-gradient(145deg,#0d3925,#092016); border:2px solid var(--accent-green); box-shadow:0 0 18px rgba(57,245,138,.22); }
+        .badge { background:rgba(57,245,138,.10); border-color:rgba(57,245,138,.65); }
+        .container { padding:10px 13px 92px; }
+        .card,.task-list-card { border-radius:18px; border-color:rgba(57,245,138,.12); box-shadow:0 8px 26px rgba(0,0,0,.16); }
+        .balance-gradient-card { background:linear-gradient(135deg,#0b5b35 0%,#087a43 48%,#0fcf69 100%); border-radius:22px; padding:19px; box-shadow:0 12px 32px rgba(12,207,105,.24), inset 0 1px 0 rgba(255,255,255,.14); overflow:hidden; }
+        .balance-gradient-card:after { content:""; position:absolute; width:180px; height:180px; right:-80px; bottom:-90px; border-radius:50%; background:rgba(255,255,255,.10); }
+        .live-tag { background:rgba(0,0,0,.20); border:1px solid rgba(255,255,255,.16); }
+        .action-btn-light { background:#fff; color:#08733f; border-radius:12px; box-shadow:0 6px 16px rgba(0,0,0,.14); }
+        .icon-box,.task-icon { background:rgba(57,245,138,.09); color:var(--accent-green); border:1px solid rgba(57,245,138,.12); }
+        .gradient-btn,.compact-btn { background:linear-gradient(135deg,#0ab65c,#39f58a); color:#04150b; box-shadow:0 7px 18px rgba(24,201,107,.18); }
+        .gradient-btn:active,.compact-btn:active,.action-btn-light:active { transform:scale(.985); }
+        .method-btn.active { border-color:var(--accent-green); color:var(--text-main); background:rgba(57,245,138,.09); box-shadow:0 0 0 1px rgba(57,245,138,.08); }
+        .input-box:focus { border-color:rgba(57,245,138,.65); box-shadow:0 0 0 3px rgba(57,245,138,.08); }
+        .deposit-package { background:linear-gradient(180deg,rgba(57,245,138,.05),rgba(57,245,138,.015)); border-color:rgba(57,245,138,.13); border-radius:14px; }
+        .deposit-package.active { border-color:var(--accent-green)!important; background:rgba(57,245,138,.12)!important; box-shadow:0 0 0 1px rgba(57,245,138,.18),0 8px 20px rgba(57,245,138,.08); }
+        .bottom-nav { background:rgba(5,16,11,.92); backdrop-filter:blur(18px); border-top:1px solid rgba(57,245,138,.14); padding:7px 3px calc(7px + env(safe-area-inset-bottom)); box-shadow:0 -8px 28px rgba(0,0,0,.20); }
+        body.light-theme .bottom-nav { background:rgba(255,255,255,.94); }
+        .nav-item { border-radius:13px; padding:5px 0; transition:.18s ease; }
+        .nav-item.active { color:var(--accent-green); background:rgba(57,245,138,.08); }
+        .nav-item.active i { filter:drop-shadow(0 0 7px rgba(57,245,138,.45)); }
+        .history-card { border-color:rgba(57,245,138,.12)!important; }
+        @media (max-width:380px){ .nav-item{font-size:9px}.nav-item i{font-size:15px}.container{padding-left:10px;padding-right:10px}.deposit-package{padding:9px 5px!important} }
     </style>
 </head>
 <body>
@@ -544,39 +581,24 @@
                 </div>
 
                 <div class="method-selector">
-                    <button class="method-btn active" id="depositBkashBtn" onclick="selectDepositMethod('bKash', this)">● বিকাশ</button>
-                    <button class="method-btn" id="depositBinanceBtn" onclick="selectDepositMethod('Binance', this)">● Binance USDT</button>
+                    <button class="method-btn active" id="depositBkashBtn" onclick="selectDepositMethod('bKash', this)">💳 bKash</button>
+                    <button class="method-btn" id="depositBinanceBtn" onclick="selectDepositMethod('Binance', this)">₿ Binance USDT</button>
                 </div>
-
-                <div id="bkashPaymentBox" style="margin-top:10px; padding:12px; background:var(--surface-bg); border-radius:10px; border:1px solid var(--card-border);">
-                    <div style="font-size:11px;color:var(--text-sub);">bKash Merchant Payment</div>
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:5px;">
-                        <b style="font-size:18px;letter-spacing:.5px;">01884635078</b>
-                        <button type="button" class="compact-btn" onclick="copyDepositText(BKASH_MERCHANT)">Copy</button>
-                    </div>
-                    <div style="font-size:10px;color:var(--text-sub);margin-top:5px;">প্যাকেজের পুরো টাকা ৳-তে bKash Merchant Payment করুন।</div>
+                <div id="depositPaymentInfo" style="padding:12px;border-radius:14px;background:var(--surface-bg);border:1px solid var(--card-border);margin-bottom:12px;text-align:left;">
+                    <div style="font-size:12px;font-weight:800;margin-bottom:6px;">bKash Merchant</div>
+                    <div style="font-size:19px;font-weight:900;letter-spacing:.5px;color:var(--accent-green);">01884635078</div>
+                    <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BKASH_MERCHANT)">Copy Merchant Number</button>
                 </div>
-
-                <div id="binancePaymentBox" style="display:none;margin-top:10px;padding:12px;background:var(--surface-bg);border-radius:10px;border:1px solid var(--card-border);">
-                    <div style="font-size:11px;color:var(--text-sub);">Binance USDT — BNB Smart Chain (BEP20)</div>
-                    <div style="font-size:11px;line-height:1.45;word-break:break-all;margin-top:6px;"><b>0x0998085153541e45e0df0ff23debb0a1c961854d</b></div>
-                    <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BINANCE_USDT_ADDRESS)">Copy Address</button>
-                    <div style="margin-top:10px;padding:9px;border-radius:8px;background:rgba(0,210,255,.08);text-align:center;">
-                        <small style="color:var(--text-sub);">পেমেন্ট করতে হবে</small>
-                        <div style="font-size:20px;font-weight:800;color:var(--accent-cyan);"><span id="selectedUsdtAmount">0.91</span> USDT</div>
-                        <small style="color:var(--text-sub);">1 USDT = ৳110 হিসাবে</small>
-                    </div>
-                    <div style="font-size:10px;color:#f59e0b;margin-top:7px;">⚠️ শুধু USDT (BEP20 / BNB Smart Chain) পাঠাবেন। অন্য network ব্যবহার করলে payment শনাক্ত নাও হতে পারে।</div>
-                </div>
-
                 <input type="text" class="input-box" id="depositTransactionId" placeholder="bKash TXID / Binance Transaction Hash">
                 <button class="gradient-btn" onclick="submitDepositRequest()"><i class="fas fa-paper-plane"></i> Deposit Request পাঠান</button>
-                <div style="font-size:10px; color:var(--text-sub); margin-top:8px; text-align:center;">পেমেন্ট সম্পন্ন করে সঠিক TXID/Transaction Hash দিন। অ্যাডমিন যাচাই না করা পর্যন্ত Deposit Active হবে না।</div>
+                <div style="font-size:10px; color:var(--text-sub); margin-top:8px; text-align:center;">পেমেন্ট সম্পন্ন করে সঠিক TXID দিন। অ্যাডমিন যাচাই না করা পর্যন্ত Deposit Active হবে না।</div>
             </div>
 
             <div class="card" style="margin-bottom:12px;">
-                <button class="gradient-btn" onclick="claimDepositProfit()"><i class="fas fa-gift"></i> আজকের Deposit Profit Claim করুন</button>
-                <div style="font-size:10px; color:var(--text-sub); margin-top:7px; text-align:center;">Profit claim server-side একবার/দিন যাচাই করা হয়।</div>
+                <div style="display:flex;gap:10px;align-items:center;text-align:left;">
+                    <div class="icon-box" style="margin:0;flex:0 0 40px;"><i class="fas fa-bolt"></i></div>
+                    <div><b style="font-size:12px;">Daily Profit Auto Credit</b><div style="font-size:10px;color:var(--text-sub);margin-top:3px;">Approved deposit-এর দৈনিক profit server-side স্বয়ংক্রিয়ভাবে Main Balance-এ যোগ হবে।</div></div>
+                </div>
             </div>
 
             <div style="margin-top:16px;">
@@ -739,10 +761,31 @@
         let activeDailyProfit = 0.00;
         let selectedDepositAmount = 100;
         let selectedDepositMethod = "bKash";
-
         const BKASH_MERCHANT = "01884635078";
         const BINANCE_USDT_ADDRESS = "0x0998085153541e45e0df0ff23debb0a1c961854d";
         const USDT_BDT_RATE = 110;
+
+        function updateDepositPaymentInfo() {
+            const box = document.getElementById('depositPaymentInfo');
+            if (!box) return;
+            if (selectedDepositMethod === 'Binance') {
+                const usdt = (selectedDepositAmount / USDT_BDT_RATE).toFixed(6);
+                box.innerHTML = `
+                    <div style="font-size:12px;font-weight:800;margin-bottom:5px;">Binance USDT — BEP20 / BNB Smart Chain</div>
+                    <div style="font-size:11px;line-height:1.45;word-break:break-all;color:var(--text-sub);"><b>${BINANCE_USDT_ADDRESS}</b></div>
+                    <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BINANCE_USDT_ADDRESS)">Copy Address</button>
+                    <div style="margin-top:9px;text-align:center;padding:8px;border-radius:10px;background:rgba(57,245,138,.07);">
+                        <small style="color:var(--text-sub);">পেমেন্ট করতে হবে</small>
+                        <div style="font-size:20px;font-weight:900;color:var(--accent-green);">${usdt} USDT</div>
+                        <small style="color:var(--text-sub);">1 USDT = ৳110</small>
+                    </div>`;
+            } else {
+                box.innerHTML = `
+                    <div style="font-size:12px;font-weight:800;margin-bottom:6px;">bKash Merchant</div>
+                    <div style="font-size:19px;font-weight:900;letter-spacing:.5px;color:var(--accent-green);">${BKASH_MERCHANT}</div>
+                    <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BKASH_MERCHANT)">Copy Merchant Number</button>`;
+            }
+        }
         const DEPOSIT_PACKAGES = [100,200,300,400,500,1000,1500,2000,3000,4000,5000,10000,20000,30000,40000,50000];
 
         async function getDeviceId() {
@@ -933,10 +976,9 @@
             `).join('');
             const a = document.getElementById('selectedDepositAmount');
             const p = document.getElementById('selectedDailyProfit');
-            const u = document.getElementById('selectedUsdtAmount');
             if (a) a.innerText = selectedDepositAmount.toLocaleString();
             if (p) p.innerText = (selectedDepositAmount * 0.003).toFixed(2);
-            if (u) u.innerText = (selectedDepositAmount / USDT_BDT_RATE).toFixed(2);
+            updateDepositPaymentInfo();
         }
 
         function selectDepositPackage(amount) {
@@ -948,28 +990,7 @@
             selectedDepositMethod = method;
             document.querySelectorAll('#deposit .method-btn').forEach(b => b.classList.remove('active'));
             el.classList.add('active');
-
-            const bkashBox = document.getElementById('bkashPaymentBox');
-            const binanceBox = document.getElementById('binancePaymentBox');
-            if (bkashBox) bkashBox.style.display = method === 'bKash' ? 'block' : 'none';
-            if (binanceBox) binanceBox.style.display = method === 'Binance' ? 'block' : 'none';
-        }
-
-        function copyDepositText(text) {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(() => alert('✅ কপি হয়েছে।')).catch(() => fallbackCopy(text));
-            } else {
-                fallbackCopy(text);
-            }
-        }
-
-        function fallbackCopy(text) {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            try { document.execCommand('copy'); alert('✅ কপি হয়েছে।'); } catch(e) {}
-            ta.remove();
+            updateDepositPaymentInfo();
         }
 
         function submitDepositRequest() {
@@ -987,8 +1008,7 @@
                     user_id: userId,
                     amount: selectedDepositAmount,
                     method: selectedDepositMethod,
-                    transaction_id: txid,
-                    usdt_amount: selectedDepositMethod === 'Binance' ? Number((selectedDepositAmount / USDT_BDT_RATE).toFixed(6)) : null
+                    transaction_id: txid
                 })
             }).then(r => r.json()).then(data => {
                 if (data.status === 'banned') {
