@@ -481,6 +481,11 @@ if bot:
 
         elif action == "rej":
             withdraws_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "rejected"}})
+
+            # Rejected withdrawal: restore any deposit principal that was reduced
+            # when the withdrawal request was created.
+            restore_withdrawal_deposit_principal(req.get("principal_allocations", []))
+
             if users_collection is not None:
                 users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
 
@@ -530,60 +535,31 @@ if bot:
         today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         if action == "acc":
-            # Atomically approve ONLY a pending deposit.
-            # This prevents the same deposit from crediting the user's balance twice.
-            result = deposits_collection.update_one(
+            deposits_collection.update_one(
                 {"_id": ObjectId(req_id), "status": "pending"},
                 {"$set": {
                     "status": "active",
                     "approved_at": datetime.datetime.utcnow(),
                     "started_at": datetime.datetime.utcnow(),
                     "last_profit_date": today,
-                    "daily_rate": DEPOSIT_DAILY_RATE,
-                    "total_profit": float(req.get("total_profit", 0.0) or 0.0)
+                    "daily_rate": DEPOSIT_DAILY_RATE
                 }}
             )
-
-            if result.modified_count != 1:
-                bot.answer_callback_query(
-                    call.id,
-                    "এই Deposit ইতিমধ্যে প্রসেস করা হয়েছে!",
-                    show_alert=True
-                )
-                return
-
-            # IMPORTANT: Add the approved deposit amount to the main wallet balance.
-            # Because the update above is atomic, this runs only once per deposit.
-            if users_collection is not None:
-                users_collection.update_one(
-                    {"user_id": user_id},
-                    {"$inc": {"balance": amount}},
-                    upsert=True
-                )
-
-            bot.answer_callback_query(
-                call.id,
-                "✅ Deposit Approved & Balance Added!"
-            )
-
+            bot.answer_callback_query(call.id, "✅ Deposit Approved!")
             try:
                 bot.edit_message_text(
-                    f"{call.message.text}\n\n"
-                    f"<b>✅ স্ট্যাটাস: Approved / Active</b>\n"
-                    f"💰 <b>Main Balance-এ যোগ: ৳{amount:.2f}</b>",
+                    f"{call.message.text}\n\n<b>✅ স্ট্যাটাস: Approved / Active</b>",
                     chat_id=call.message.chat.id,
                     message_id=call.message.message_id,
                     parse_mode="HTML"
                 )
             except Exception:
                 pass
-
             try:
                 bot.send_message(
                     user_id,
                     f"🎉 <b>আপনার ৳{amount:.2f} ডিপোজিট অ্যাপ্রুভ হয়েছে!</b>\n\n"
-                    f"💰 <b>Main Balance-এ যোগ হয়েছে: ৳{amount:.2f}</b>\n"
-                    f"📈 <b>দৈনিক হিসাব: ৳{amount * DEPOSIT_DAILY_RATE:.2f}</b>\n"
+                    f"📈 দৈনিক হিসাব: ৳{amount * DEPOSIT_DAILY_RATE:.2f}\n"
                     f"ℹ️ প্রথম profit claim পরবর্তী UTC দিনে করা যাবে।",
                     parse_mode="HTML"
                 )
@@ -1193,6 +1169,70 @@ def get_user_data():
                         "date": d.get("date")
                     })
 
+            # ---------------------------------------------------------
+            # AUTO CREDIT DAILY DEPOSIT PROFIT
+            # ---------------------------------------------------------
+            # Approved deposits start earning from the next UTC day.
+            # Whenever the user opens/refreshes the app, credit one
+            # unclaimed day of profit atomically into the main wallet.
+            # This keeps the existing /claim-deposit-profit endpoint
+            # available, while also making daily profit actually reach
+            # the main balance without requiring a separate button.
+            if deposits_collection is not None and users_collection is not None:
+                today_profit_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+                auto_profit_total = 0.0
+
+                active_profit_docs = deposits_collection.find({
+                    "user_id": str(user_id),
+                    "status": "active"
+                })
+
+                for dep in active_profit_docs:
+                    last_profit_date = dep.get("last_profit_date")
+
+                    # No profit on the approval day. Profit starts the next UTC day.
+                    if not last_profit_date:
+                        continue
+                    if last_profit_date >= today_profit_date:
+                        continue
+
+                    dep_amount = float(dep.get("amount", 0) or 0)
+                    dep_rate = float(dep.get("daily_rate", DEPOSIT_DAILY_RATE) or DEPOSIT_DAILY_RATE)
+                    dep_profit = round(dep_amount * dep_rate, 2)
+
+                    if dep_profit <= 0:
+                        continue
+
+                    # Only one request/process can credit this deposit for today.
+                    credit_result = deposits_collection.update_one(
+                        {
+                            "_id": dep["_id"],
+                            "status": "active",
+                            "last_profit_date": last_profit_date
+                        },
+                        {
+                            "$set": {"last_profit_date": today_profit_date},
+                            "$inc": {"total_profit": dep_profit}
+                        }
+                    )
+
+                    if credit_result.modified_count == 1:
+                        auto_profit_total += dep_profit
+
+                if auto_profit_total > 0:
+                    users_collection.update_one(
+                        {"user_id": str(user_id)},
+                        {
+                            "$inc": {
+                                "balance": round(auto_profit_total, 2),
+                                "total_earned": round(auto_profit_total, 2)
+                            }
+                        }
+                    )
+
+                    # Refresh user data after adding today's profit.
+                    user_data = users_collection.find_one({"user_id": str(user_id)}) or user_data
+
             user_deposits = []
             active_deposit_total = 0.0
             active_daily_profit = 0.0
@@ -1500,6 +1540,88 @@ def claim_deposit_profit():
     }), 200
 
 
+def reduce_active_deposit_principal(user_id, withdraw_amount):
+    """Allocate a withdrawal against active deposit principal, oldest first.
+    Returns a list of allocations so a rejected withdrawal can restore them.
+    Any amount above active principal is treated as wallet/profit balance and
+    does not reduce deposits further.
+    """
+    if deposits_collection is None or withdraw_amount <= 0:
+        return []
+
+    remaining = round(float(withdraw_amount), 2)
+    allocations = []
+
+    deposits = list(deposits_collection.find(
+        {"user_id": str(user_id), "status": "active", "amount": {"$gt": 0}}
+    ).sort("created_at", 1))
+
+    for d in deposits:
+        if remaining <= 0:
+            break
+        principal = round(float(d.get("amount", 0)), 2)
+        if principal <= 0:
+            continue
+
+        take = min(principal, remaining)
+        new_amount = round(principal - take, 2)
+
+        result = deposits_collection.update_one(
+            {"_id": d["_id"], "status": "active", "amount": principal},
+            {"$set": {
+                "amount": new_amount,
+                "daily_profit": round(new_amount * float(d.get("daily_rate", DEPOSIT_DAILY_RATE)), 2)
+            }}
+        )
+
+        if result.modified_count == 1:
+            allocations.append({
+                "deposit_id": str(d["_id"]),
+                "amount": take
+            })
+            remaining = round(remaining - take, 2)
+
+            if new_amount <= 0:
+                deposits_collection.update_one(
+                    {"_id": d["_id"], "status": "active", "amount": 0},
+                    {"$set": {"status": "closed", "daily_profit": 0.0}}
+                )
+
+    return allocations
+
+
+def restore_withdrawal_deposit_principal(allocations):
+    """Restore principal reductions when an admin rejects a withdrawal."""
+    if deposits_collection is None:
+        return
+
+    for item in allocations or []:
+        try:
+            dep_id = ObjectId(item["deposit_id"])
+            restore_amount = round(float(item["amount"]), 2)
+        except Exception:
+            continue
+        if restore_amount <= 0:
+            continue
+
+        dep = deposits_collection.find_one({"_id": dep_id})
+        if not dep:
+            continue
+
+        current_amount = round(float(dep.get("amount", 0)), 2)
+        new_amount = round(current_amount + restore_amount, 2)
+        rate = float(dep.get("daily_rate", DEPOSIT_DAILY_RATE))
+
+        deposits_collection.update_one(
+            {"_id": dep_id},
+            {"$set": {
+                "amount": new_amount,
+                "status": "active",
+                "daily_profit": round(new_amount * rate, 2)
+            }}
+        )
+
+
 @app.route('/request-withdraw', methods=['POST'])
 def request_withdraw():
     data = request.json or {}
@@ -1520,6 +1642,10 @@ def request_withdraw():
         if not user_data or float(user_data.get("balance", 0)) < amount:
             return jsonify({"status": "error", "message": "পর্যাপ্ত ব্যালেন্স নেই!"}), 400
 
+        # Withdrawal consumes active deposit principal first (oldest deposit first).
+        # This immediately reduces the principal used for future daily profit.
+        principal_allocations = reduce_active_deposit_principal(user_id, amount)
+
         users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": -amount}})
 
         req_doc = {
@@ -1528,6 +1654,7 @@ def request_withdraw():
             "account": account,
             "method": method,
             "status": "pending",
+            "principal_allocations": principal_allocations,
             "date": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
         }
         res = withdraws_collection.insert_one(req_doc)
