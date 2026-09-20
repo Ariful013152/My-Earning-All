@@ -149,6 +149,160 @@ def is_user_banned(user_id):
     return False
 
 
+def reconcile_legacy_deposit_withdrawals(user_id):
+    """One-time migration for older withdrawals created before principal allocations.
+
+    Older withdrawal records may not contain ``principal_allocations``. For those
+    completed/approved/pending withdrawals, consume the user's active deposit
+    principal oldest-first and store the allocation so the same withdrawal is
+    never applied twice. Rejected withdrawals are intentionally ignored.
+    """
+    if deposits_collection is None or withdraws_collection is None or not user_id:
+        return
+
+    try:
+        legacy_withdraws = list(withdraws_collection.find({
+            "user_id": str(user_id),
+            "status": {"$in": ["completed", "approved", "pending"]},
+            "$or": [
+                {"principal_allocations": {"$exists": False}},
+                {"principal_allocations": None}
+            ]
+        }).sort("date", 1))
+
+        for wd in legacy_withdraws:
+            try:
+                amount = round(float(wd.get("amount", 0) or 0), 2)
+            except Exception:
+                continue
+            if amount <= 0:
+                continue
+
+            remaining = amount
+            allocations = []
+            deposits = list(deposits_collection.find({
+                "user_id": str(user_id),
+                "status": "active",
+                "amount": {"$gt": 0}
+            }).sort("created_at", 1))
+
+            for dep in deposits:
+                if remaining <= 0:
+                    break
+                principal = round(float(dep.get("amount", 0) or 0), 2)
+                if principal <= 0:
+                    continue
+
+                take = min(principal, remaining)
+                new_amount = round(principal - take, 2)
+                rate = float(dep.get("daily_rate", DEPOSIT_DAILY_RATE) or DEPOSIT_DAILY_RATE)
+                new_status = "closed" if new_amount <= 0 else "active"
+
+                result = deposits_collection.update_one(
+                    {"_id": dep["_id"], "status": "active", "amount": principal},
+                    {"$set": {
+                        "amount": new_amount,
+                        "status": new_status,
+                        "daily_profit": round(new_amount * rate, 2)
+                    }}
+                )
+                if result.modified_count == 1:
+                    allocations.append({"deposit_id": str(dep["_id"]), "amount": take})
+                    remaining = round(remaining - take, 2)
+
+            # Mark the legacy record as reconciled even if part of the withdrawal
+            # came from non-deposit wallet earnings; otherwise it would be applied
+            # again on every app load.
+            withdraws_collection.update_one(
+                {"_id": wd["_id"]},
+                {"$set": {"principal_allocations": allocations, "legacy_principal_reconciled": True}}
+            )
+    except Exception as exc:
+        print(f"⚠️ Legacy deposit reconciliation error for {user_id}: {exc}")
+
+
+def get_active_deposit_total(user_id):
+    """Return the exact active deposit principal from deposit records."""
+    if deposits_collection is None or not user_id:
+        return 0.0
+    total = 0.0
+    try:
+        docs = deposits_collection.find({
+            "user_id": str(user_id),
+            "status": "active",
+            "amount": {"$gt": 0}
+        }, {"amount": 1})
+        for d in docs:
+            total += float(d.get("amount", 0) or 0)
+    except Exception as exc:
+        print(f"⚠️ Active deposit total error for {user_id}: {exc}")
+    return round(total, 2)
+
+
+def ensure_wallet_model_v2(user_id):
+    """Migrate old combined balance into separate Main + Deposit wallets once.
+
+    Old versions placed approved deposit principal and task/profit earnings in
+    ``balance``. After legacy withdrawal reconciliation, the active deposit
+    principal is known from the deposit collection, so we move that principal
+    into ``deposit_wallet`` and keep the remaining old balance as Main Wallet.
+    """
+    if users_collection is None or not user_id:
+        return {"main_balance": 0.0, "deposit_wallet": 0.0}
+
+    uid = str(user_id)
+    user = users_collection.find_one({"user_id": uid})
+    if not user:
+        users_collection.update_one(
+            {"user_id": uid},
+            {"$setOnInsert": {
+                "user_id": uid,
+                "balance": 0.0,
+                "deposit_wallet": 0.0,
+                "wallet_model_version": 2
+            }},
+            upsert=True
+        )
+        return {"main_balance": 0.0, "deposit_wallet": 0.0}
+
+    if user.get("wallet_model_version") == 2 and "deposit_wallet" in user:
+        # Keep Deposit Wallet exactly synchronized with active deposit records.
+        active_total = get_active_deposit_total(uid)
+        users_collection.update_one(
+            {"user_id": uid},
+            {"$set": {"deposit_wallet": active_total, "wallet_model_version": 2}}
+        )
+        main_balance = float(user.get("balance", 0) or 0)
+        return {"main_balance": round(main_balance, 2), "deposit_wallet": active_total}
+
+    old_balance = float(user.get("balance", 0) or 0)
+    active_total = get_active_deposit_total(uid)
+    # Old balance = old deposit principal + main earnings/profits.
+    # Never allow a negative Main Wallet during migration.
+    main_balance = round(max(0.0, old_balance - active_total), 2)
+
+    users_collection.update_one(
+        {"user_id": uid},
+        {"$set": {
+            "balance": main_balance,
+            "deposit_wallet": active_total,
+            "wallet_model_version": 2
+        }}
+    )
+    return {"main_balance": main_balance, "deposit_wallet": active_total}
+
+
+def sync_deposit_wallet(user_id):
+    """Make the stored Deposit Wallet equal the active deposit principal total."""
+    active_total = get_active_deposit_total(user_id)
+    if users_collection is not None and user_id:
+        users_collection.update_one(
+            {"user_id": str(user_id)},
+            {"$set": {"deposit_wallet": active_total, "wallet_model_version": 2}}
+        )
+    return active_total
+
+
 def process_due_deposit_profits(user_id=None):
     """Credit every fully elapsed 24-hour deposit-profit period.
 
@@ -232,6 +386,7 @@ def process_due_deposit_profits(user_id=None):
     for uid, credit in total_by_user.items():
         if credit <= 0:
             continue
+        ensure_wallet_model_v2(uid)
         result = users_collection.update_one(
             {"user_id": uid},
             {"$inc": {"balance": credit, "total_earned": credit}}
@@ -397,7 +552,7 @@ if bot:
                     {
                         "$set": {"pending_referrer": str(incoming_referrer)},
                         "$setOnInsert": {
-                            "user_id": user_id, "balance": 0.0, "total_refers": 0,
+                            "user_id": user_id, "balance": 0.0, "deposit_wallet": 0.0, "wallet_model_version": 2, "total_refers": 0,
                             "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0,
                             "gigapub_first_view_at": None,
                             "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d")
@@ -439,7 +594,7 @@ if bot:
             users_collection.update_one(
                 {"user_id": user_id},
                 {"$set": {"first_name": first_name, "username": username, "banned": False},
-                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "gigapub_first_view_at": None, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d"), "total_earned": 0.0, "total_tasks_completed": 0, "joined_at": datetime.datetime.utcnow(), "last_active": datetime.datetime.utcnow()}},
+                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "deposit_wallet": 0.0, "wallet_model_version": 2, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "gigapub_first_view_at": None, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d"), "total_earned": 0.0, "total_tasks_completed": 0, "joined_at": datetime.datetime.utcnow(), "last_active": datetime.datetime.utcnow()}},
                 upsert=True
             )
 
@@ -590,7 +745,13 @@ if bot:
             restore_withdrawal_deposit_principal(req.get("principal_allocations", []))
 
             if users_collection is not None:
-                users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
+                wallet_type = req.get("wallet_type", "deposit" if req.get("principal_allocations") else "main")
+                ensure_wallet_model_v2(user_id)
+                if wallet_type == "deposit":
+                    users_collection.update_one({"user_id": user_id}, {"$inc": {"deposit_wallet": amount}})
+                    sync_deposit_wallet(user_id)
+                else:
+                    users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": amount}})
 
             bot.answer_callback_query(call.id, "❌ Withdraw Rejected!")
 
@@ -652,12 +813,13 @@ if bot:
                 }}
             )
             if approve_result.modified_count == 1 and users_collection is not None:
-                # The approved deposit principal is added to the user's
-                # withdrawable Main Balance immediately. Daily profit is
-                # added separately after each full 24-hour period.
+                # Deposit principal belongs to Deposit Wallet. Task/referral
+                # earnings remain in Main Wallet. Deposit profit is credited
+                # to Main Wallet after each full 24-hour period.
+                ensure_wallet_model_v2(user_id)
                 users_collection.update_one(
                     {"user_id": user_id},
-                    {"$inc": {"balance": amount}}
+                    {"$inc": {"deposit_wallet": amount}}
                 )
             bot.answer_callback_query(call.id, "✅ Deposit Approved!")
             try:
@@ -674,7 +836,7 @@ if bot:
                     user_id,
                     f"🎉 <b>আপনার ৳{amount:.2f} ডিপোজিট অ্যাপ্রুভ হয়েছে!</b>\n\n"
                     f"📈 দৈনিক হিসাব: ৳{amount * DEPOSIT_DAILY_RATE:.2f}\n"
-                    f"ℹ️ প্রথম profit claim পরবর্তী UTC দিনে করা যাবে।",
+                    f"ℹ️ প্রথম profit পরবর্তী পূর্ণ ২৪ ঘণ্টা শেষে Main Wallet-এ যোগ হবে।",
                     parse_mode="HTML"
                 )
             except Exception:
@@ -1006,6 +1168,14 @@ if bot:
         except Exception as e:
             print(f"⚠️ User details profit processing error: {e}")
 
+        # Keep legacy accounts consistent with the separate wallet model.
+        try:
+            reconcile_legacy_deposit_withdrawals(target_user_id)
+            ensure_wallet_model_v2(target_user_id)
+            sync_deposit_wallet(target_user_id)
+        except Exception as e:
+            print(f"⚠️ User details wallet sync error: {e}")
+
         user = users_collection.find_one({"user_id": target_user_id})
         if not user:
             bot.reply_to(message, f"❌ User ID <code>{target_user_id}</code> ডাটাবেসে পাওয়া যায়নি।", parse_mode="HTML")
@@ -1086,6 +1256,7 @@ if bot:
             f"👤 <b>নাম:</b> {name}\n"
             f"🔗 <b>Username:</b> @{username}\n"
             f"💰 <b>Main Balance:</b> {money(balance)}\n"
+            f"💳 <b>Deposit Wallet:</b> {money(deposit_total)}\n"
             f"📈 <b>Total Earned:</b> {money(total_earned)}\n"
             f"💳 <b>Active Deposit:</b> {money(deposit_total)} ({len(active_deposits)}টি)\n"
             f"📊 <b>Active Daily Profit:</b> {money(active_daily_profit)}\n"
@@ -1480,13 +1651,17 @@ def get_user_data():
                         "amount": d.get("amount"),
                         "account": d.get("account"),
                         "method": d.get("method"),
+                        "wallet_type": d.get("wallet_type", "main"),
                         "status": d.get("status"),
                         "date": d.get("date")
                     })
 
-            # Server-side 24-hour profit processing. The background worker
-            # also runs independently, so opening the Mini App is not required.
+            # Reconcile older withdrawals created before deposit-principal tracking,
+            # then process any fully elapsed 24-hour deposit profit periods.
+            reconcile_legacy_deposit_withdrawals(str(user_id))
+            ensure_wallet_model_v2(str(user_id))
             process_due_deposit_profits(str(user_id))
+            sync_deposit_wallet(str(user_id))
             user_data = users_collection.find_one({"user_id": str(user_id)}) or user_data
 
             user_deposits = []
@@ -1514,6 +1689,8 @@ def get_user_data():
             return jsonify({
                 "status": "success",
                 "balance": float(user_data.get("balance", 0.00)),
+                "main_balance": float(user_data.get("balance", 0.00)),
+                "deposit_wallet": float(user_data.get("deposit_wallet", active_deposit_total)),
                 "total_refers": int(user_data.get("total_refers", 0)),
                 "total_earned": float(user_data.get("total_earned", 0.00)),
                 "total_tasks_completed": int(user_data.get("total_tasks_completed", 0)),
@@ -1761,7 +1938,7 @@ def claim_deposit_profit():
     if profit <= 0:
         return jsonify({
             "status": "already_claimed",
-            "message": "এখনও ২৪ ঘণ্টা পূর্ণ হয়নি বা আজকের Profit আগে থেকেই যোগ হয়েছে।",
+            "message": "এখনও ২৪ ঘণ্টা পূর্ণ হয়নি বা এই ২৪ ঘণ্টার Profit ইতিমধ্যে যোগ হয়েছে।",
             "profit": 0
         }), 200
 
@@ -1858,64 +2035,104 @@ def restore_withdrawal_deposit_principal(allocations):
 def request_withdraw():
     data = request.json or {}
     user_id = str(data.get('user_id'))
-    amount = float(data.get('amount', 0.0))
+    amount = round(float(data.get('amount', 0.0)), 2)
     account = str(data.get('account', ''))
     method = str(data.get('method', 'bKash'))
+    wallet_type = str(data.get('wallet_type', 'main')).strip().lower()
 
     min_amount = WITHDRAW_METHOD_MIN.get(method, 100)
     if not user_id or method not in WITHDRAW_METHOD_MIN or amount < min_amount or len(account) < 11:
         return jsonify({"status": "error", "message": f"সর্বনিম্ন উইথড্র পরিমাণ ৳{min_amount:.0f} অথবা তথ্য সঠিক নয়!"}), 400
+    if wallet_type not in ("main", "deposit"):
+        return jsonify({"status": "error", "message": "কোন Wallet থেকে টাকা তুলবেন তা নির্বাচন করুন।"}), 400
 
     if is_user_banned(user_id):
         return jsonify({"status": "banned"}), 200
 
-    if users_collection is not None and withdraws_collection is not None:
-        user_data = users_collection.find_one({"user_id": user_id})
-        if not user_data or float(user_data.get("balance", 0)) < amount:
-            return jsonify({"status": "error", "message": "পর্যাপ্ত ব্যালেন্স নেই!"}), 400
+    if users_collection is None or withdraws_collection is None:
+        return jsonify({"status": "error", "message": "Database Connection Error"}), 500
 
-        # Withdrawal consumes active deposit principal first (oldest deposit first).
-        # This immediately reduces the principal used for future daily profit.
+    # Keep Deposit Wallet exactly equal to active deposit principal.
+    reconcile_legacy_deposit_withdrawals(user_id)
+    ensure_wallet_model_v2(user_id)
+    sync_deposit_wallet(user_id)
+    user_data = users_collection.find_one({"user_id": user_id})
+    if not user_data:
+        return jsonify({"status": "error", "message": "ইউজার পাওয়া যায়নি!"}), 404
+
+    main_balance = round(float(user_data.get("balance", 0) or 0), 2)
+    deposit_wallet = round(float(user_data.get("deposit_wallet", 0) or 0), 2)
+
+    if wallet_type == "main":
+        if main_balance < amount:
+            return jsonify({"status": "error", "message": "Main Wallet-এ পর্যাপ্ত ব্যালেন্স নেই!"}), 400
+        # Main Wallet withdrawal does not touch deposit principal/profit base.
+        debit_result = users_collection.update_one(
+            {"user_id": user_id, "balance": {"$gte": amount}},
+            {"$inc": {"balance": -amount}}
+        )
+        if debit_result.modified_count != 1:
+            return jsonify({"status": "error", "message": "ব্যালেন্স পরিবর্তিত হয়েছে, আবার চেষ্টা করুন।"}), 409
+        principal_allocations = []
+    else:
+        if deposit_wallet < amount:
+            return jsonify({"status": "error", "message": "Deposit Wallet-এ পর্যাপ্ত ব্যালেন্স নেই!"}), 400
+        # Deposit Wallet withdrawal reduces the actual deposit records, so future
+        # profit is calculated only on the remaining principal.
         principal_allocations = reduce_active_deposit_principal(user_id, amount)
-
-        users_collection.update_one({"user_id": user_id}, {"$inc": {"balance": -amount}})
-
-        req_doc = {
-            "user_id": user_id,
-            "amount": amount,
-            "account": account,
-            "method": method,
-            "status": "pending",
-            "principal_allocations": principal_allocations,
-            "date": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-        }
-        res = withdraws_collection.insert_one(req_doc)
-        req_id = str(res.inserted_id)
-
-        admin_msg = (
-            f"📥 <b>নতুন উইথড্র রিকোয়েস্ট!</b>\n\n"
-            f"👤 <b>ইউজার:</b> {user_data.get('first_name', 'User')} (@{user_data.get('username', 'No Username')})\n"
-            f"🆔 <b>ইউজার ID:</b> <code>{user_id}</code>\n"
-            f"💵 <b>পরিমাণ:</b> ৳{amount:.2f}\n"
-            f"🌐 <b>মেথড:</b> {method}\n"
-            f"📱 <b>অ্যাকাউন্ট:</b> <code>{account}</code>"
+        allocated = round(sum(float(x.get("amount", 0) or 0) for x in principal_allocations), 2)
+        if allocated < amount:
+            restore_withdrawal_deposit_principal(principal_allocations)
+            sync_deposit_wallet(user_id)
+            return jsonify({"status": "error", "message": "Deposit balance sync হয়নি, আবার চেষ্টা করুন।"}), 409
+        debit_result = users_collection.update_one(
+            {"user_id": user_id, "deposit_wallet": {"$gte": amount}},
+            {"$inc": {"deposit_wallet": -amount}}
         )
+        if debit_result.modified_count != 1:
+            restore_withdrawal_deposit_principal(principal_allocations)
+            sync_deposit_wallet(user_id)
+            return jsonify({"status": "error", "message": "Deposit Wallet পরিবর্তিত হয়েছে, আবার চেষ্টা করুন।"}), 409
+        sync_deposit_wallet(user_id)
 
-        markup = InlineKeyboardMarkup()
-        markup.row(
-            InlineKeyboardButton("✅ Accept", callback_data=f"wd_acc_{req_id}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"wd_rej_{req_id}")
-        )
+    req_doc = {
+        "user_id": user_id,
+        "amount": amount,
+        "account": account,
+        "method": method,
+        "wallet_type": wallet_type,
+        "status": "pending",
+        "principal_allocations": principal_allocations,
+        "date": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    }
+    res = withdraws_collection.insert_one(req_doc)
+    req_id = str(res.inserted_id)
 
-        if bot:
-            for admin_id in ADMIN_CHAT_IDS:
-                try:
-                    bot.send_message(admin_id, admin_msg, parse_mode="HTML", reply_markup=markup)
-                except Exception as e:
-                    print(f"Error notifying admin {admin_id}: {e}")
+    wallet_label = "Main Wallet" if wallet_type == "main" else "Deposit Wallet"
+    admin_msg = (
+        f"📥 <b>নতুন উইথড্র রিকোয়েস্ট!</b>\n\n"
+        f"👤 <b>ইউজার:</b> {user_data.get('first_name', 'User')} (@{user_data.get('username', 'No Username')})\n"
+        f"🆔 <b>ইউজার ID:</b> <code>{user_id}</code>\n"
+        f"💵 <b>পরিমাণ:</b> ৳{amount:.2f}\n"
+        f"👛 <b>Wallet:</b> {wallet_label}\n"
+        f"🌐 <b>মেথড:</b> {method}\n"
+        f"📱 <b>অ্যাকাউন্ট:</b> <code>{account}</code>"
+    )
 
-        return jsonify({"status": "success"}), 200
-    return jsonify({"status": "error", "message": "Database Connection Error"}), 500
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("✅ Accept", callback_data=f"wd_acc_{req_id}"),
+        InlineKeyboardButton("❌ Reject", callback_data=f"wd_rej_{req_id}")
+    )
+
+    if bot:
+        for admin_id in ADMIN_CHAT_IDS:
+            try:
+                bot.send_message(admin_id, admin_msg, parse_mode="HTML", reply_markup=markup)
+            except Exception as e:
+                print(f"Withdraw admin notification error: {e}")
+
+    return jsonify({"status": "success", "message": f"{wallet_label} থেকে ৳{amount:.2f} উইথড্র রিকোয়েস্ট পাঠানো হয়েছে।"}), 200
 
 @app.route('/check-device', methods=['POST'])
 def check_device():
