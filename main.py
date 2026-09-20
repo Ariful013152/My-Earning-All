@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import secrets
 import urllib.parse
+import html
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ForceReply
 from flask import Flask, request, jsonify, render_template
@@ -792,12 +793,14 @@ if bot:
         btn_startall = InlineKeyboardButton("\U0001F504 Start All Users", callback_data="admin_startall_confirm")
         btn_toggle = InlineKeyboardButton(bot_status_label, callback_data="admin_toggle_bot")
         btn_msguser = InlineKeyboardButton("\u2709\uFE0F Message User", callback_data="admin_msguser_prompt")
+        btn_userdetails = InlineKeyboardButton("\U0001F464 User Details", callback_data="admin_userdetails_prompt")
         btn_bannedlist = InlineKeyboardButton("\U0001F4CB Banned List", callback_data="admin_banned_list")
 
         markup.add(btn_ban, btn_unban)
         markup.add(btn_add_bal, btn_cut_bal)
         markup.add(btn_stats, btn_broadcast)
-        markup.add(btn_msguser, btn_bannedlist)
+        markup.add(btn_msguser, btn_userdetails)
+        markup.add(btn_bannedlist)
         markup.add(btn_toggle)
         markup.add(btn_startall)
         return markup
@@ -896,6 +899,16 @@ if bot:
             )
             bot.register_next_step_handler(msg, process_msguser_id_input)
 
+        elif call.data == "admin_userdetails_prompt":
+            msg = bot.send_message(
+                call.message.chat.id,
+                "\U0001F464 <b>যে ইউজারের সম্পূর্ণ তথ্য দেখতে চান তার USER ID লিখে এই মেসেজে রিপ্লাই দিন:</b>\n\n"
+                "উদাহরণ: <code>5034445579</code>",
+                parse_mode="HTML",
+                reply_markup=ForceReply(selective=True)
+            )
+            bot.register_next_step_handler(msg, process_userdetails_input)
+
         elif call.data == "admin_banned_list":
             if users_collection is None:
                 bot.send_message(call.message.chat.id, "⚠️ ডাটাবেস সংযুক্ত নেই।")
@@ -970,6 +983,174 @@ if bot:
                 )
 
         bot.answer_callback_query(call.id)
+
+    def process_userdetails_input(message):
+        """Show an admin a complete user/account/activity snapshot by Telegram ID."""
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+
+        target_user_id = message.text.strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "❌ এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
+
+        if users_collection is None:
+            bot.reply_to(message, "⚠️ ডাটাবেস সংযুক্ত নেই।")
+            return
+
+        # First settle any due 24-hour deposit profits so the displayed balance
+        # and deposit totals are current even if the background loop has not
+        # processed this user a moment ago.
+        try:
+            process_due_deposit_profits(target_user_id)
+        except Exception as e:
+            print(f"⚠️ User details profit processing error: {e}")
+
+        user = users_collection.find_one({"user_id": target_user_id})
+        if not user:
+            bot.reply_to(message, f"❌ User ID <code>{target_user_id}</code> ডাটাবেসে পাওয়া যায়নি।", parse_mode="HTML")
+            return
+
+        def esc(value):
+            return html.escape(str(value if value is not None else "-"))
+
+        def money(value):
+            try:
+                return f"৳{float(value or 0):.2f}"
+            except Exception:
+                return "৳0.00"
+
+        def dt(value):
+            if isinstance(value, datetime.datetime):
+                return value.strftime("%Y-%m-%d %H:%M:%S UTC")
+            return str(value) if value not in (None, "") else "-"
+
+        def send_long(text, limit=3900):
+            # Telegram message limit is 4096 chars; keep each admin detail
+            # message safely below that limit while preserving every record.
+            chunk = ""
+            for part in text.split("\n"):
+                candidate = f"{chunk}\n{part}" if chunk else part
+                if len(candidate) > limit and chunk:
+                    bot.send_message(message.chat.id, chunk, parse_mode="HTML")
+                    chunk = part
+                else:
+                    chunk = candidate
+            if chunk:
+                bot.send_message(message.chat.id, chunk, parse_mode="HTML")
+
+        name = esc(user.get("first_name", "User"))
+        username = esc(user.get("username", "No Username"))
+        balance = float(user.get("balance", 0) or 0)
+        total_earned = float(user.get("total_earned", 0) or 0)
+        total_refers = int(user.get("total_refers", 0) or 0)
+        total_tasks = int(user.get("total_tasks_completed", 0) or 0)
+        banned = bool(user.get("banned", False))
+
+        # Active deposit/profit snapshot.
+        deposits = []
+        active_deposits = []
+        deposit_total = 0.0
+        active_daily_profit = 0.0
+        if deposits_collection is not None:
+            deposits = list(deposits_collection.find({"user_id": target_user_id}).sort("created_at", -1))
+            for d in deposits:
+                amount = float(d.get("amount", 0) or 0)
+                rate = float(d.get("daily_rate", DEPOSIT_DAILY_RATE) or DEPOSIT_DAILY_RATE)
+                if d.get("status") == "active":
+                    deposit_total += amount
+                    active_daily_profit += amount * rate
+                    active_deposits.append(d)
+
+        # Withdrawal history and totals.
+        withdraws = []
+        withdraw_total = 0.0
+        if withdraws_collection is not None:
+            withdraws = list(withdraws_collection.find({"user_id": target_user_id}).sort("date", -1))
+            withdraw_total = sum(float(w.get("amount", 0) or 0) for w in withdraws if w.get("status") in ("completed", "approved", "pending"))
+
+        # Referral history.
+        referrals = []
+        if referrals_collection is not None:
+            referrals = list(referrals_collection.find({
+                "$or": [{"referrer_id": target_user_id}, {"referred_id": target_user_id}]
+            }).sort("date", -1))
+
+        referred_by = esc(user.get("referred_by", "-"))
+        pending_referrer = esc(user.get("pending_referrer", "-"))
+        completed_tasks = user.get("completed_channel_tasks", []) or []
+
+        summary = (
+            "👤 <b>সম্পূর্ণ ইউজার ডিটেইলস</b>\n\n"
+            f"🆔 <b>User ID:</b> <code>{esc(target_user_id)}</code>\n"
+            f"👤 <b>নাম:</b> {name}\n"
+            f"🔗 <b>Username:</b> @{username}\n"
+            f"💰 <b>Main Balance:</b> {money(balance)}\n"
+            f"📈 <b>Total Earned:</b> {money(total_earned)}\n"
+            f"💳 <b>Active Deposit:</b> {money(deposit_total)} ({len(active_deposits)}টি)\n"
+            f"📊 <b>Active Daily Profit:</b> {money(active_daily_profit)}\n"
+            f"👁️ <b>Ad Counters:</b> Monetag={int(user.get('monetag_count', 0) or 0)}, Adsterra={int(user.get('adsterra_count', 0) or 0)}, GigaPub={int(user.get('gigapub_count', 0) or 0)}\n"
+            f"💸 <b>Withdraw Requests:</b> {len(withdraws)}\n"
+            f"💵 <b>Withdraw Amount (processed/pending):</b> {money(withdraw_total)}\n"
+            f"👥 <b>Total Refers:</b> {total_refers}\n"
+            f"📝 <b>Referral Records:</b> {len(referrals)}\n"
+            f"🎯 <b>Completed Tasks:</b> {total_tasks}\n"
+            f"📌 <b>Saved Channel Tasks:</b> {len(completed_tasks)}\n"
+            f"🚫 <b>Banned:</b> {'হ্যাঁ' if banned else 'না'}\n"
+            f"🔗 <b>Referred By:</b> <code>{referred_by}</code>\n"
+            f"⏳ <b>Pending Referrer:</b> <code>{pending_referrer}</code>\n"
+            f"📅 <b>Joined:</b> {esc(dt(user.get('joined_at')))}\n"
+            f"🕐 <b>Last Active:</b> {esc(dt(user.get('last_active')))}\n"
+            f"🔄 <b>Last Reset:</b> {esc(user.get('last_reset_date', '-'))}"
+        )
+        bot.send_message(message.chat.id, summary, parse_mode="HTML")
+
+        # Deposit details: every package/transaction, not just the active total.
+        if deposits:
+            lines = [f"💳 <b>Deposit Details — {len(deposits)}টি</b>"]
+            for i, d in enumerate(deposits, 1):
+                lines.append(
+                    f"\n<b>#{i}</b> {money(d.get('amount'))} | <b>{esc(d.get('status', '-'))}</b>\n"
+                    f"• Method: {esc(d.get('method', '-'))}\n"
+                    f"• TXID/Hash: <code>{esc(d.get('transaction_id', '-'))}</code>\n"
+                    f"• Daily: {money(d.get('daily_profit'))}\n"
+                    f"• Total Profit: {money(d.get('total_profit'))}\n"
+                    f"• Created: {esc(d.get('date', dt(d.get('created_at'))))}\n"
+                    f"• Last Profit: {esc(d.get('last_profit_date', '-'))}"
+                )
+            send_long("\n".join(lines))
+        else:
+            bot.send_message(message.chat.id, "💳 <b>Deposit Details:</b> কোনো deposit record নেই।", parse_mode="HTML")
+
+        # Withdrawal details.
+        if withdraws:
+            lines = [f"💸 <b>Withdrawal Details — {len(withdraws)}টি</b>"]
+            for i, w in enumerate(withdraws, 1):
+                lines.append(
+                    f"\n<b>#{i}</b> {money(w.get('amount'))} | <b>{esc(w.get('status', '-'))}</b>\n"
+                    f"• Method: {esc(w.get('method', '-'))}\n"
+                    f"• Account: <code>{esc(w.get('account', '-'))}</code>\n"
+                    f"• Date: {esc(w.get('date', '-'))}"
+                )
+            send_long("\n".join(lines))
+        else:
+            bot.send_message(message.chat.id, "💸 <b>Withdrawal Details:</b> কোনো withdrawal record নেই।", parse_mode="HTML")
+
+        # Referral details.
+        if referrals:
+            lines = [f"👥 <b>Referral Details — {len(referrals)}টি</b>"]
+            for i, r in enumerate(referrals, 1):
+                lines.append(
+                    f"\n<b>#{i}</b> <b>{esc(r.get('status', '-'))}</b>\n"
+                    f"• Referrer ID: <code>{esc(r.get('referrer_id', '-'))}</code>\n"
+                    f"• Referred ID: <code>{esc(r.get('referred_id', '-'))}</code>\n"
+                    f"• Name: {esc(r.get('referred_name', '-'))}\n"
+                    f"• Username: @{esc(r.get('referred_username', '-'))}\n"
+                    f"• Date: {esc(r.get('date', '-'))}"
+                )
+            send_long("\n".join(lines))
+        else:
+            bot.send_message(message.chat.id, "👥 <b>Referral Details:</b> কোনো referral record নেই।", parse_mode="HTML")
 
     def process_msguser_id_input(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
@@ -1096,6 +1277,27 @@ if bot:
                         pass
             
             bot.edit_message_text(f"✅ <b>ব্রডকাস্ট সম্পন্ন!</b>\n\nমোট <b>{success_count}</b> জন ইউজারের কাছে মেসেজ পৌঁছেছে।", chat_id=message.chat.id, message_id=status_msg.message_id, parse_mode="HTML")
+
+    @bot.message_handler(commands=['userdetails'])
+    def handle_userdetails_command(message):
+        if message.from_user.id not in ADMIN_CHAT_IDS:
+            return
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/userdetails USER_ID</code>", parse_mode="HTML")
+            return
+        target_user_id = args[1].strip()
+        if not is_valid_telegram_id(target_user_id):
+            bot.reply_to(message, "❌ এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            return
+        # Reuse the same complete detail formatter used by the admin-panel button.
+        # The handler expects a message whose text is the target ID.
+        original_text = message.text
+        try:
+            message.text = target_user_id
+            process_userdetails_input(message)
+        finally:
+            message.text = original_text
 
     @bot.message_handler(commands=['unban'])
     def handle_unban_command(message):
