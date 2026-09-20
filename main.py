@@ -530,31 +530,60 @@ if bot:
         today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         if action == "acc":
-            deposits_collection.update_one(
+            # Atomically approve ONLY a pending deposit.
+            # This prevents the same deposit from crediting the user's balance twice.
+            result = deposits_collection.update_one(
                 {"_id": ObjectId(req_id), "status": "pending"},
                 {"$set": {
                     "status": "active",
                     "approved_at": datetime.datetime.utcnow(),
                     "started_at": datetime.datetime.utcnow(),
                     "last_profit_date": today,
-                    "daily_rate": DEPOSIT_DAILY_RATE
+                    "daily_rate": DEPOSIT_DAILY_RATE,
+                    "total_profit": float(req.get("total_profit", 0.0) or 0.0)
                 }}
             )
-            bot.answer_callback_query(call.id, "✅ Deposit Approved!")
+
+            if result.modified_count != 1:
+                bot.answer_callback_query(
+                    call.id,
+                    "এই Deposit ইতিমধ্যে প্রসেস করা হয়েছে!",
+                    show_alert=True
+                )
+                return
+
+            # IMPORTANT: Add the approved deposit amount to the main wallet balance.
+            # Because the update above is atomic, this runs only once per deposit.
+            if users_collection is not None:
+                users_collection.update_one(
+                    {"user_id": user_id},
+                    {"$inc": {"balance": amount}},
+                    upsert=True
+                )
+
+            bot.answer_callback_query(
+                call.id,
+                "✅ Deposit Approved & Balance Added!"
+            )
+
             try:
                 bot.edit_message_text(
-                    f"{call.message.text}\n\n<b>✅ স্ট্যাটাস: Approved / Active</b>",
+                    f"{call.message.text}\n\n"
+                    f"<b>✅ স্ট্যাটাস: Approved / Active</b>\n"
+                    f"💰 <b>Main Balance-এ যোগ: ৳{amount:.2f}</b>",
                     chat_id=call.message.chat.id,
                     message_id=call.message.message_id,
                     parse_mode="HTML"
                 )
             except Exception:
                 pass
+
             try:
                 bot.send_message(
                     user_id,
                     f"🎉 <b>আপনার ৳{amount:.2f} ডিপোজিট অ্যাপ্রুভ হয়েছে!</b>\n\n"
-                    f"📈 দৈনিক হিসাব: ৳{amount * DEPOSIT_DAILY_RATE:.2f}\n"
+                    f"💰 <b>Main Balance-এ যোগ হয়েছে: ৳{amount:.2f}</b>\n"
+                    f"📈 <b>দৈনিক হিসাব: ৳{amount * DEPOSIT_DAILY_RATE:.2f}</b>\n"
                     f"ℹ️ প্রথম profit claim পরবর্তী UTC দিনে করা যাবে।",
                     parse_mode="HTML"
                 )
