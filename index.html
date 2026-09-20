@@ -511,17 +511,6 @@
                         <button onclick="claimChannelReward('@allinoneg2', 'action-ch-3', 0.50)" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
                     </div>
                 </div>
-
-                <div class="ch-task-item" style="margin-bottom: 0;">
-                    <div>
-                        <b style="font-size: 12px;">Ainovum Bot Task</b><br>
-                        <small style="color:#22c55e; font-size:10px;">+ TK 0.10</small>
-                    </div>
-                    <div id="action-ch-4">
-                        <a href="https://t.me/ainovum_bot?start=ref_5034445579" target="_blank" style="background:#3b82f6; color:#fff; padding:5px 10px; border-radius:6px; text-decoration:none; font-size:11px; margin-right:4px;">Start Bot</a>
-                        <button onclick="claimChannelReward('bot_ainovum', 'action-ch-4', 0.10)" style="background:#22c55e; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;">Confirm</button>
-                    </div>
-                </div>
             </div>
 
             <div class="task-list-card">
@@ -589,7 +578,7 @@
                     <div style="font-size:19px;font-weight:900;letter-spacing:.5px;color:var(--accent-green);">01884635078</div>
                     <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BKASH_MERCHANT)">Copy Merchant Number</button>
                 </div>
-                <input type="text" class="input-box" id="depositTransactionId" placeholder="bKash TXID / Binance Transaction Hash">
+                <input type="text" class="input-box" id="depositTransactionId" placeholder="Payment TXID / Binance Transaction Hash">
                 <button class="gradient-btn" onclick="submitDepositRequest()"><i class="fas fa-paper-plane"></i> Deposit Request পাঠান</button>
                 <div style="font-size:10px; color:var(--text-sub); margin-top:8px; text-align:center;">পেমেন্ট সম্পন্ন করে সঠিক TXID দিন। অ্যাডমিন যাচাই না করা পর্যন্ত Deposit Active হবে না।</div>
             </div>
@@ -773,19 +762,45 @@
                 box.innerHTML = `
                     <div style="font-size:12px;font-weight:800;margin-bottom:5px;">Binance USDT — BEP20 / BNB Smart Chain</div>
                     <div style="font-size:11px;line-height:1.45;word-break:break-all;color:var(--text-sub);"><b>${BINANCE_USDT_ADDRESS}</b></div>
-                    <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BINANCE_USDT_ADDRESS)">Copy Address</button>
-                    <div style="margin-top:9px;text-align:center;padding:8px;border-radius:10px;background:rgba(57,245,138,.07);">
-                        <small style="color:var(--text-sub);">পেমেন্ট করতে হবে</small>
+                    <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BINANCE_USDT_ADDRESS)">📋 Address কপি করুন</button>
+                    <div style="margin-top:9px;text-align:center;padding:9px;border-radius:10px;background:rgba(57,245,138,.07);">
+                        <small style="color:var(--text-sub);">এই পরিমাণ USDT পেমেন্ট করুন</small>
                         <div style="font-size:20px;font-weight:900;color:var(--accent-green);">${usdt} USDT</div>
-                        <small style="color:var(--text-sub);">1 USDT = ৳110</small>
+                        <small style="color:var(--text-sub);">1 USDT = ৳110 • Network: BEP20</small>
                     </div>`;
             } else {
                 box.innerHTML = `
-                    <div style="font-size:12px;font-weight:800;margin-bottom:6px;">bKash Merchant</div>
+                    <div style="font-size:12px;font-weight:800;margin-bottom:6px;">bKash Merchant Payment</div>
                     <div style="font-size:19px;font-weight:900;letter-spacing:.5px;color:var(--accent-green);">${BKASH_MERCHANT}</div>
-                    <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BKASH_MERCHANT)">Copy Merchant Number</button>`;
+                    <div style="margin-top:7px;padding:9px;border-radius:10px;background:rgba(57,245,138,.07);color:var(--text-main);font-size:12px;line-height:1.5;">
+                        💳 এই Merchant নম্বরে <b>Payment</b> করুন।<br>
+                        💰 পেমেন্টের পরিমাণ: <b>৳${selectedDepositAmount.toLocaleString()}</b>
+                    </div>
+                    <button type="button" class="compact-btn" style="margin-top:8px;" onclick="copyDepositText(BKASH_MERCHANT)">📋 Merchant Number কপি করুন</button>`;
             }
         }
+
+        async function copyDepositText(text) {
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(String(text));
+                } else {
+                    const area = document.createElement('textarea');
+                    area.value = String(text);
+                    area.setAttribute('readonly', '');
+                    area.style.position = 'fixed';
+                    area.style.opacity = '0';
+                    document.body.appendChild(area);
+                    area.select();
+                    document.execCommand('copy');
+                    area.remove();
+                }
+                alert('✅ কপি হয়েছে: ' + text);
+            } catch (e) {
+                alert('কপি করা যায়নি। নম্বর/Address চেপে ধরে Copy করুন।');
+            }
+        }
+
         const DEPOSIT_PACKAGES = [100,200,300,400,500,1000,1500,2000,3000,4000,5000,10000,20000,30000,40000,50000];
 
         async function getDeviceId() {
@@ -875,7 +890,6 @@
                         if (completedTasks.includes('@myearningall')) markTaskCompleted('action-ch-1');
                         if (completedTasks.includes('@allinoneg1')) markTaskCompleted('action-ch-2');
                         if (completedTasks.includes('@allinoneg2')) markTaskCompleted('action-ch-3');
-                        if (completedTasks.includes('bot_ainovum')) markTaskCompleted('action-ch-4');
 
                         updateUI();
                         renderWithdrawHistory();
@@ -1008,7 +1022,10 @@
                     user_id: userId,
                     amount: selectedDepositAmount,
                     method: selectedDepositMethod,
-                    transaction_id: txid
+                    transaction_id: txid,
+                    usdt_amount: selectedDepositMethod === 'Binance'
+                        ? parseFloat((selectedDepositAmount / USDT_BDT_RATE).toFixed(6))
+                        : null
                 })
             }).then(r => r.json()).then(data => {
                 if (data.status === 'banned') {
@@ -1363,6 +1380,9 @@
             setupReferralAndBotInfo();
             verifyDeviceOnServer();
             fetchUserDataFromServer();
+            // Keep Main Balance / Daily Profit display in sync with the
+            // server-side 24-hour deposit-profit worker.
+            setInterval(fetchUserDataFromServer, 60000);
             updateResetCountdown();
             setInterval(updateResetCountdown, 1000);
         };
