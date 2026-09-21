@@ -726,6 +726,21 @@
         const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
         let userId = tgUser ? tgUser.id.toString() : localStorage.getItem('temp_user_id');
 
+        // Security: attach Telegram's signed initData to every same-origin API call.
+        // The server verifies the signature and the user ID before changing/reading money.
+        const _nativeFetch = window.fetch.bind(window);
+        window.fetch = function(input, init = {}) {
+            try {
+                const url = typeof input === 'string' ? input : input.url;
+                if (url && url.startsWith('/') && tg && tg.initData) {
+                    const headers = new Headers(init.headers || (input && input.headers) || {});
+                    headers.set('X-Telegram-Init-Data', tg.initData);
+                    init.headers = headers;
+                }
+            } catch (e) {}
+            return _nativeFetch(input, init);
+        };
+
         if (!userId) {
             userId = "user_" + Math.floor(100000 + Math.random() * 900000);
             localStorage.setItem('temp_user_id', userId);
