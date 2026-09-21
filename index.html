@@ -620,7 +620,17 @@
             <div class="card">
                 <div class="icon-box"><i class="fas fa-users"></i></div>
                 <h3>রেফার করুন ও আয় করুন</h3>
-                <p style="font-size: 11px; color: var(--text-sub);">নতুন ইউজার যোগ দিলে পাবেন নিশ্চিত <b>TK 0.50</b> বোনাস!</p>
+                <p style="font-size: 11px; color: var(--text-sub);">নতুন ইউজার যোগ দিলে পাবেন নিশ্চিত <b>TK 0.50</b> বোনাস। আর রেফার করা ইউজারের Deposit Wallet-এ টাকা থাকলে তার উপর <b>0.05% / 24 ঘণ্টা</b> Referral Deposit Profit পাবেন।</p>
+                <div class="grid-2" style="margin:10px 0;">
+                    <div class="card" style="padding:10px;">
+                        <div style="font-size:10px;color:var(--text-sub);">Referral Daily Profit</div>
+                        <h3 style="margin:5px 0 0;">৳<span id="referralDailyProfit">0.00</span></h3>
+                    </div>
+                    <div class="card" style="padding:10px;">
+                        <div style="font-size:10px;color:var(--text-sub);">Referral Profit Total</div>
+                        <h3 style="margin:5px 0 0;">৳<span id="referralProfitTotal">0.00</span></h3>
+                    </div>
+                </div>
                 
                 <input type="text" class="input-box" id="referLinkInput" value="Loading..." readonly style="text-align: center; margin-top: 8px;">
                 
@@ -762,6 +772,8 @@
         let gigapubCount = 0;
         let balance = 0.00;
         let totalRefers = 0;
+        let referralDepositDailyProfit = 0;
+        let referralDepositProfitTotal = 0;
         let totalEarned = 0.00;
         let totalTasksCompleted = 0;
         let withdrawsHistory = [];
@@ -900,6 +912,8 @@
                         monetagCount = parseInt(data.monetag_count || 0);
                         adsterraCount = parseInt(data.adsterra_count || 0);
                         gigapubCount = parseInt(data.gigapub_count || 0);
+                        referralDepositDailyProfit = parseFloat(data.referral_deposit_daily_profit || 0);
+                        referralDepositProfitTotal = parseFloat(data.referral_deposit_profit_total || 0);
                         withdrawsHistory = data.withdraws || [];
                         depositsHistory = data.deposits || [];
                         activeDepositTotal = parseFloat(data.active_deposit_total || 0);
@@ -946,6 +960,10 @@
             document.getElementById('adsterraCount').innerText = adsterraCount;
             document.getElementById('gigapubCount').innerText = gigapubCount;
             document.getElementById('refCount').innerText = totalRefers;
+            const referralDailyProfitEl = document.getElementById('referralDailyProfit');
+            const referralProfitTotalEl = document.getElementById('referralProfitTotal');
+            if (referralDailyProfitEl) referralDailyProfitEl.innerText = referralDepositDailyProfit.toFixed(2);
+            if (referralProfitTotalEl) referralProfitTotalEl.innerText = referralDepositProfitTotal.toFixed(2);
             document.getElementById('todayTaskCount').innerText = monetagCount + adsterraCount + gigapubCount;
             document.getElementById('userName').innerText = firstName;
             document.getElementById('userIdDisplay').innerText = userId;
