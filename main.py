@@ -10,6 +10,9 @@ import hmac
 import secrets
 import urllib.parse
 import html
+import math
+from functools import wraps
+from collections import defaultdict, deque
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ForceReply
 from flask import Flask, request, jsonify, render_template
@@ -63,6 +66,10 @@ withdraws_collection = None
 deposits_collection = None
 referrals_collection = None
 settings_collection = None
+audit_collection = None
+
+_rate_lock = threading.Lock()
+_rate_events = defaultdict(deque)
 
 if MONGO_URI:
     try:
@@ -74,6 +81,7 @@ if MONGO_URI:
         deposits_collection = db["deposits"]
         referrals_collection = db["referrals"]
         settings_collection = db["settings"]
+        audit_collection = db["audit_logs"]
         print("✅ MongoDB Connected Successfully")
 
         # Indexes matter a lot here: users_collection.find_one({"user_id": ...})
@@ -91,6 +99,10 @@ if MONGO_URI:
             deposits_collection.create_index("status")
             deposits_collection.create_index([("user_id", 1), ("status", 1)])
             devices_collection.create_index("device_id")
+            deposits_collection.create_index("transaction_id", unique=True, sparse=True)
+            withdraws_collection.create_index([("user_id", 1), ("status", 1)])
+            referrals_collection.create_index([("referrer_id", 1), ("referred_id", 1)], unique=True, sparse=True)
+            audit_collection.create_index([("user_id", 1), ("created_at", -1)])
             print("✅ MongoDB indexes ensured")
         except Exception as e:
             print(f"⚠️ Index creation error (non-fatal): {e}")
@@ -128,17 +140,91 @@ def verify_telegram_init_data(init_data):
         received_hash = data_dict.pop('hash', None)
         if not received_hash:
             return False
-        
         data_list = [f"{k}={v}" for k, v in sorted(data_dict.items())]
         data_check_string = "\n".join(data_list)
-        
         secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode('utf-8'), hashlib.sha256).digest()
         calculated_hash = hmac.new(secret_key, data_check_string.encode('utf-8'), hashlib.sha256).hexdigest()
-        
         return hmac.compare_digest(calculated_hash, received_hash)
     except Exception as e:
         print(f"Auth verification error: {e}")
         return False
+
+
+def get_authenticated_telegram_user(init_data, expected_user_id=None):
+    if not verify_telegram_init_data(init_data):
+        return None
+    try:
+        data = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
+        auth_date = int(data.get("auth_date", "0"))
+        now_ts = int(time.time())
+        if auth_date <= 0 or auth_date > now_ts + 300 or now_ts - auth_date > 86400:
+            return None
+        user_json = data.get("user")
+        if not user_json:
+            return None
+        import json
+        tg_user = json.loads(user_json)
+        tg_id = str(tg_user.get("id", ""))
+        if not tg_id or (expected_user_id is not None and tg_id != str(expected_user_id)):
+            return None
+        return tg_user
+    except Exception:
+        return None
+
+
+def require_telegram_auth(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        init_data = request.headers.get("X-Telegram-Init-Data", "")
+        body = request.get_json(silent=True) or {}
+        expected = request.args.get("user_id") if request.method == "GET" else body.get("user_id")
+        if not expected:
+            return jsonify({"status": "error", "message": "নিরাপত্তার কারণে Telegram verification প্রয়োজন।"}), 401
+        tg_user = get_authenticated_telegram_user(init_data, expected)
+        if not tg_user:
+            return jsonify({"status": "error", "message": "Telegram verification ব্যর্থ হয়েছে। অ্যাপটি Telegram থেকে খুলুন।"}), 401
+        request.telegram_user = tg_user
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def rate_limit(key, limit=30, window=60):
+    now = time.time()
+    with _rate_lock:
+        q = _rate_events[key]
+        while q and now - q[0] > window:
+            q.popleft()
+        if len(q) >= limit:
+            return False
+        q.append(now)
+        return True
+
+
+def audit_event(user_id, event, amount=0, wallet=None, metadata=None):
+    if audit_collection is None:
+        return
+    try:
+        audit_collection.insert_one({
+            "user_id": str(user_id) if user_id is not None else None,
+            "event": str(event),
+            "amount": round(float(amount or 0), 2),
+            "wallet": wallet,
+            "metadata": metadata or {},
+            "created_at": datetime.datetime.utcnow()
+        })
+    except Exception as exc:
+        print(f"Audit log error: {exc}")
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if request.path.startswith(("/get-user-data", "/request-", "/verify-", "/claim-", "/check-device")):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 # -------- HELPER: CHECK USER BANNED STATUS FROM DB --------
 def is_user_banned(user_id):
@@ -1062,6 +1148,9 @@ if bot:
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('ban_', 'unban_')))
     def handle_ban_callback(call):
+        if call.from_user.id not in ADMIN_CHAT_IDS:
+            bot.answer_callback_query(call.id, "অ্যাক্সেস নেই!", show_alert=True)
+            return
         action, target_user_id = call.data.split('_')
         
         if action == 'ban':
@@ -1526,6 +1615,9 @@ if bot:
         except ValueError:
             bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
             return
+        if not math.isfinite(amount) or amount <= 0:
+            bot.reply_to(message, "❌ Amount অবশ্যই 0-এর বেশি হতে হবে।")
+            return
 
         if users_collection is not None:
             users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": amount}}, upsert=True)
@@ -1550,6 +1642,9 @@ if bot:
             amount = float(args[1].strip())
         except ValueError:
             bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
+            return
+        if not math.isfinite(amount) or amount <= 0:
+            bot.reply_to(message, "❌ Amount অবশ্যই 0-এর বেশি হতে হবে।")
             return
 
         if users_collection is not None:
@@ -1768,8 +1863,11 @@ def get_referral_deposit_profit_total(referrer_id):
     return round(total, 2)
 
 @app.route('/get-user-data', methods=['GET'])
+@require_telegram_auth
 def get_user_data():
     user_id = request.args.get('user_id')
+    if not rate_limit(f'get:{user_id}', 60, 60):
+        return jsonify({"status": "error", "message": "অনেক বেশি অনুরোধ। একটু পরে চেষ্টা করুন।"}), 429
     if not user_id:
         return jsonify({"status": "error", "message": "User ID required"}), 400
 
@@ -1876,11 +1974,14 @@ def get_user_data():
     return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "total_earned": 0.00, "total_tasks_completed": 0, "first_name": "User", "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "completed_channel_tasks": [], "withdraws": [], "deposits": [], "active_deposit_total": 0.0, "active_daily_profit": 0.0}), 200
 
 @app.route('/verify-channel-task', methods=['POST'])
+@require_telegram_auth
 def verify_channel_task():
     data = request.json or {}
+    if not rate_limit(f'task:{data.get("user_id")}', 30, 60):
+        return jsonify({"status": "error", "message": "অনেক বেশি Task request। একটু পরে চেষ্টা করুন।"}), 429
     user_id = data.get('user_id')
     channel = data.get('channel')
-    reward = float(data.get('reward', 0.50))
+    reward = 0.50  # Server-controlled reward; never trust the browser.
 
     if not user_id or not channel:
         return jsonify({"status": "error", "message": "Invalid parameters"}), 400
@@ -1917,8 +2018,11 @@ def verify_channel_task():
     return jsonify({"status": "error", "message": "Database connection error"}), 500
 
 @app.route('/verify-ad-task', methods=['POST'])
+@require_telegram_auth
 def verify_ad_task():
     data = request.json or {}
+    if not rate_limit(f'ad:{data.get("user_id")}', 30, 60):
+        return jsonify({"status": "error", "message": "অনেক বেশি Ad request। একটু পরে চেষ্টা করুন।"}), 429
     user_id = str(data.get('user_id'))
     task_type = str(data.get('task_type'))
 
@@ -1997,10 +2101,18 @@ def verify_ad_task():
         return jsonify({"status": "success", "reward": reward, "new_count": adsterra_count + 1}), 200
 
 @app.route('/request-deposit', methods=['POST'])
+@require_telegram_auth
 def request_deposit():
     data = request.json or {}
+    if not rate_limit(f'deposit:{data.get("user_id")}', 10, 300):
+        return jsonify({"status": "error", "message": "অনেক বেশি Deposit request। পরে চেষ্টা করুন।"}), 429
     user_id = str(data.get('user_id', '')).strip()
-    amount = float(data.get('amount', 0) or 0)
+    try:
+        amount = float(data.get('amount', 0) or 0)
+    except (TypeError, ValueError):
+        amount = 0.0
+    if not math.isfinite(amount):
+        amount = 0.0
     method = str(data.get('method', 'bKash')).strip()
     transaction_id = str(data.get('transaction_id', '')).strip()
 
@@ -2092,8 +2204,11 @@ def request_deposit():
 
 
 @app.route('/claim-deposit-profit', methods=['POST'])
+@require_telegram_auth
 def claim_deposit_profit():
     data = request.json or {}
+    if not rate_limit(f'claim:{data.get("user_id")}', 10, 300):
+        return jsonify({"status": "error", "message": "অনেক বেশি request। পরে চেষ্টা করুন।"}), 429
     user_id = str(data.get('user_id', '')).strip()
     if not user_id:
         return jsonify({"status": "error", "message": "User ID required"}), 400
@@ -2200,10 +2315,19 @@ def restore_withdrawal_deposit_principal(allocations):
 
 
 @app.route('/request-withdraw', methods=['POST'])
+@require_telegram_auth
 def request_withdraw():
     data = request.json or {}
+    if not rate_limit(f'withdraw:{data.get("user_id")}', 5, 300):
+        return jsonify({"status": "error", "message": "অনেক বেশি Withdrawal request। পরে চেষ্টা করুন।"}), 429
     user_id = str(data.get('user_id'))
-    amount = round(float(data.get('amount', 0.0)), 2)
+    try:
+        raw_amount = float(data.get('amount', 0.0))
+    except (TypeError, ValueError):
+        raw_amount = 0.0
+    if not math.isfinite(raw_amount):
+        raw_amount = 0.0
+    amount = round(raw_amount, 2)
     account = str(data.get('account', ''))
     method = str(data.get('method', 'bKash'))
     wallet_type = str(data.get('wallet_type', 'main')).strip().lower()
@@ -2303,8 +2427,11 @@ def request_withdraw():
     return jsonify({"status": "success", "message": f"{wallet_label} থেকে ৳{amount:.2f} উইথড্র রিকোয়েস্ট পাঠানো হয়েছে।"}), 200
 
 @app.route('/check-device', methods=['POST'])
+@require_telegram_auth
 def check_device():
     data = request.json or {}
+    if not rate_limit(f'device:{data.get("user_id")}', 10, 300):
+        return jsonify({"status": "error", "message": "অনেক বেশি request। পরে চেষ্টা করুন।"}), 429
     if not data:
         return jsonify({"status": "error", "message": "No data"}), 400
 
