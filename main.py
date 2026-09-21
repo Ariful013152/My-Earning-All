@@ -45,6 +45,7 @@ BKASH_MERCHANT = "01884635078"
 BINANCE_USDT_ADDRESS = "0x0998085153541e45e0df0ff23debb0a1c961854d"
 USDT_BDT_RATE = 110.0
 DEPOSIT_DAILY_RATE = 0.003
+REFERRAL_DEPOSIT_DAILY_RATE = 0.0005  # 0.05% daily on each referred user's active Deposit Wallet
 DEPOSIT_ALLOWED_AMOUNTS = {100, 200, 300, 400, 500, 1000, 1500, 2000, 3000, 4000, 5000, 10000, 20000, 30000, 40000, 50000}
 
 
@@ -397,11 +398,147 @@ def process_due_deposit_profits(user_id=None):
     return round(grand_total, 2)
 
 
+
+def process_due_referral_deposit_profits(user_id=None):
+    """Credit referrers 0.05% per completed 24h period from each approved
+    referred user's current active Deposit Wallet.
+
+    The existing referral system is unchanged: this is an additional earning
+    stream. Profit is paid to the referrer's Main Wallet. If the referred user
+    has no active Deposit Wallet balance, no referral-deposit profit is paid.
+    """
+    if referrals_collection is None or users_collection is None or deposits_collection is None:
+        return 0.0
+
+    now = datetime.datetime.utcnow()
+    query = {"status": "approved"}
+    if user_id is not None:
+        # Optional optimization: only referrals belonging to this referrer.
+        query["referrer_id"] = str(user_id)
+
+    try:
+        referrals = list(referrals_collection.find(query))
+    except Exception as exc:
+        print(f"⚠️ Referral deposit profit scan error: {exc}")
+        return 0.0
+
+    total_by_referrer = {}
+
+    for ref in referrals:
+        try:
+            referrer_id = str(ref.get("referrer_id", "")).strip()
+            referred_id = str(ref.get("referred_id", "")).strip()
+            if not referrer_id or not referred_id or referrer_id == referred_id:
+                continue
+
+            last_at = ref.get("last_referral_profit_at")
+            if not isinstance(last_at, datetime.datetime):
+                # Do not award a large retroactive amount to old referrals when
+                # this feature is enabled for the first time. Start their clock now.
+                last_at = now
+                init_result = referrals_collection.update_one(
+                    {"_id": ref["_id"], "status": "approved",
+                     "$or": [
+                         {"last_referral_profit_at": {"$exists": False}},
+                         {"last_referral_profit_at": None}
+                     ]},
+                    {"$set": {
+                        "last_referral_profit_at": now,
+                        "referral_deposit_daily_rate": REFERRAL_DEPOSIT_DAILY_RATE,
+                        "total_deposit_profit": float(ref.get("total_deposit_profit", 0) or 0)
+                    }}
+                )
+                # Another worker/request may have initialized it first.
+                if init_result.modified_count != 1:
+                    refreshed = referrals_collection.find_one({"_id": ref["_id"]})
+                    if refreshed:
+                        last_at = refreshed.get("last_referral_profit_at")
+                    if not isinstance(last_at, datetime.datetime):
+                        last_at = now
+
+            if last_at.tzinfo is not None:
+                last_at = last_at.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+            elapsed_seconds = (now - last_at).total_seconds()
+            periods = int(elapsed_seconds // 86400)
+            if periods < 1:
+                continue
+
+            referred_deposit = get_active_deposit_total(referred_id)
+            if referred_deposit <= 0:
+                # Even when there is no deposit, advance the clock so an old
+                # zero-balance period is not paid retroactively after a later deposit.
+                new_last_at = last_at + datetime.timedelta(days=periods)
+                referrals_collection.update_one(
+                    {"_id": ref["_id"], "status": "approved",
+                     "last_referral_profit_at": ref.get("last_referral_profit_at", last_at)},
+                    {"$set": {
+                        "last_referral_profit_at": new_last_at,
+                        "referral_deposit_daily_rate": REFERRAL_DEPOSIT_DAILY_RATE
+                    }}
+                )
+                continue
+
+            per_day = round(referred_deposit * REFERRAL_DEPOSIT_DAILY_RATE, 2)
+            credit = round(per_day * periods, 2)
+            new_last_at = last_at + datetime.timedelta(days=periods)
+
+            filter_doc = {"_id": ref["_id"], "status": "approved"}
+            stored_last = ref.get("last_referral_profit_at")
+            if isinstance(stored_last, datetime.datetime):
+                filter_doc["last_referral_profit_at"] = stored_last
+            else:
+                filter_doc["last_referral_profit_at"] = {"$in": [last_at, None]}
+
+            update = {
+                "$set": {
+                    "last_referral_profit_at": new_last_at,
+                    "referral_deposit_daily_rate": REFERRAL_DEPOSIT_DAILY_RATE
+                }
+            }
+            if credit > 0:
+                update["$inc"] = {"total_deposit_profit": credit}
+
+            result = referrals_collection.update_one(filter_doc, update)
+            if result.modified_count == 1 and credit > 0:
+                total_by_referrer[referrer_id] = round(
+                    total_by_referrer.get(referrer_id, 0.0) + credit, 2
+                )
+        except Exception as exc:
+            print(f"⚠️ Referral deposit profit error for {ref.get('_id')}: {exc}")
+
+    grand_total = 0.0
+    for referrer_id, credit in total_by_referrer.items():
+        if credit <= 0:
+            continue
+        ensure_wallet_model_v2(referrer_id)
+        result = users_collection.update_one(
+            {"user_id": referrer_id},
+            {"$inc": {"balance": credit, "total_earned": credit}}
+        )
+        if result.modified_count == 1:
+            grand_total += credit
+            if bot:
+                try:
+                    bot.send_message(
+                        int(referrer_id),
+                        f"🎁 <b>Referral Deposit Profit</b>\n\n"
+                        f"আপনার রেফার করা ইউজারদের Deposit Wallet-এর উপর আজকের/বকেয়া Profit হিসেবে "
+                        f"<b>৳{credit:.2f}</b> Main Wallet-এ যোগ হয়েছে।\n"
+                        f"📈 Rate: <b>0.05% / 24 hours</b>",
+                        parse_mode="HTML"
+                    )
+                except Exception:
+                    pass
+
+    return round(grand_total, 2)
+
 def deposit_profit_loop():
     """Server-side worker: checks due 24-hour periods about once per minute."""
     while True:
         try:
             process_due_deposit_profits()
+            process_due_referral_deposit_profits()
         except Exception as exc:
             print(f"⚠️ Deposit profit worker error: {exc}")
         time.sleep(60)
@@ -892,7 +1029,7 @@ if bot:
         referrer_id = req["referrer_id"]
 
         if action == "acc":
-            referrals_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "approved"}})
+            referrals_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "approved", "last_referral_profit_at": datetime.datetime.utcnow(), "referral_deposit_daily_rate": REFERRAL_DEPOSIT_DAILY_RATE}})
             if users_collection is not None:
                 users_collection.update_one(
                     {"user_id": referrer_id},
@@ -1601,6 +1738,35 @@ def get_bot_info():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+def get_referral_deposit_daily_profit(referrer_id):
+    """Current 0.05% daily referral-deposit profit from all approved referrals."""
+    if referrals_collection is None or not referrer_id:
+        return 0.0
+    total = 0.0
+    try:
+        refs = referrals_collection.find({"referrer_id": str(referrer_id), "status": "approved"}, {"referred_id": 1})
+        for ref in refs:
+            amount = get_active_deposit_total(str(ref.get("referred_id", "")))
+            if amount > 0:
+                total += amount * REFERRAL_DEPOSIT_DAILY_RATE
+    except Exception as exc:
+        print(f"⚠️ Referral daily profit display error: {exc}")
+    return round(total, 2)
+
+
+def get_referral_deposit_profit_total(referrer_id):
+    if referrals_collection is None or not referrer_id:
+        return 0.0
+    total = 0.0
+    try:
+        refs = referrals_collection.find({"referrer_id": str(referrer_id), "status": "approved"}, {"total_deposit_profit": 1})
+        for ref in refs:
+            total += float(ref.get("total_deposit_profit", 0) or 0)
+    except Exception as exc:
+        print(f"⚠️ Referral profit total error: {exc}")
+    return round(total, 2)
+
 @app.route('/get-user-data', methods=['GET'])
 def get_user_data():
     user_id = request.args.get('user_id')
@@ -1702,7 +1868,9 @@ def get_user_data():
                 "withdraws": user_withdraws,
                 "deposits": user_deposits,
                 "active_deposit_total": round(active_deposit_total, 2),
-                "active_daily_profit": round(active_daily_profit, 2)
+                "active_daily_profit": round(active_daily_profit, 2),
+                "referral_deposit_daily_profit": round(get_referral_deposit_daily_profit(str(user_id)), 2),
+                "referral_deposit_profit_total": round(get_referral_deposit_profit_total(str(user_id)), 2)
             }), 200
 
     return jsonify({"status": "success", "balance": 0.00, "total_refers": 0, "total_earned": 0.00, "total_tasks_completed": 0, "first_name": "User", "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "completed_channel_tasks": [], "withdraws": [], "deposits": [], "active_deposit_total": 0.0, "active_daily_profit": 0.0}), 200
