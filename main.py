@@ -15,7 +15,7 @@ from functools import wraps
 from collections import defaultdict, deque
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ForceReply
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from pymongo import MongoClient
 from bson.objectid import ObjectId
@@ -210,7 +210,7 @@ def audit_event(user_id, event, amount=0, wallet=None, metadata=None):
             "amount": round(float(amount or 0), 2),
             "wallet": wallet,
             "metadata": metadata or {},
-            "created_at": datetime.datetime.utcnow()
+            "created_at": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         })
     except Exception as exc:
         print(f"Audit log error: {exc}")
@@ -400,7 +400,7 @@ def process_due_deposit_profits(user_id=None):
     if deposits_collection is None or users_collection is None:
         return 0.0
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     query = {"status": "active"}
     if user_id is not None:
         query["user_id"] = str(user_id)
@@ -496,7 +496,7 @@ def process_due_referral_deposit_profits(user_id=None):
     if referrals_collection is None or users_collection is None or deposits_collection is None:
         return 0.0
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     query = {"status": "approved"}
     if user_id is not None:
         # Optional optimization: only referrals belonging to this referrer.
@@ -709,7 +709,7 @@ def inactivity_reminder_loop():
     while True:
         try:
             if users_collection is not None:
-                cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=INACTIVITY_REMINDER_HOURS)
+                cutoff = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - datetime.timedelta(hours=INACTIVITY_REMINDER_HOURS)
                 idle_users = users_collection.find({
                     "banned": {"$ne": True},
                     "last_active": {"$lt": cutoff},
@@ -726,7 +726,7 @@ def inactivity_reminder_loop():
                         continue
                     try:
                         bot.send_message(uid, INACTIVITY_REMINDER_TEXT, parse_mode="HTML", reply_markup=markup)
-                        users_collection.update_one({"user_id": uid}, {"$set": {"last_reminder_sent": datetime.datetime.utcnow()}})
+                        users_collection.update_one({"user_id": uid}, {"$set": {"last_reminder_sent": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)}})
                         time.sleep(0.05)  # gentle pacing, same as broadcast, to stay under Telegram's rate limits
                     except Exception:
                         # Most common cause: user blocked the bot — nothing to do, just move on.
@@ -778,7 +778,7 @@ if bot:
                             "user_id": user_id, "balance": 0.0, "deposit_wallet": 0.0, "wallet_model_version": 2, "total_refers": 0,
                             "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0,
                             "gigapub_first_view_at": None,
-                            "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d")
+                            "last_reset_date": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
                         }
                     },
                     upsert=True
@@ -817,7 +817,7 @@ if bot:
             users_collection.update_one(
                 {"user_id": user_id},
                 {"$set": {"first_name": first_name, "username": username, "banned": False},
-                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "deposit_wallet": 0.0, "wallet_model_version": 2, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "gigapub_first_view_at": None, "last_reset_date": datetime.datetime.utcnow().strftime("%Y-%m-%d"), "total_earned": 0.0, "total_tasks_completed": 0, "joined_at": datetime.datetime.utcnow(), "last_active": datetime.datetime.utcnow()}},
+                 "$setOnInsert": {"user_id": user_id, "balance": 0.0, "deposit_wallet": 0.0, "wallet_model_version": 2, "total_refers": 0, "monetag_count": 0, "adsterra_count": 0, "gigapub_count": 0, "gigapub_first_view_at": None, "last_reset_date": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d"), "total_earned": 0.0, "total_tasks_completed": 0, "joined_at": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), "last_active": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)}},
                 upsert=True
             )
 
@@ -843,7 +843,7 @@ if bot:
                                 "referred_name": first_name,
                                 "referred_username": username,
                                 "status": "pending",
-                                "date": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+                                "date": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
                             }
                             res = referrals_collection.insert_one(ref_doc)
                             ref_req_id = str(res.inserted_id)
@@ -1019,10 +1019,10 @@ if bot:
 
         user_id = str(req.get("user_id"))
         amount = float(req.get("amount", 0))
-        today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
 
         if action == "acc":
-            now = datetime.datetime.utcnow()
+            now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
             approve_result = deposits_collection.update_one(
                 {"_id": ObjectId(req_id), "status": "pending"},
                 {"$set": {
@@ -1068,7 +1068,7 @@ if bot:
         elif action == "rej":
             deposits_collection.update_one(
                 {"_id": ObjectId(req_id), "status": "pending"},
-                {"$set": {"status": "rejected", "rejected_at": datetime.datetime.utcnow()}}
+                {"$set": {"status": "rejected", "rejected_at": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)}}
             )
             bot.answer_callback_query(call.id, "❌ Deposit Rejected!")
             try:
@@ -1115,7 +1115,7 @@ if bot:
         referrer_id = req["referrer_id"]
 
         if action == "acc":
-            referrals_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "approved", "last_referral_profit_at": datetime.datetime.utcnow(), "referral_deposit_daily_rate": REFERRAL_DEPOSIT_DAILY_RATE}})
+            referrals_collection.update_one({"_id": ObjectId(req_id)}, {"$set": {"status": "approved", "last_referral_profit_at": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), "referral_deposit_daily_rate": REFERRAL_DEPOSIT_DAILY_RATE}})
             if users_collection is not None:
                 users_collection.update_one(
                     {"user_id": referrer_id},
@@ -1252,7 +1252,7 @@ if bot:
             if users_collection is not None:
                 total_db_users = users_collection.count_documents({})
                 total_banned = users_collection.count_documents({"banned": True})
-                active_cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
+                active_cutoff = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - datetime.timedelta(hours=24)
                 # "Active" = opened the app in the last 24 hours (last_active is
                 # stamped by /get-user-data on every app load) and not banned.
                 total_active = users_collection.count_documents({
@@ -1823,7 +1823,9 @@ def run_bot():
 # -------- FLASK ROUTES --------
 @app.route('/')
 def home():
-    return render_template('index.html')
+    # Serve the Mini App as plain HTML. This avoids Jinja2 parsing JavaScript
+    # braces/comments inside index.html.
+    return send_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'index.html'))
 
 @app.route('/get-bot-info', methods=['GET'])
 def get_bot_info():
@@ -1890,10 +1892,10 @@ def get_user_data():
             # count in the admin panel. Cheap indexed write, not read back here.
             users_collection.update_one(
                 {"user_id": str(user_id)},
-                {"$set": {"last_active": datetime.datetime.utcnow()}}
+                {"$set": {"last_active": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)}}
             )
             
-            today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+            today_str = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
             if user_data.get("last_reset_date") != today_str:
                 users_collection.update_one(
                     {"user_id": str(user_id)},
@@ -2039,7 +2041,7 @@ def verify_ad_task():
     if not user_data:
         return jsonify({"status": "error", "message": "User not found"}), 404
 
-    today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    today_str = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     if user_data.get("last_reset_date") != today_str:
         users_collection.update_one(
             {"user_id": user_id},
@@ -2057,7 +2059,7 @@ def verify_ad_task():
 
     if task_type == 'gigapub':
         gigapub_reward = 0.05
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         first_view_at = user_data.get("gigapub_first_view_at")
 
         if first_view_at and (now - first_view_at) < datetime.timedelta(hours=24):
@@ -2146,7 +2148,7 @@ def request_deposit():
     if deposits_collection.find_one({"transaction_id": transaction_id}):
         return jsonify({"status": "error", "message": "এই Transaction ID আগে ব্যবহার করা হয়েছে।"}), 400
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     doc = {
         "user_id": user_id,
         "amount": amount,
@@ -2395,7 +2397,7 @@ def request_withdraw():
         "wallet_type": wallet_type,
         "status": "pending",
         "principal_allocations": principal_allocations,
-        "date": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+        "date": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
     }
     res = withdraws_collection.insert_one(req_doc)
     req_id = str(res.inserted_id)
