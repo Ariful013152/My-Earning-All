@@ -387,9 +387,50 @@
         .nav-item.active i { filter:drop-shadow(0 0 7px rgba(57,245,138,.45)); }
         .history-card { border-color:rgba(57,245,138,.12)!important; }
         @media (max-width:380px){ .nav-item{font-size:9px}.nav-item i{font-size:15px}.container{padding-left:10px;padding-right:10px}.deposit-package{padding:9px 5px!important} }
+        /* ===== Premium 3-4s Telegram Boot Animation ===== */
+        #appLoadingOverlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;overflow:hidden;background:radial-gradient(circle at 50% 35%,rgba(28,214,112,.16),transparent 32%),linear-gradient(180deg,#06140e 0%,#03100a 100%);color:#fff;transition:opacity .45s ease,visibility .45s ease}
+        #appLoadingOverlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+        #appLoadingOverlay .boot-glow{position:absolute;width:270px;height:270px;border-radius:50%;background:radial-gradient(circle,rgba(57,245,138,.16),rgba(57,245,138,0) 68%);filter:blur(3px);animation:bootPulse 1.8s ease-in-out infinite}
+        #appLoadingOverlay .boot-orbit{position:absolute;width:245px;height:245px;border:1px solid rgba(57,245,138,.14);border-radius:50%;animation:bootOrbit 5s linear infinite}
+        #appLoadingOverlay .boot-orbit:before,#appLoadingOverlay .boot-orbit:after{content:"";position:absolute;width:6px;height:6px;border-radius:50%;background:#39f58a;box-shadow:0 0 14px #39f58a}
+        #appLoadingOverlay .boot-orbit:before{top:16px;left:42px}
+        #appLoadingOverlay .boot-orbit:after{right:18px;bottom:42px;width:4px;height:4px}
+        #appLoadingOverlay .boot-rocket{position:relative;z-index:2;width:94px;height:94px;display:flex;align-items:center;justify-content:center;border-radius:28px;background:linear-gradient(145deg,rgba(14,77,45,.9),rgba(4,30,19,.96));border:1px solid rgba(57,245,138,.35);box-shadow:0 0 34px rgba(57,245,138,.22),inset 0 1px 0 rgba(255,255,255,.08);animation:rocketFloat 1.5s ease-in-out infinite}
+        #appLoadingOverlay .boot-rocket .rocket{font-size:56px;filter:drop-shadow(0 0 12px rgba(57,245,138,.55));animation:rocketTilt 1.5s ease-in-out infinite}
+        #appLoadingOverlay .boot-trail{position:absolute;z-index:1;top:calc(50% + 55px);width:5px;height:72px;border-radius:99px;background:linear-gradient(to bottom,#39f58a,rgba(57,245,138,0));filter:blur(1px);animation:trailPulse .75s ease-in-out infinite}
+        #appLoadingOverlay .boot-title{position:relative;z-index:3;margin-top:26px;font-size:23px;font-weight:800;letter-spacing:.2px}
+        #appLoadingOverlay .boot-title span{color:#39f58a}
+        #appLoadingOverlay .loading-text{position:relative;z-index:3;font-size:13px;color:#9bc5ad;margin-top:7px}
+        #appLoadingOverlay .boot-progress{position:relative;z-index:3;width:190px;height:4px;margin-top:18px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+        #appLoadingOverlay .boot-progress span{display:block;width:42%;height:100%;border-radius:99px;background:linear-gradient(90deg,#16c96b,#39f58a);box-shadow:0 0 12px rgba(57,245,138,.55);animation:bootProgress 1.2s ease-in-out infinite}
+        #appLoadingOverlay .boot-steps{position:relative;z-index:3;display:flex;gap:7px;margin-top:14px;font-size:9px;color:#668e79}
+        #appLoadingOverlay .boot-steps .step{padding:4px 7px;border-radius:20px;border:1px solid rgba(57,245,138,.10);background:rgba(255,255,255,.025)}
+        #appLoadingOverlay .boot-steps .step.active{color:#dfffea;border-color:rgba(57,245,138,.35);background:rgba(57,245,138,.08)}
+        @keyframes bootPulse{0%,100%{transform:scale(.92);opacity:.65}50%{transform:scale(1.08);opacity:1}}
+        @keyframes bootOrbit{to{transform:rotate(360deg)}}
+        @keyframes rocketFloat{0%,100%{transform:translateY(5px)}50%{transform:translateY(-7px)}}
+        @keyframes rocketTilt{0%,100%{transform:rotate(-3deg) translateY(1px)}50%{transform:rotate(3deg) translateY(-2px)}}
+        @keyframes trailPulse{0%,100%{height:52px;opacity:.35}50%{height:78px;opacity:.9}}
+        @keyframes bootProgress{0%{transform:translateX(-120%)}100%{transform:translateX(330%)}}
+        @media (prefers-reduced-motion:reduce){#appLoadingOverlay *{animation-duration:1ms!important;animation-iteration-count:1!important}}
     </style>
 </head>
 <body>
+    <div id="appLoadingOverlay" aria-live="polite">
+        <div class="boot-glow"></div>
+        <div class="boot-orbit"></div>
+        <div class="boot-rocket"><div class="rocket">🚀</div></div>
+        <div class="boot-trail"></div>
+        <div class="boot-title">My Earning <span>All</span></div>
+        <div class="loading-text" id="bootLoadingText">Connecting to Telegram...</div>
+        <div class="boot-progress"><span></span></div>
+        <div class="boot-steps">
+            <div class="step active" id="bootStepTelegram">Telegram</div>
+            <div class="step" id="bootStepUser">User Data</div>
+            <div class="step" id="bootStepWallet">Wallet</div>
+            <div class="step" id="bootStepReady">Ready</div>
+        </div>
+    </div>
 
     <div class="top-bar">
         <div class="user-profile">
@@ -723,8 +764,8 @@
         let botUsername = "myearningall01_bot";
         let selectedMethod = "bKash";
 
-        const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-        let userId = tgUser ? tgUser.id.toString() : localStorage.getItem('temp_user_id');
+        let tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+        let userId = tgUser ? tgUser.id.toString() : null;
 
         // Security: attach Telegram's signed initData to every same-origin API call.
         // The server verifies the signature and the user ID before changing/reading money.
@@ -741,13 +782,47 @@
             return _nativeFetch(input, init);
         };
 
-        if (!userId) {
-            userId = "user_" + Math.floor(100000 + Math.random() * 900000);
-            localStorage.setItem('temp_user_id', userId);
-        }
-
         let firstName = tgUser ? tgUser.first_name : "User";
         let username = tgUser ? (tgUser.username || "No Username") : "No Username";
+
+        function refreshTelegramIdentity() {
+            if (!tg) return false;
+            if (typeof tg.ready === 'function') tg.ready();
+            const u = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+            if (!u || !u.id || !tg.initData) return false;
+            tgUser = u; userId = String(u.id);
+            firstName = u.first_name || 'User'; username = u.username || 'No Username';
+            const idEl=document.getElementById('userIdDisplay'); if(idEl) idEl.textContent=userId;
+            const nameEl=document.getElementById('userName'); if(nameEl) nameEl.textContent=firstName;
+            return true;
+        }
+        const APP_BOOT_MIN_MS = 3400;
+        const appBootStartedAt = Date.now();
+        let appBootReady = false;
+        let appBootError = false;
+        let appBootStepTimer = null;
+        function setBootStep(step, text){
+            const textEl=document.getElementById('bootLoadingText');
+            if(textEl && text) textEl.textContent=text;
+            const ids=['bootStepTelegram','bootStepUser','bootStepWallet','bootStepReady'];
+            const idx=ids.indexOf('bootStep'+step);
+            ids.forEach((id,i)=>{const el=document.getElementById(id);if(el)el.classList.toggle('active',i<=idx);});
+        }
+        function finishAppBoot(){
+            if(appBootError || !appBootReady) return;
+            const wait=Math.max(0,APP_BOOT_MIN_MS-(Date.now()-appBootStartedAt));
+            clearTimeout(appBootStepTimer);
+            appBootStepTimer=setTimeout(()=>{
+                setBootStep('Ready','Welcome back! আপনার অ্যাকাউন্ট প্রস্তুত ✅');
+                setTimeout(()=>{const e=document.getElementById('appLoadingOverlay');if(e)e.classList.add('hidden');},220);
+            },wait);
+        }
+        function hideAppLoading(){appBootReady=true;setBootStep('Wallet','Wallet & Deposit data loaded...');finishAppBoot();}
+        function showAppLoadingError(){
+            appBootError=true;clearTimeout(appBootStepTimer);
+            const e=document.getElementById('appLoadingOverlay');
+            if(e)e.innerHTML='<div style="font-size:48px;margin-bottom:10px">📱</div><div style="font-weight:800;font-size:20px">Telegram থেকে অ্যাপটি খুলুন</div><div style="font-size:12px;color:#a7c8b5;text-align:center;padding:0 25px;margin-top:8px">অ্যাকাউন্ট যাচাই করা যাচ্ছে না। Telegram Mini App থেকে আবার Open App চাপুন।</div>';
+        }
 
         const MONETAG_LINKS = [
             'https://omg10.com/4/11522080', 'https://omg10.com/4/11522086', 'https://omg10.com/4/11711366',
@@ -904,8 +979,13 @@
         }
 
         function fetchUserDataFromServer() {
-            fetch(`/get-user-data?user_id=${userId}`)
-                .then(res => res.json())
+            if (!refreshTelegramIdentity()) return;
+            fetch(`/get-user-data?user_id=${encodeURIComponent(userId)}`)
+                .then(async res => {
+                    const data = await res.json().catch(() => ({}));
+                    if (res.status === 401) throw new Error('AUTH_RETRY');
+                    return data;
+                })
                 .then(data => {
                     if (data.status === 'banned') {
                         document.body.innerHTML = "<h2 style='color:#ef4444; text-align:center; margin-top:50%;'>❌ আপনার অ্যাকাউন্টটি ব্যান করা হয়েছে!</h2>";
@@ -919,6 +999,7 @@
                         return;
                     }
                     if (data.status === 'success') {
+                        hideAppLoading();
                         balance = parseFloat(data.main_balance ?? data.balance ?? 0);
                         depositWallet = parseFloat(data.deposit_wallet ?? data.active_deposit_total ?? 0);
                         totalRefers = parseInt(data.total_refers);
@@ -947,7 +1028,10 @@
                         renderWithdrawHistory();
                     }
                 })
-                .catch(err => console.error("Error fetching user data:", err));
+                .catch(err => {
+                    if (err && err.message === 'AUTH_RETRY') return;
+                    console.warn("Error fetching user data:", err);
+                });
         }
 
         function markTaskCompleted(elementId) {
@@ -1456,13 +1540,22 @@
 
         window.onload = function() {
             setupReferralAndBotInfo();
-            verifyDeviceOnServer();
-            fetchUserDataFromServer();
-            // Keep Main Balance / Daily Profit display in sync with the
-            // server-side 24-hour deposit-profit worker.
-            setInterval(fetchUserDataFromServer, 60000);
             updateResetCountdown();
             setInterval(updateResetCountdown, 1000);
+            let attempts = 0;
+            const bootTimer = setInterval(() => {
+                attempts++;
+                if (refreshTelegramIdentity()) {
+                    clearInterval(bootTimer);
+                    setBootStep('User','Telegram connected • User verified');
+                    verifyDeviceOnServer();
+                    fetchUserDataFromServer();
+                    setInterval(fetchUserDataFromServer, 60000);
+                } else if (attempts >= 50) {
+                    clearInterval(bootTimer);
+                    showAppLoadingError();
+                }
+            }, 100);
         };
     </script>
 </body>
