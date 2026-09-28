@@ -390,6 +390,123 @@ def sync_deposit_wallet(user_id):
     return active_total
 
 
+def admin_adjust_wallet(target_user_id, amount, wallet_type="main", operation="add"):
+    """Admin-only wallet adjustment helper.
+
+    Main Wallet adjustments change only ``balance``. Deposit Wallet additions
+    create a real active deposit record so the 0.3%/24h profit engine uses the
+    added principal. Deposit Wallet cuts reduce the actual active deposit
+    principal, so future profit is reduced automatically.
+    """
+    if users_collection is None or deposits_collection is None:
+        return False, "Database Connection Error"
+
+    uid = str(target_user_id).strip()
+    if not is_valid_telegram_id(uid):
+        return False, "সঠিক Telegram User ID দিন।"
+
+    try:
+        amount = round(float(amount), 2)
+    except (TypeError, ValueError):
+        return False, "সঠিক Amount দিন।"
+    if not math.isfinite(amount) or amount <= 0:
+        return False, "Amount অবশ্যই 0-এর বেশি হতে হবে।"
+
+    wallet_type = str(wallet_type or "main").strip().lower()
+    operation = str(operation or "add").strip().lower()
+    if wallet_type not in ("main", "deposit"):
+        return False, "Wallet অবশ্যই main অথবা deposit হবে।"
+    if operation not in ("add", "cut"):
+        return False, "Operation সঠিক নয়।"
+
+    # Ensure the user exists and is on the current two-wallet model.
+    users_collection.update_one(
+        {"user_id": uid},
+        {"$setOnInsert": {
+            "user_id": uid,
+            "balance": 0.0,
+            "deposit_wallet": 0.0,
+            "wallet_model_version": 2,
+            "total_earned": 0.0,
+            "total_refers": 0,
+            "total_tasks_completed": 0
+        }},
+        upsert=True
+    )
+    ensure_wallet_model_v2(uid)
+    sync_deposit_wallet(uid)
+
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+    if wallet_type == "main":
+        if operation == "add":
+            result = users_collection.update_one(
+                {"user_id": uid},
+                {"$inc": {"balance": amount}}
+            )
+            if result.modified_count != 1:
+                return False, "Main Wallet update হয়নি।"
+        else:
+            result = users_collection.update_one(
+                {"user_id": uid, "balance": {"$gte": amount}},
+                {"$inc": {"balance": -amount}}
+            )
+            if result.modified_count != 1:
+                return False, "Main Wallet-এ পর্যাপ্ত ব্যালেন্স নেই।"
+
+        audit_event(uid, f"admin_{operation}_main_wallet", amount, "main", {"admin": True})
+        return True, "ok"
+
+    # Deposit Wallet = active deposit principal. Never adjust this field alone.
+    if operation == "add":
+        # Manual/admin-funded deposit: it participates in the same profit engine
+        # as approved deposits and starts its 24h clock now.
+        dep_doc = {
+            "user_id": uid,
+            "amount": amount,
+            "original_amount": amount,
+            "method": "Admin Manual Deposit",
+            "transaction_id": f"ADMIN-{secrets.token_hex(6).upper()}",
+            "status": "active",
+            "daily_rate": DEPOSIT_DAILY_RATE,
+            "daily_profit": round(amount * DEPOSIT_DAILY_RATE, 2),
+            "total_profit": 0.0,
+            "created_at": now,
+            "approved_at": now,
+            "started_at": now,
+            "last_profit_at": now,
+            "last_profit_date": now.strftime("%Y-%m-%d"),
+            "admin_added": True
+        }
+        result = deposits_collection.insert_one(dep_doc)
+        if not result.inserted_id:
+            return False, "Deposit Wallet update হয়নি।"
+        sync_deposit_wallet(uid)
+        audit_event(uid, "admin_add_deposit_wallet", amount, "deposit", {
+            "admin": True, "deposit_id": str(result.inserted_id)
+        })
+        return True, "ok"
+
+    # Cut Deposit Wallet from the real active deposit records.
+    current_deposit = get_active_deposit_total(uid)
+    if current_deposit < amount:
+        return False, "Deposit Wallet-এ পর্যাপ্ত ব্যালেন্স নেই।"
+
+    allocations = reduce_active_deposit_principal(uid, amount)
+    allocated = round(sum(float(x.get("amount", 0) or 0) for x in allocations), 2)
+    if allocated < amount:
+        restore_withdrawal_deposit_principal(allocations)
+        sync_deposit_wallet(uid)
+        return False, "Deposit Wallet update হয়নি, আবার চেষ্টা করুন।"
+
+    # Re-sync from deposit records instead of trusting a standalone field.
+    sync_deposit_wallet(uid)
+    audit_event(uid, "admin_cut_deposit_wallet", amount, "deposit", {
+        "admin": True, "allocations": allocations
+    })
+    return True, "ok"
+
+
 def process_due_deposit_profits(user_id=None):
     """Credit every fully elapsed 24-hour deposit-profit period.
 
@@ -1233,7 +1350,7 @@ if bot:
         elif call.data == "admin_addbal_prompt":
             msg = bot.send_message(
                 call.message.chat.id, 
-                "➕ <b>USER_ID এবং AMOUNT স্পেস দিয়ে লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 50</code>)", 
+                "➕ <b>USER_ID এবং AMOUNT লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 50</code>)\nতারপর Main Wallet / Deposit Wallet বেছে নিতে পারবেন।", 
                 parse_mode="HTML", 
                 reply_markup=ForceReply(selective=True)
             )
@@ -1242,12 +1359,57 @@ if bot:
         elif call.data == "admin_cutbal_prompt":
             msg = bot.send_message(
                 call.message.chat.id, 
-                "➖ <b>USER_ID এবং AMOUNT স্পেস দিয়ে লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 20</code>)", 
+                "➖ <b>USER_ID এবং AMOUNT লিখে এই মেসেজে রিপ্লাই দিন:</b>\n(যেমন: <code>8530140256 20</code>)\nতারপর Main Wallet / Deposit Wallet বেছে নিতে পারবেন।", 
                 parse_mode="HTML", 
                 reply_markup=ForceReply(selective=True)
             )
             bot.register_next_step_handler(msg, process_cutbal_input)
             
+        elif call.data.startswith("admin_add_main_") or call.data.startswith("admin_add_deposit_") or call.data.startswith("admin_cut_main_") or call.data.startswith("admin_cut_deposit_"):
+            try:
+                parts = call.data.split("_")
+                # admin_add_main_USER_AMOUNT / admin_add_deposit_USER_AMOUNT
+                if len(parts) != 5:
+                    raise ValueError("bad callback")
+                operation = parts[1]   # add / cut
+                wallet_type = parts[2]  # main / deposit
+                target_user_id = parts[3]
+                amount = float(parts[4])
+                if not is_valid_telegram_id(target_user_id):
+                    raise ValueError("bad user")
+
+                ok, reason = admin_adjust_wallet(target_user_id, amount, wallet_type, operation)
+                if not ok:
+                    bot.answer_callback_query(call.id, reason, show_alert=True)
+                    return
+
+                wallet_label = "Main Wallet" if wallet_type == "main" else "Deposit Wallet"
+                verb = "যোগ" if operation == "add" else "কাটা"
+                bot.answer_callback_query(call.id, f"৳{amount:.2f} {wallet_label}-এ {verb} হয়েছে", show_alert=True)
+                bot.edit_message_text(
+                    f"✅ <b>Wallet Update সফল!</b>\n\n"
+                    f"👤 User ID: <code>{target_user_id}</code>\n"
+                    f"💵 Amount: <b>৳{amount:.2f}</b>\n"
+                    f"👛 Wallet: <b>{wallet_label}</b>\n"
+                    f"📌 Action: <b>{verb}</b>",
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    parse_mode="HTML"
+                )
+                try:
+                    if operation == "add":
+                        note = f"🎉 অ্যাডমিন আপনার <b>{wallet_label}</b>-এ <b>৳{amount:.2f}</b> যোগ করেছেন।"
+                        if wallet_type == "deposit":
+                            note += "\n⏱️ Deposit Profit-এর ২৪ ঘণ্টার হিসাব এখন থেকে শুরু হবে।"
+                    else:
+                        note = f"⚠️ অ্যাডমিন আপনার <b>{wallet_label}</b> থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।"
+                    bot.send_message(target_user_id, note, parse_mode="HTML")
+                except Exception:
+                    pass
+            except Exception as exc:
+                print(f"Admin wallet callback error: {exc}")
+                bot.answer_callback_query(call.id, "Wallet update ব্যর্থ হয়েছে।", show_alert=True)
+
         elif call.data == "admin_stats":
             if users_collection is not None:
                 total_db_users = users_collection.count_documents({})
@@ -1604,11 +1766,11 @@ if bot:
             return
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> USER_ID AMOUNT লিখুন।\nযেমন: <code>8530140256 500</code>", parse_mode="HTML")
             return
         target_user_id = args[0].strip()
         if not is_valid_telegram_id(target_user_id):
-            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            bot.reply_to(message, "❌ এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
             return
         try:
             amount = float(args[1].strip())
@@ -1619,24 +1781,29 @@ if bot:
             bot.reply_to(message, "❌ Amount অবশ্যই 0-এর বেশি হতে হবে।")
             return
 
-        if users_collection is not None:
-            users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": amount}}, upsert=True)
-            bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর অ্যাকাউন্টে ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
-            try:
-                bot.send_message(target_user_id, f"🎉 অ্যাডমিন আপনার ওয়ালেটে <b>৳{amount:.2f}</b> যুক্ত করেছেন!", parse_mode="HTML")
-            except Exception:
-                pass
+        # Keep the old two-field flow, but now let the admin choose the wallet.
+        markup = InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            InlineKeyboardButton("💰 Main Wallet", callback_data=f"admin_add_main_{target_user_id}_{amount:.2f}"),
+            InlineKeyboardButton("💳 Deposit Wallet", callback_data=f"admin_add_deposit_{target_user_id}_{amount:.2f}")
+        )
+        bot.send_message(
+            message.chat.id,
+            f"➕ <b>Balance Add</b>\n\n👤 User ID: <code>{target_user_id}</code>\n💵 Amount: <b>৳{amount:.2f}</b>\n\nকোন Wallet-এ টাকা যোগ করবেন?",
+            parse_mode="HTML",
+            reply_markup=markup
+        )
 
     def process_cutbal_input(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
             return
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "⚠️ <b>সঠিক নিয়ম:</b> USER_ID এবং AMOUNT স্পেস দিয়ে লিখুন।", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> USER_ID AMOUNT লিখুন।\nযেমন: <code>8530140256 200</code>", parse_mode="HTML")
             return
         target_user_id = args[0].strip()
         if not is_valid_telegram_id(target_user_id):
-            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            bot.reply_to(message, "❌ এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
             return
         try:
             amount = float(args[1].strip())
@@ -1647,13 +1814,17 @@ if bot:
             bot.reply_to(message, "❌ Amount অবশ্যই 0-এর বেশি হতে হবে।")
             return
 
-        if users_collection is not None:
-            users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": -amount}}, upsert=True)
-            bot.reply_to(message, f"✂️ <b>ইউজার ID {target_user_id} এর অ্যাকাউন্ট থেকে ৳{amount:.2f} কেটে নেওয়া হয়েছে!</b>", parse_mode="HTML")
-            try:
-                bot.send_message(target_user_id, f"⚠️ অ্যাডমিন আপনার ওয়ালেট থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।", parse_mode="HTML")
-            except Exception:
-                pass
+        markup = InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            InlineKeyboardButton("💰 Main Wallet", callback_data=f"admin_cut_main_{target_user_id}_{amount:.2f}"),
+            InlineKeyboardButton("💳 Deposit Wallet", callback_data=f"admin_cut_deposit_{target_user_id}_{amount:.2f}")
+        )
+        bot.send_message(
+            message.chat.id,
+            f"➖ <b>Balance Cut</b>\n\n👤 User ID: <code>{target_user_id}</code>\n💵 Amount: <b>৳{amount:.2f}</b>\n\nকোন Wallet থেকে টাকা কাটবেন?",
+            parse_mode="HTML",
+            reply_markup=markup
+        )
 
     def process_broadcast_input(message):
         if message.from_user.id not in ADMIN_CHAT_IDS:
@@ -1740,25 +1911,31 @@ if bot:
             return
         args = message.text.split()
         if len(args) < 3:
-            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/addbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/addbalance USER_ID AMOUNT [main|deposit]</code>\nWallet না দিলে Main Wallet-এ যোগ হবে।", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
         if not is_valid_telegram_id(target_user_id):
-            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            bot.reply_to(message, "❌ এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
             return
         try:
             amount = float(args[2].strip())
         except ValueError:
             bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
             return
-
-        if users_collection is not None:
-            users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": amount}}, upsert=True)
-            bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর অ্যাকাউন্টে ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
-            try:
-                bot.send_message(target_user_id, f"🎉 অ্যাডমিন আপনার ওয়ালেটে <b>৳{amount:.2f}</b> যুক্ত করেছেন!", parse_mode="HTML")
-            except Exception:
-                pass
+        wallet_type = args[3].strip().lower() if len(args) >= 4 else "main"
+        ok, reason = admin_adjust_wallet(target_user_id, amount, wallet_type, "add")
+        if not ok:
+            bot.reply_to(message, f"❌ {reason}")
+            return
+        wallet_label = "Main Wallet" if wallet_type == "main" else "Deposit Wallet"
+        bot.reply_to(message, f"💰 <b>ইউজার ID {target_user_id} এর {wallet_label}-এ ৳{amount:.2f} যোগ করা হয়েছে!</b>", parse_mode="HTML")
+        try:
+            note = f"🎉 অ্যাডমিন আপনার <b>{wallet_label}</b>-এ <b>৳{amount:.2f}</b> যোগ করেছেন।"
+            if wallet_type == "deposit":
+                note += "\n⏱️ Deposit Profit-এর ২৪ ঘণ্টার হিসাব এখন থেকে শুরু হবে।"
+            bot.send_message(target_user_id, note, parse_mode="HTML")
+        except Exception:
+            pass
 
     @bot.message_handler(commands=['cutbalance'])
     def handle_cutbalance_command(message):
@@ -1766,25 +1943,28 @@ if bot:
             return
         args = message.text.split()
         if len(args) < 3:
-            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/cutbalance USER_ID AMOUNT</code>", parse_mode="HTML")
+            bot.reply_to(message, "⚠️ <b>নিয়ম:</b> <code>/cutbalance USER_ID AMOUNT [main|deposit]</code>\nWallet না দিলে Main Wallet থেকে কাটা হবে।", parse_mode="HTML")
             return
         target_user_id = args[1].strip()
         if not is_valid_telegram_id(target_user_id):
-            bot.reply_to(message, "\u274C এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
+            bot.reply_to(message, "❌ এটি সঠিক Telegram User ID নয় (শুধু সংখ্যা হতে হবে)।")
             return
         try:
             amount = float(args[2].strip())
         except ValueError:
             bot.reply_to(message, "❌ টাকার পরিমাণ সংখ্যায় লিখুন।")
             return
-
-        if users_collection is not None:
-            users_collection.update_one({"user_id": target_user_id}, {"$inc": {"balance": -amount}}, upsert=True)
-            bot.reply_to(message, f"✂️ <b>ইউজার ID {target_user_id} এর অ্যাকাউন্ট থেকে ৳{amount:.2f} কেটে নেওয়া হয়েছে!</b>", parse_mode="HTML")
-            try:
-                bot.send_message(target_user_id, f"⚠️ অ্যাডমিন আপনার ওয়ালেট থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।", parse_mode="HTML")
-            except Exception:
-                pass
+        wallet_type = args[3].strip().lower() if len(args) >= 4 else "main"
+        ok, reason = admin_adjust_wallet(target_user_id, amount, wallet_type, "cut")
+        if not ok:
+            bot.reply_to(message, f"❌ {reason}")
+            return
+        wallet_label = "Main Wallet" if wallet_type == "main" else "Deposit Wallet"
+        bot.reply_to(message, f"✂️ <b>ইউজার ID {target_user_id} এর {wallet_label} থেকে ৳{amount:.2f} কেটে নেওয়া হয়েছে!</b>", parse_mode="HTML")
+        try:
+            bot.send_message(target_user_id, f"⚠️ অ্যাডমিন আপনার <b>{wallet_label}</b> থেকে <b>৳{amount:.2f}</b> কেটে নিয়েছেন।", parse_mode="HTML")
+        except Exception:
+            pass
 
     @bot.message_handler(commands=['broadcast'])
     def handle_broadcast_command(message):
